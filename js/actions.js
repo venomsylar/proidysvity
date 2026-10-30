@@ -169,8 +169,16 @@ function openCardMenu(c, where) {
 function closeMenu() { $('#menu').hidden = true; }
 
 /* --- модальні вікна --- */
-function showModal(html, cls = '') { NET.setupOpen = false; $('#sheet').className = 'sheet ' + cls; $('#sheet').innerHTML = html; $('#modal').hidden = false; $('#sheet').querySelectorAll('[data-close]').forEach(b => b.onclick = closeModal); const f = $('#sheet').querySelector('.btn.primary, .btn'); f && f.focus(); }
+function showModal(html, cls = '') { NET.setupOpen = false; $('#modal').classList.toggle('screen', typeof MENU !== 'undefined' && MENU.open); $('#sheet').className = 'sheet ' + cls; $('#sheet').innerHTML = html; $('#modal').hidden = false; $('#sheet').querySelectorAll('[data-close]').forEach(b => b.onclick = closeModal); const f = $('#sheet').querySelector('.btn.primary') || $('#sheet').querySelector('.btn'); if (f) f.focus({ preventScroll: true }); }
 function closeModal() { $('#modal').hidden = true; NET.setupOpen = false; }
+/* у режимі «екран» (відкрито з головного меню) — кнопка «Назад» угорі робить те саме, що кнопка повернення в самому вікні */
+function screenBack() {
+  const sh = $('#sheet');
+  const b = sh.querySelector('#setupBack, #jBack, #leaveB, #clOk, #skDone, #fB, #lhB, [data-close], #mNo');
+  if (b) b.click(); else closeModal();
+}
+$('#scrBack').onclick = screenBack;
+addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#modal').hidden && $('#modal').classList.contains('screen')) { e.preventDefault(); screenBack(); } });
 function confirmModal(title, text, yes, no) {
   return new Promise(res => {
     showModal(`<h2>${esc(title)}</h2><p>${esc(text).replace(/\n/g, '<br>')}</p><div class="row end"><button class="btn ghost" id="mNo" type="button">${esc(no)}</button><button class="btn primary" id="mYes" type="button">${esc(yes)}</button></div>`);
