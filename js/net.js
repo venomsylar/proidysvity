@@ -178,7 +178,8 @@ function clientOnData(d) {
     case 'fx': onNetFx(d); break;
     case 'toast': toast(d.text, d.ms); break;
     case 'ask': NET.curAsk = d.id; confirmModal(d.title, d.text, d.yes, d.no).then(ok => { NET.curAsk = 0; netSendHost({ t: 'answer', id: d.id, ok }); }); break;
-    case 'helpAsk': { NET.curAsk = d.id; playSfx('alert'); helpAskModal(d.title, d.text, d.tr | 0, d.T | 0).then(r => { if (NET.curAsk !== d.id) return; NET.curAsk = 0; netSendHost({ t: 'answer', id: d.id, ok: r.ok, pick: r.counter == null ? null : r.counter }); }); break; }
+    case 'helpAsk': { NET.curAsk = d.id; playSfx('alert'); helpAskModal(d.title, d.text, d.tr | 0, d.T | 0, d.cards || []).then(r => { if (NET.curAsk !== d.id) return; NET.curAsk = 0; netSendHost({ t: 'answer', id: d.id, ok: r.ok, pick: r.counter == null ? null : r.counter }); }); break; }
+    case 'cardsAsk': NET.curAsk = d.id; cardsModal(d.title, d.text, d.groups || [], d.yes, d.no).then(ok => { if (NET.curAsk !== d.id) return; NET.curAsk = 0; netSendHost({ t: 'answer', id: d.id, ok }); }); break;
     case 'tradeAsk': { const me = viewerP(); if (!me) { netSendHost({ t: 'answer', id: d.id, ok: false }); break; } NET.curAsk = d.id; playSfx('alert'); tradePickModal(me, d.from, d.give || []).then(pick => { if (NET.curAsk !== d.id) return; NET.curAsk = 0; netSendHost({ t: 'answer', id: d.id, ok: !!pick, pick: pick || [] }); }); break; }
     case 'askEnd': if (NET.curAsk === d.id) { NET.curAsk = 0; closeModal(); } break;
   }

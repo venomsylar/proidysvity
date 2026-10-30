@@ -253,13 +253,14 @@ function botAcceptCounter(p, h, counter) {
   return Math.random() < [0, .95, .85, .75][p.diff || 2];
 }
 /* вікно для людини, яку кличуть: допомогти, відмовити або попросити більше */
-function helpAskModal(title, text, tr, T) {
+function helpAskModal(title, text, tr, T, cards = []) {
   return new Promise(res => {
     const st = { c: Math.min(T, tr + 1) };
     const draw = () => `<h2>${esc(title)}</h2><p>${esc(text).replace(/\n/g, '<br>')}</p>
+      ${cards.length ? `<h3>Карти, які отримаєш одразу</h3>${cardRow(cards)}` : ''}
       ${T > tr ? `<h3>Або попроси більше</h3><p class="hint">Скільки скарбів із ${T} хочеш за допомогу:</p><div class="seg" role="group" aria-label="Скільки скарбів просиш">${Array.from({ length: T - tr }, (_, k) => tr + 1 + k).map(n => `<button type="button" data-hc="${n}" aria-pressed="${st.c === n}">${n}</button>`).join('')}</div>` : ''}
       <div class="row end"><button class="btn ghost" type="button" id="haNo">Відмовити</button>${T > tr ? `<button class="btn" type="button" id="haMore">Попросити ${st.c}</button>` : ''}<button class="btn primary" type="button" id="haYes">Допомогти</button></div>`;
-    showModal(draw());
+    showModal(draw(), cards.length ? 'wide' : '');
     const fin = r => { $('#sheet').onclick = null; closeModal(); res(r); };
     $('#sheet').onclick = e => {
       const b = e.target.closest('button'); if (!b) return;
@@ -270,14 +271,15 @@ function helpAskModal(title, text, tr, T) {
     };
   });
 }
-function helpAskFor(h, tr, T, title, text) {
-  if (h.type !== 'remote') return helpAskModal(title, text, tr, T);
+function helpAskFor(h, tr, T, title, text, cards = []) {
+  cards = cards.map(cardCopy);
+  if (h.type !== 'remote') return helpAskModal(title, text, tr, T, cards);
   return new Promise(res => {
     const id = ++NET.askSeq; let tm;
     const done = (ok, pick) => { if (!NET.asks.has(id)) return; NET.asks.delete(id); clearTimeout(tm); netSendTo(h.idx, { t: 'askEnd', id }); res({ ok: !!ok, counter: Number.isFinite(pick) ? pick : null }); };
     done.who = h.idx; NET.asks.set(id, done);
     tm = setTimeout(() => done(false), 45000);
-    netSendTo(h.idx, { t: 'helpAsk', id, title, text, tr, T });
+    netSendTo(h.idx, { t: 'helpAsk', id, title, text, tr, T, cards });
   });
 }
 function togetherWith(i) { const cb = G.combat, was = cb.helper; cb.helper = i; const s = sides(); cb.helper = was; return s; }
@@ -298,7 +300,7 @@ async function askHelp(i, offer) {
   renderUI();
   let ok, why = '', counter = null, haggled = false;
   if (h.type === 'bot') { await botDelay(600); const d = botHelpDecision(h, p, offer); ok = d.ok; why = d.why; counter = d.counter == null ? null : d.counter; }
-  else { const r = await helpAskFor(h, offer.tr, T, `${h.name}, допоможеш?`, `${p.name} кличе тебе на поміч у бою з «${monNames()}».\n${helpForecast(i)}\nПропонує: ${offerText(offer)}${race(h) === 'elf' ? ', а ти як ельф ще й отримаєш рівень' : ''}.`); ok = r.ok; counter = r.counter; }
+  else { const r = await helpAskFor(h, offer.tr, T, `${h.name}, допоможеш?`, `${p.name} кличе тебе на поміч у бою з «${monNames()}».\n${helpForecast(i)}\nПропонує: ${offerText(offer)}${race(h) === 'elf' ? ', а ти як ельф ще й отримаєш рівень' : ''}.`, offer.cards); ok = r.ok; counter = r.counter; }
   if (!G.combat) return false;
   if (!ok && counter != null && counter > offer.tr && counter <= T) {
     haggled = true;
@@ -569,19 +571,46 @@ function botTradeOffer(b, p, give) {
   if (!take.length) return gain >= 300 ? { ok: true, take: [], why: 'Дати натомість нічого не можу, але подарунок візьму!' } : { ok: false, why: 'Мені це ні до чого.' };
   return { ok: true, take, why: '' };
 }
+/* карти у вікнах: показуємо самі карти, а не лише назви */
+const cardCopy = c => JSON.parse(JSON.stringify(c));
+function cardRow(cards, o = {}) {
+  if (!cards.length) return o.empty ? `<p class="hint">${o.empty}</p>` : '';
+  return `<div class="cardrow">${cards.map(c => {
+    const on = o.sel && o.sel.has(c.uid);
+    return `<div class="cpick${o.sel ? ' selectable' : ''}${on ? ' on' : ''}"${o.sel ? ` data-${o.key}="${c.uid}" role="button" tabindex="0" aria-pressed="${on}"` : ''}>${cardHTML(c, 'static')}${o.tag ? `<span class="ctag">${o.tag(c)}</span>` : ''}</div>`;
+  }).join('')}</div>`;
+}
+function cardsModal(title, text, groups, yes, no) {
+  return new Promise(res => {
+    showModal(`<h2>${esc(title)}</h2>${text ? `<p>${esc(text).replace(/\n/g, '<br>')}</p>` : ''}${groups.map(g => `<h3>${esc(g.label)}</h3>${cardRow(g.cards, { empty: esc(g.empty || 'нічого') })}`).join('')}
+      <div class="row end"><button class="btn ghost" id="mNo" type="button">${esc(no)}</button><button class="btn primary" id="mYes" type="button">${esc(yes)}</button></div>`, 'wide');
+    $('#mYes').onclick = () => { closeModal(); res(true); }; $('#mNo').onclick = () => { closeModal(); res(false); };
+  });
+}
+function cardsConfirmFor(p, title, text, groups, yes, no) {
+  groups = groups.map(g => ({ ...g, cards: g.cards.map(cardCopy) }));
+  if (p.type !== 'remote') return cardsModal(title, text, groups, yes, no);
+  return new Promise(res => {
+    const id = ++NET.askSeq; let tm;
+    const done = ok => { if (!NET.asks.has(id)) return; NET.asks.delete(id); clearTimeout(tm); netSendTo(p.idx, { t: 'askEnd', id }); res(!!ok); };
+    done.who = p.idx; NET.asks.set(id, done);
+    tm = setTimeout(() => done(false), 60000);
+    netSendTo(p.idx, { t: 'cardsAsk', id, title, text, groups, yes, no });
+  });
+}
 function tradeChip(c) { return `${c.art} ${esc(c.name)}${c.bonus ? ' +' + c.bonus : ''}${c.value ? ' · ' + c.value + ' зол.' : ''}`; }
 /* вибір зустрічної пропозиції (бачить лише той, кого просять) */
 function tradePickModal(t, fromName, giveInfo) {
   return new Promise(res => {
     const items = tradeItems(t), sel = new Set();
     const draw = () => `<h2>${esc(t.name)}, обмін?</h2><p><b>${esc(fromName)}</b> пропонує тобі:</p>
-      <div class="ochips">${giveInfo.length ? giveInfo.map(c => `<span class="tag">${tradeChip(c)}</span>`).join('') : '<p class="hint">нічого — просто просить щось дати</p>'}</div>
+      ${cardRow(giveInfo, { empty: 'нічого — просто просить щось дати' })}
       <h3>Що ти готовий дати натомість</h3><p class="hint">Цей список бачиш лише ти. ${esc(fromName)} побачить тільки те, що ти вибереш, і вирішить, чи згоден.</p>
-      <div class="ochips">${items.map(c => `<button type="button" class="ochip" data-tp="${c.uid}" aria-pressed="${sel.has(c.uid)}">${tradeChip(c)}${t.gear.includes(c) ? ' · вдягнено' : ' · у руці'}</button>`).join('') || '<p class="hint">У тебе немає речей для обміну.</p>'}</div>
+      <p class="hint">Натисни на карти, які віддаси.</p>${cardRow(items, { sel, key: 'tp', tag: c => t.gear.includes(c) ? 'вдягнено' : 'у руці', empty: 'У тебе немає речей для обміну.' })}
       <div class="row end"><button class="btn ghost" type="button" id="tpNo">Відмовитись</button><button class="btn primary" type="button" id="tpGo" ${sel.size || giveInfo.length ? '' : 'disabled'}>${sel.size ? `Запропонувати (${sel.size})` : 'Взяти без нічого натомість'}</button></div>`;
-    showModal(draw());
+    showModal(draw(), 'wide');
     $('#sheet').onclick = e => {
-      const b = e.target.closest('button'); if (!b) return;
+      const b = e.target.closest('button, [data-tp]'); if (!b) return;
       if (b.dataset.tp) { const u = +b.dataset.tp; sel.has(u) ? sel.delete(u) : sel.add(u); $('#sheet').innerHTML = draw(); }
       else if (b.id === 'tpNo') { $('#sheet').onclick = null; closeModal(); res(null); }
       else if (b.id === 'tpGo') { $('#sheet').onclick = null; closeModal(); res([...sel]); }
@@ -598,7 +627,7 @@ function askRemoteTrade(t, fromName, giveInfo, timeout = 90000) {
   });
 }
 async function humanTradeOffer(t, p, give) {
-  const info = give.map(c => ({ art: c.art, name: c.name, bonus: c.bonus, value: c.value }));
+  const info = give.map(cardCopy);
   if (t.type === 'remote') { const pick = await askRemoteTrade(t, p.name, info); return pick && pick.map(u => findTradeItem(t, u)).filter(Boolean); }
   const pv = G.viewer, pr = G.reveal, priv = privacy();
   if (priv) { G.reveal = -1; closeMenu(); renderUI(); await curtain(t); }
@@ -622,7 +651,8 @@ async function doTrade(p, t, give) {
   if (!take) { log(`${nameTag(t)} відмовляється від обміну.${why ? ` <i>«${esc(why)}»</i>` : ''}`); tell(p, `${t.name}: ${why ? '«' + why + '»' : 'відмова'}`, 2600); memo(p, t, -.5); return; }
   if (!give.length && !take.length) return;
   if (give.some(c => !findTradeItem(p, c.uid)) || take.some(c => !findTradeItem(t, c.uid))) { tell(p, 'Речі вже змінилися — обмін скасовано.'); return; }
-  const ok = await confirmFor(p, `${t.name} відповідає`, `${why ? '«' + why + '» ' : ''}За ${names(give)} ${t.name} ${take.length ? 'пропонує натомість: ' + names(take) : 'нічого не дає натомість'}. Згоден?`, take.length ? 'Міняємось' : 'Подарувати', 'Відмовитись');
+  const ok = await cardsConfirmFor(p, `${t.name} відповідає`, `${why ? '«' + why + '» ' : ''}${take.length ? `${t.name} пропонує натомість ось це. Згоден?` : `${t.name} нічого не дає натомість. Подарувати?`}`,
+    [{ label: `Ти отримаєш від ${t.name}`, cards: take, empty: 'нічого' }, { label: 'Ти віддаси', cards: give, empty: 'нічого' }], take.length ? 'Міняємось' : 'Подарувати', 'Відмовитись');
   if (!ok) { log(`${nameTag(p)} не погоджується на пропозицію ${nameTag(t)}.`); memo(t, p, -.3); return; }
   if (give.some(c => !findTradeItem(p, c.uid)) || take.some(c => !findTradeItem(t, c.uid))) { tell(p, 'Речі вже змінилися — обмін скасовано.'); return; }
   const move = async (from, to, c) => {
@@ -661,7 +691,6 @@ function openTrade() {
   const p = viewerP(); if (!canTrade(p)) return;
   const others = G.players.filter(q => q !== p);
   const st = { t: others[0].idx, give: new Set() };
-  const chip = (c, set, key) => `<button type="button" class="ochip" data-${key}="${c.uid}" aria-pressed="${set.has(c.uid)}">${c.art} ${esc(c.name)}${c.bonus ? ' +' + c.bonus : ''} · ${c.value} зол.</button>`;
   const draw = () => {
     const t = G.players[st.t];
     const mine = tradeItems(p);
@@ -669,13 +698,13 @@ function openTrade() {
     return `<h2>Обмін речами</h2><p>Вибери, з ким мінятися і що пропонуєш. Суперник сам вирішить, що дати натомість (його карт ти не бачиш), а ти потім погодишся або відмовишся. Отримані речі потрапляють у руку.</p>
       <h3>З ким</h3><div class="seg" role="group" aria-label="З ким мінятися">${others.map(q => `<button type="button" data-tt="${q.idx}" aria-pressed="${st.t === q.idx}">${esc(q.name)}</button>`).join('')}</div>
       ${t.type === 'bot' ? `<p class="hint" style="margin-top:8px">Бот, ${DIFF[t.diff || 2].name.toLowerCase()}. Ставлення до тебе: ${attitude(t, p)}. Що вища складність, то вигіднішу пропозицію він хоче.</p>` : ''}
-      <h3>Ти віддаєш (${gv} зол.)</h3><div class="ochips">${mine.map(c => chip(c, st.give, 'gv')).join('') || '<p class="hint">У тебе немає речей.</p>'}</div>
+      <h3>Ти віддаєш (${gv} зол.)</h3><p class="hint">Натисни на карти, які пропонуєш.</p>${cardRow(mine, { sel: st.give, key: 'gv', tag: c => p.gear.includes(c) ? 'вдягнено' : 'у руці', empty: 'У тебе немає речей.' })}
       <div class="row end"><button class="btn ghost" type="button" data-close>Скасувати</button><button class="btn primary" type="button" id="trGo">${st.give.size ? 'Запропонувати обмін' : 'Попросити щось без пропозиції'}</button></div>`;
   };
   const redraw = () => { $('#sheet').innerHTML = draw(); $('#sheet').querySelectorAll('[data-close]').forEach(x => x.onclick = closeModal); };
-  showModal(draw());
+  showModal(draw(), 'wide');
   $('#sheet').onclick = e => {
-    const b = e.target.closest('button'); if (!b) return;
+    const b = e.target.closest('button, [data-gv]'); if (!b) return;
     if (b.dataset.tt) { st.t = +b.dataset.tt; redraw(); }
     else if (b.dataset.gv) { const u = +b.dataset.gv; st.give.has(u) ? st.give.delete(u) : st.give.add(u); redraw(); }
     else if (b.id === 'trGo') { $('#sheet').onclick = null; closeModal(); dispatch({ k: 'trade', target: st.t, give: [...st.give] }); }
