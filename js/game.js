@@ -173,14 +173,19 @@ function meddleOptions(b) {
 async function botsInterfere() {
   const p = fighter(); if (!G.combat) return false; let any = false;
   const leader = Math.max(...G.players.filter(q => q !== p).map(q => q.level));
-  for (const b of G.players) {
+  /* що вищий рівень героя, то охочіше йому шкодять: плавно, до +0.2 біля фінішу */
+  const progress = clamp((p.level - 1) / Math.max(1, G.goal - 1), 0, 1);
+  const levelHeat = .2 * Math.pow(progress, 1.5);
+  for (const b of shuffle([...G.players])) {
     if (!G.combat || G.over) return any;
     const cb = G.combat;
     if (b === p || b.idx === cb.helper || b.type !== 'bot' || cb.interfered.has(b.idx)) continue;
     const s = sides(); if (!s.win) continue;
     const D = DIFF[b.diff || 2]; const an = affN(b, p);
     const winning = p.level + levelsGain() >= G.goal;
-    const chance = winning ? D.block : D.meddle + (p.level >= leader ? D.lead : 0) + (p.level >= G.goal * .6 ? .1 : 0) - an * D.grudge * 6;
+    /* хтось уже нашкодив у цьому бою — решта менш охоче доливає (щоб не накидалися всі разом) */
+    const piled = cb.interfered.size;
+    const chance = winning ? D.block : (D.meddle + (p.level >= leader ? D.lead : 0) + levelHeat - an * D.grudge * 6) * Math.pow(.5, piled);
     if (Math.random() > clamp(chance, 0, 1)) continue;
     const need = s.hero - s.mon + (s.tie ? 1 : 0);
     const opts = meddleOptions(b); if (!opts.length) continue;
