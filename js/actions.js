@@ -259,6 +259,23 @@ function openRules() {
 
 /* --- налаштування партії --- */
 const setupState = { types: loadMonTypes(), rows: [{ name: 'Мандрівник', type: 'human', sex: 'm', diff: 2 }, { name: 'Мотря', type: 'bot', sex: 'f', diff: 2 }, { name: 'Опанас', type: 'bot', sex: 'm', diff: 2 }, { name: 'Одарка', type: 'bot', sex: 'f', diff: 2 }], speed: 1, goal: 10, anim: 1.5 };
+/* налаштування стартового екрана памʼятаються на пристрої, поки їх не змінять */
+const SETUP_KEY = 'pdsv-setup';
+function loadSetup(s) {
+  try {
+    const d = JSON.parse(localStorage.getItem(SETUP_KEY) || 'null'); if (!d) return;
+    const rows = (Array.isArray(d.rows) ? d.rows : []).filter(r => r && (r.type === 'human' || r.type === 'bot')).slice(0, 6)
+      .map((r, i) => ({ name: String(r.name || '').trim().slice(0, 16) || (r.type === 'bot' ? BOT_NAMES[i] : `Гравець ${i + 1}`), type: r.type, sex: r.sex === 'f' ? 'f' : 'm', diff: [1, 2, 3].includes(r.diff) ? r.diff : 2 }));
+    if (rows.length >= 2) s.rows = rows;
+    if ([10, 20].includes(d.goal)) s.goal = d.goal;
+    if ([1.4, 1, .45].includes(d.speed)) s.speed = d.speed;
+    if ([2.1, 1.5, .9].includes(d.anim)) s.anim = d.anim;
+  } catch (e) { /* без збережених налаштувань */ }
+}
+function storeSetup(s = setupState) {
+  try { localStorage.setItem(SETUP_KEY, JSON.stringify({ rows: s.rows.filter(r => r.type !== 'remote').map(r => ({ name: r.name, type: r.type, sex: r.sex, diff: r.diff || 2 })), goal: s.goal, speed: s.speed, anim: s.anim })); } catch (e) { }
+}
+loadSetup(setupState);
 function loadMonTypes() { try { const t = JSON.parse(localStorage.getItem('pdsv-montypes') || 'null'); if (t) return { undead: t.undead !== false, dragon: t.dragon !== false }; } catch (e) { } return { undead: true, dragon: true }; }
 function saveMonTypes(t) { try { localStorage.setItem('pdsv-montypes', JSON.stringify(t)); } catch (e) { } }
 const monTypesText = t => ['звичайні', t.undead && 'нежить', t.dragon && 'дракони'].filter(Boolean).join(', ');
@@ -311,7 +328,8 @@ function openSetup() {
     <div class="row end"><button class="btn ghost" type="button" id="rulesB">Правила</button><button class="btn primary" type="button" id="startB">Почати гру</button></div>`;
   const save = () => s.rows.forEach((r, i) => { const el = $('#pname-' + i); if (el && r.type !== 'remote') r.name = el.value.trim() || (r.type === 'bot' ? BOT_NAMES[i] : `Гравець ${i + 1}`); });
   const bind = () => {
-    $('#sheet').onchange = e => { const sel = e.target.closest('[data-diff]'); if (sel) { save(); s.rows[+sel.dataset.diff].diff = +sel.value; } const mt = e.target.closest('[data-mt]'); if (mt) { save(); s.types[mt.dataset.mt] = mt.checked; saveMonTypes(s.types); rerender(); } };
+    $('#sheet').onchange = e => { const sel = e.target.closest('[data-diff]'); if (sel) { save(); s.rows[+sel.dataset.diff].diff = +sel.value; storeSetup(); } const mt = e.target.closest('[data-mt]'); if (mt) { save(); s.types[mt.dataset.mt] = mt.checked; saveMonTypes(s.types); rerender(); } };
+    $('#sheet').oninput = e => { if (e.target.id && e.target.id.startsWith('pname-')) { save(); storeSetup(); } };
     $('#sheet').onclick = e => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.t) { save(); s.rows[+b.dataset.i].type = b.dataset.t; rerender(); }
@@ -327,11 +345,11 @@ function openSetup() {
       else if (b.id === 'netJoin') { save(); openJoin(); }
       else if (b.id === 'netStop') { save(); stopHosting(); rerender(); }
       else if (b.id === 'rulesB') { save(); openRules(); const back = $('#sheet').querySelector('[data-close]'); back.textContent = 'Назад'; back.onclick = () => openSetup(); }
-      else if (b.id === 'startB') { save(); closeModal(); newGame(); }
+      else if (b.id === 'startB') { save(); storeSetup(); closeModal(); newGame(); }
       else if (b.id === 'setupVer') { save(); openChangelog(); }
     };
   };
-  const rerender = () => { if (!NET.setupOpen) return; $('#sheet').innerHTML = html(); bind(); };
+  const rerender = () => { storeSetup(); if (!NET.setupOpen) return; $('#sheet').innerHTML = html(); bind(); };
   rerenderSetup = () => { save(); rerender(); };
   showModal(html()); NET.setupOpen = true; bind();
 }
