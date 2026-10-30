@@ -302,3 +302,4 @@ button.slot:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
 .cpick.on{background:rgba(224,169,59,.18);box-shadow:0 0 0 3px var(--brass)}
 .cpick.on::after{content:'✓';position:absolute;top:-7px;right:-7px;width:24px;height:24px;border-radius:50%;background:var(--brass);color:#23170b;font:700 14px/24px var(--f-ui);text-align:center;box-shadow:0 2px 6px rgba(0,0,0,.4)}
 .ctag{font-size:11px;color:var(--muted)}
+.card .art img{display:block;width:calc(48px*var(--k));height:calc(48px*var(--k));margin:calc(-3px*var(--k)) auto calc(-2px*var(--k))}

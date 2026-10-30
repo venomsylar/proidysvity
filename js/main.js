@@ -24,10 +24,13 @@ renderVersionBtn();
 
 /* ============================== СТАРТ ============================== */
 async function boot() {
+  const artP = loadCardArt();
   try {
     const arts = [...buildDoorDeck(true), ...buildTreasureDeck()].map(c => c.art).join('') + '⚔♂♀★';
     await Promise.race([Promise.all(['32px Underdog', '22px Pangolin', '700 20px Rubik'].map(f => document.fonts.load(f, 'АБВ')).concat([document.fonts.load('40px "Noto Color Emoji"', arts)])), wait(4000)]);
   } catch (e) { /* шрифти недоступні — використовуємо запасні */ }
+  if ($('#status')) $('#status').textContent = 'Розкладаємо карти й малюнки…';
+  await Promise.race([artP, wait(6000)]);
   if (typeof THREE === 'undefined') { $('#status').textContent = 'Не вдалося завантажити 3D-рушій. Перевір зʼєднання й онови сторінку.'; return; }
   init3D();
   renderUI();

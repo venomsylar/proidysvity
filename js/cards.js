@@ -291,7 +291,7 @@ function cardInfo(c) {
       if (c.vsT && c.vsT.dragon) t.push(`+${c.vsT.dragon} проти драконів.`);
       return { type: 'Річ', corner: c.bonus ? '+' + c.bonus : '', text: t.join(' '), flavor: c.flavor, foot: [`${c.value} зол.`, c.bonus ? `+${c.bonus} до сили` : ''] };
     }
-    case 'oneshot': return { type: 'Разова', corner: sgn(c.bonus), text: (c.bonus > 0 ? `Зіграй у бою: +${c.bonus} будь-якій стороні.` : `Зіграй у бою: ${c.bonus} будь-якій стороні — послаб монстра чи героя.`) + (c.fire ? ' Вогняна: на драконів не діє, проти нежиті ще +2.' : ''), flavor: c.flavor, foot: [`${c.value} зол.`, ''] };
+    case 'oneshot': return { type: 'Разова', corner: sgn(c.bonus), text: (c.bonus > 0 ? `Зіграй у бою: +${c.bonus} будь-якій стороні.` : `Зіграй у бою: ${sgn(c.bonus)} будь-якій стороні — послаб монстра чи героя.`) + (c.fire ? ' Вогняна: на драконів не діє, проти нежиті ще +2.' : ''), flavor: c.flavor, foot: [`${c.value} зол.`, ''] };
     case 'redirect': return { type: 'Разова', corner: '', text: 'Зіграй у будь-якому бою: бій з усіма монстрами переходить до іншого гравця на твій вибір.', flavor: c.flavor, foot: [`${c.value} зол.`, ''] };
     case 'flee': return { type: 'Разова', corner: '', text: 'Зіграй у бою: ти автоматично втікаєш.', flavor: c.flavor, foot: [`${c.value} зол.`, ''] };
     case 'wander': return { type: 'Особлива', corner: '', text: 'Зіграй у будь-якому бою разом із монстром з руки: він приєднується до бою.', flavor: c.flavor, foot: ['У бою', ''] };
@@ -313,5 +313,5 @@ function typeBadge(c) {
 }
 function cardHTML(c, extra = '') {
   const i = cardInfo(c);
-  return `<div class="card ${c.deck} ${extra}" data-uid="${c.uid}" tabindex="0" role="button" aria-label="${esc(c.name)}"><div class="band"><span>${esc(i.type)}</span><b>${esc(i.corner)}</b></div><div class="nm">${esc(c.name)}</div><div class="art" aria-hidden="true">${c.art}</div>${(b => b ? `<div class="mtype" style="background:${b.bg};color:${b.fg};border-color:${b.bd}">${b.e ? b.e + ' ' : ''}${b.t}</div>` : '')(typeBadge(c))}<div class="tx">${esc(i.text)}${i.flavor ? `<i>${esc(i.flavor)}</i>` : ''}</div><div class="ft"><span>${esc(i.foot[0])}</span><span>${esc(i.foot[1])}</span></div></div>`;
+  return `<div class="card ${c.deck} ${extra}" data-uid="${c.uid}" tabindex="0" role="button" aria-label="${esc(c.name)}"><div class="band"><span>${esc(i.type)}</span><b>${esc(i.corner)}</b></div><div class="nm">${esc(c.name)}</div><div class="art" aria-hidden="true">${(im => im ? `<img src="${im.src}" alt="">` : c.art)(artFor(c))}</div>${(b => b ? `<div class="mtype" style="background:${b.bg};color:${b.fg};border-color:${b.bd}">${b.e ? b.e + ' ' : ''}${b.t}</div>` : '')(typeBadge(c))}<div class="tx">${esc(i.text)}${i.flavor ? `<i>${esc(i.flavor)}</i>` : ''}</div><div class="ft"><span>${esc(i.foot[0])}</span><span>${esc(i.foot[1])}</span></div></div>`;
 }

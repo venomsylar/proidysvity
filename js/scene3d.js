@@ -221,7 +221,9 @@ function drawCardFace(g, c, W, H) {
   g.fillStyle = door ? 'rgba(138,38,80,.13)' : 'rgba(168,116,26,.18)';
   g.beginPath(); g.arc(W / 2, 210, 58, 0, Math.PI * 2); g.fill();
   g.setLineDash([8, 7]); g.lineWidth = 3; g.strokeStyle = 'rgba(27,21,18,.45)'; g.stroke(); g.setLineDash([]);
-  g.font = '84px ' + EMOJI_FONT; g.fillStyle = '#1b1512'; g.fillText(c.art, W / 2, 215);
+  const im = artFor(c);
+  if (im) g.drawImage(im, W / 2 - 66, 204 - 68, 132, 132);
+  else { g.font = '84px ' + EMOJI_FONT; g.fillStyle = '#1b1512'; g.fillText(c.art, W / 2, 215); }
   const bdg = typeBadge(c);
   if (bdg) {
     const lab = bdg.t.toUpperCase();
