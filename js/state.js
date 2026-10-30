@@ -9,16 +9,29 @@ const fighter = () => G.combat && G.combat.fighter != null ? G.players[G.combat.
 const viewerP = () => G.players[G.viewer] || null;
 const race = p => p.raceCard ? p.raceCard.race : null;
 const cls = p => p.clsCard ? p.clsCard.cls : null;
+/* дві раси / два класи (карти «Родовід із сюрпризом» і «Сумісництво») */
+const raceCards = p => [p.raceCard, p.raceCard2].filter(Boolean);
+const clsCards = p => [p.clsCard, p.clsCard2].filter(Boolean);
+const hasRace = (p, r) => raceCards(p).some(c => c.race === r);
+const hasCls = (p, k) => clsCards(p).some(c => c.cls === k);
+const rcCards = p => [p.raceCard, p.raceCard2, p.clsCard, p.clsCard2, p.dualRace, p.dualCls].filter(Boolean);
+const rcNames = p => [...raceCards(p), ...clsCards(p)].map(c => c.name).join(' · ');
+const raceShield = p => !!p.dualRace && !p.raceCard2;   // подвійна раса без другої раси: монстри не мають бонусів проти твоєї раси
+const clsShield = p => !!p.dualCls && !p.clsCard2;
+/* тривалі прокляття */
+const curseN = (p, k) => (p.curses || []).filter(c => c.bad && c.bad.p === k).length;
+const curseStr = p => curseN(p, 'monday') * 2 + curseN(p, 'sneeze');
+const sellPrice = (p, c) => curseN(p, 'inflation') ? Math.floor((c.value || 0) / 2 / 50) * 50 : (c.value || 0);
 const nameTag = p => `<b style="color:${p.color}">${esc(p.name)}</b>`;
 
-function usable(p, c) { if (!c.req) return true; if (c.req.sex) return p.sex === c.req.sex; if (c.req.race) return race(p) === c.req.race; if (c.req.cls) return cls(p) === c.req.cls; return true; }
+function usable(p, c) { if (!c.req) return true; if (c.req.sex) return p.sex === c.req.sex; if (c.req.race) return hasRace(p, c.req.race); if (c.req.cls) return hasCls(p, c.req.cls); return true; }
 const gearBonus = p => sum(p.gear, c => usable(p, c) ? c.bonus : 0);
-const baseStr = p => p.level + gearBonus(p) + (cls(p) === 'warrior' ? 1 : 0);
-const fleeBonus = p => (race(p) === 'elf' ? 1 : 0) + sum(p.gear, c => usable(p, c) ? (c.flee || 0) : 0);
+const baseStr = p => Math.max(0, p.level + gearBonus(p) + (hasCls(p, 'warrior') ? 1 : 0) - curseStr(p));
+const fleeBonus = p => (hasRace(p, 'elf') ? 1 : 0) + sum(p.gear, c => usable(p, c) ? (c.flee || 0) : 0) - curseN(p, 'lead') - curseN(p, 'sneeze');
 const EPIC_AT = 10;
 const epicFor = p => G.goal > 10 && p.level >= EPIC_AT;
 const monLvl = (m, p) => m.lvl * (epicFor(p) ? 2 : 1);
-const vsBonus = (m, p) => { let b = 0; if (m.vs) for (const k in m.vs) if (race(p) === k || cls(p) === k || p.sex === k) b += m.vs[k]; return b; };
+const vsBonus = (m, p) => { let b = 0; if (m.vs) for (const k in m.vs) if ((hasRace(p, k) && !raceShield(p)) || (hasCls(p, k) && !clsShield(p)) || p.sex === k) b += m.vs[k]; return b; };
 const DIFF = {
   1: { name: 'Легкий', help: .8, demand: .2, meddle: .06, lead: .15, block: .5, curse: .45, grudge: .04 },
   2: { name: 'Середній', help: .6, demand: .45, meddle: .16, lead: .35, block: .9, curse: .8, grudge: .07 },
@@ -39,7 +52,7 @@ function forgetTick(p) {
   const k = Math.pow(.5, 1 / half);
   for (const i in p.mem) { p.mem[i] *= k; if (Math.abs(p.mem[i]) < .05) delete p.mem[i]; }
 }
-const handLimit = p => race(p) === 'dwarf' ? 6 : 5;
+const handLimit = p => Math.max(1, (hasRace(p, 'dwarf') ? 6 : 5) - curseN(p, 'pocket'));
 
 function draw(deck) {
   const k = deck === 'door' ? 'doorDeck' : 'treasureDeck', dk = deck === 'door' ? 'doorDiscard' : 'treasureDiscard';
@@ -62,7 +75,7 @@ function equipConflicts(p, c) {
     const hs = p.gear.filter(g => g.slot === 'hands'); let used = sum(hs, g => g.hands), i = 0;
     while (used + c.hands > 2 && i < hs.length) { out.push(hs[i]); used -= hs[i].hands; i++; }
   }
-  if (c.big && race(p) !== 'dwarf') p.gear.forEach(g => { if (g.big && !out.includes(g)) out.push(g); });
+  if (c.big && !hasRace(p, 'dwarf')) p.gear.forEach(g => { if (g.big && !out.includes(g)) out.push(g); });
   return out;
 }
 const canEquip = (p, c) => c.kind !== 'gear' ? 'Це не спорядження.' : (!usable(p, c) ? `Лише для: ${reqName(c.req)}.` : null);
@@ -96,12 +109,12 @@ function sides() {
   const h = cb.helper != null ? G.players[cb.helper] : null;
   const ty = combatTypes(cb), undead = ty.undead;
   let hero = baseStr(p) + adjSum(typeAdj(p, ty)) + sum(cb.pShots, c => shotVal(c, ty, true)) + cb.wiz * 2;
-  if (cls(p) === 'cleric' && undead) hero += 3;
-  if (h) { hero += baseStr(h) + adjSum(typeAdj(h, ty)); if (cls(h) === 'cleric' && undead) hero += 3; }
+  if (hasCls(p, 'cleric') && undead) hero += 3;
+  if (h) { hero += baseStr(h) + adjSum(typeAdj(h, ty)); if (hasCls(h, 'cleric') && undead) hero += 3; }
   hero = Math.max(0, hero);
-  let mon = sum(cb.mons, x => monLvl(x.c, p) + vsBonus(x.c, p)) + sum(cb.mods, c => c.bonus) + sum(cb.mShots, c => shotVal(c, ty, false));
+  let mon = curseN(p, 'magnet') * 2 + sum(cb.mons, x => monLvl(x.c, p) + vsBonus(x.c, p)) + sum(cb.mods, c => c.bonus) + sum(cb.mShots, c => shotVal(c, ty, false));
   mon = Math.max(1, mon);
-  const tie = cls(p) === 'warrior' || (h && cls(h) === 'warrior');
+  const tie = hasCls(p, 'warrior') || (h && hasCls(h, 'warrior'));
   return { hero, mon, tie, win: hero > mon || (hero === mon && tie) };
 }
 
@@ -111,8 +124,10 @@ function keepScore(p, c) {
     case 'flee': return 500;
     case 'oneshot': return 200 + Math.abs(c.bonus) * 60;
     case 'gear': return (usable(p, c) ? 120 : 20) + c.value * 0.3;
-    case 'race': return p.raceCard ? 110 : 600;
-    case 'class': return p.clsCard ? 110 : 600;
+    case 'race': return !p.raceCard ? 600 : p.dualRace && !p.raceCard2 && !hasRace(p, c.race) ? 520 : 110;
+    case 'class': return !p.clsCard ? 600 : p.dualCls && !p.clsCard2 && !hasCls(p, c.cls) ? 520 : 110;
+    case 'dual': return (c.dual === 'race' ? p.dualRace : p.dualCls) ? 90 : 480;
+    case 'uncurse': return (p.curses || []).length ? 800 : 320;
     case 'mod': return 230 + Math.abs(c.bonus) * 8;
     case 'curse': return 280;
     case 'wander': return 270;
@@ -130,6 +145,7 @@ function badHits(q, bad) {
     case 'gold': return q.gold > 0;
     case 'race': return !!q.raceCard;
     case 'class': return !!q.clsCard;
+    case 'persist': return true;
     case 'death': case 'sex': return true;
   }
   return false;

@@ -8,21 +8,28 @@ function slotItems(p) {
   return { head: p.gear.find(g => g.slot === 'head'), body: p.gear.find(g => g.slot === 'body'), feet: p.gear.find(g => g.slot === 'feet'), L, R, two, misc: p.gear.filter(g => g.slot === 'misc') };
 }
 function slotHTML(p, c, label, area, big, extra = '') {
-  if (!c) return `<div class="slot empty" style="grid-area:${area}"><span class="sl">${label}</span></div>`;
+  if (!c) return `<div class="slot empty" style="grid-area:${area}"><span class="sl">${label}</span>${extra}</div>`;
   const off = c.kind === 'gear' && !usable(p, c);
   const bonus = c.kind === 'gear' && (c.bonus || c.flee) ? `<span class="sb">${c.bonus ? '+' + c.bonus : ''}${c.flee ? ` ↗${c.flee}` : ''}</span>` : '';
   const tip = `${label}: ${c.name}${off ? ` (не діє — лише для: ${reqName(c.req)})` : ''}`;
   return `<button type="button" class="slot ${c.kind !== 'gear' ? 'rc' : ''} ${off ? 'off' : ''}" style="grid-area:${area}" data-g="${c.uid}" title="${esc(tip)}" aria-label="${esc(tip)}"><span class="se" aria-hidden="true">${artIcon(c, "")}</span>${big ? `<span class="sn">${esc(c.name)}</span>` : ''}${bonus}${extra}</button>`;
+}
+const miniRC = (second, dual) => (second ? `<span class="s2" title="${esc(second.name)}">${artIcon(second, '')}</span>` : '') + (dual ? `<span class="sd" title="${esc(dual.name)}">×2</span>` : '');
+function dualSlotHTML(p) {
+  const cs = [p.dualRace, p.dualCls].filter(Boolean);
+  if (!cs.length) return `<div class="slot empty dualslot" style="grid-area:dual"><span class="sl">Особливе</span></div>`;
+  return `<div class="slot dualslot rc" style="grid-area:dual">${cs.map(c => `<button type="button" class="dualb" data-g="${c.uid}" title="${esc(c.name)}">${artIcon(c, '')}<span class="sn">${esc(c.name)}</span></button>`).join('')}</div>`;
 }
 function dollHTML(p, big) {
   const s = slotItems(p);
   const misc = s.misc.length ? slotHTML(p, s.misc[0], 'Дрібниці', 'misc', big && s.misc.length === 1, s.misc.length > 1 ? `<span class="cnt">×${s.misc.length}</span>` : '') : slotHTML(p, null, 'Дрібниці', 'misc', big);
   const rh = s.two ? `<div class="slot twin" style="grid-area:rh" title="Дворучна річ: ${esc(s.R.name)}"><span class="se" aria-hidden="true">${artIcon(s.R, "")}</span><span class="sl">дві руки</span></div>` : slotHTML(p, s.R, 'Права рука', 'rh', big);
   return `<div class="doll ${big ? 'big' : ''}">${SIL}
-    ${slotHTML(p, p.raceCard, 'Раса', 'race', big)}${slotHTML(p, s.head, 'Голова', 'head', big)}${slotHTML(p, p.clsCard, 'Клас', 'cls', big)}
+    ${slotHTML(p, p.raceCard, 'Раса', 'race', big, big ? '' : miniRC(p.raceCard2, p.dualRace))}${slotHTML(p, s.head, 'Голова', 'head', big)}${slotHTML(p, p.clsCard, 'Клас', 'cls', big, big ? '' : miniRC(p.clsCard2, p.dualCls))}
     ${slotHTML(p, s.L, 'Ліва рука', 'lh', big)}${slotHTML(p, s.body, 'Тіло', 'body', big)}${rh}
     ${misc}${slotHTML(p, s.feet, 'Ноги', 'feet', big)}
-    <div class="slot power" style="grid-area:pow" title="Сила в бою"><span class="pv">${baseStr(p)}</span><span class="sl">сила</span></div></div>`;
+    <div class="slot power" style="grid-area:pow" title="Сила в бою"><span class="pv">${baseStr(p)}</span><span class="sl">сила</span></div>
+    ${big ? slotHTML(p, p.raceCard2, p.dualRace ? 'Раса 2' : 'Раса 2 · потрібна карта «Родовід»', 'race2', big) + dualSlotHTML(p) + slotHTML(p, p.clsCard2, p.dualCls ? 'Клас 2' : 'Клас 2 · потрібна карта «Сумісництво»', 'cls2', big) : ''}</div>`;
 }
 const sexName = p => p.sex === 'f' ? 'жінка' : 'чоловік';
 const typeName = p => p.type === 'bot' ? `бот · ${DIFF[p.diff || 2].name.toLowerCase()}` : p.type === 'remote' ? 'гравець по мережі' : 'гравець';
@@ -31,15 +38,18 @@ function openCharSheet(i) {
   closeMenu(); hidePeek();
   const mine = i === G.viewer && handVisible();
   const v = viewerP();
-  const rcName = [p.raceCard && p.raceCard.name, p.clsCard && p.clsCard.name].filter(Boolean).join(' · ') || 'без раси й класу';
+  const rcName = rcNames(p) || 'без раси й класу';
   const rows = [`<div class="kv"><span>Рівень</span><b>${p.level}</b></div>`];
   p.gear.forEach(c => { const on = usable(p, c); if (c.bonus || !on) rows.push(`<div class="kv ${on ? '' : 'off'}"><span>${artIcon(c)} ${esc(c.name)}${on ? '' : ` — лише для: ${esc(reqName(c.req))}`}</span><b>${on ? '+' + c.bonus : '0'}</b></div>`); });
-  if (cls(p) === 'warrior') rows.push(`<div class="kv"><span>${artIcon(p.clsCard)} Воїн</span><b>+1</b></div>`);
+  if (hasCls(p, 'warrior')) rows.push(`<div class="kv"><span>${artIcon(p.clsCard)} Воїн</span><b>+1</b></div>`);
+  (p.curses || []).forEach(k => { const d = { monday: 2, sneeze: 1 }[k.bad.p]; if (d) rows.push(`<div class="kv off-curse"><span>${artIcon(k)} ${esc(k.name)}</span><b>−${d}</b></div>`); });
   rows.push(`<div class="kv total"><span>Разом</span><b>${baseStr(p)}</b></div>`);
   const fb = fleeBonus(p), need = Math.max(1, 5 - fb);
-  let chance = Math.min(6, 7 - need) / 6; if (race(p) === 'halfling') chance = 1 - Math.pow(1 - chance, 2);
-  const fleeSrc = [race(p) === 'elf' ? 'Ельф +1' : '', ...p.gear.filter(c => c.flee && usable(p, c)).map(c => `${c.name} +${c.flee}`), race(p) === 'halfling' ? 'Напіврослик перекидає кубик' : ''].filter(Boolean);
-  const abil = [p.raceCard && `<p class="ability"><b>${esc(p.raceCard.name)}.</b> ${esc(RACES[race(p)].text)}</p>`, p.clsCard && `<p class="ability"><b>${esc(p.clsCard.name)}.</b> ${esc(CLASSES[cls(p)].text)}</p>`].filter(Boolean).join('') || `<p class="ability">Немає раси й класу. ${mine ? 'Зіграй карту раси чи класу з руки поза боєм.' : ''}</p>`;
+  let chance = Math.min(6, 7 - need) / 6; if (hasRace(p, 'halfling')) chance = 1 - Math.pow(1 - chance, 2);
+  const fleeSrc = [hasRace(p, 'elf') ? 'Ельф +1' : '', ...p.gear.filter(c => c.flee && usable(p, c)).map(c => `${c.name} +${c.flee}`), hasRace(p, 'halfling') ? 'Напіврослик перекидає кубик' : '', ...(p.curses || []).filter(k => ['lead', 'sneeze'].includes(k.bad.p)).map(k => `${k.name} −1`)].filter(Boolean);
+  const abil = [...raceCards(p).map(c => `<p class="ability"><b>${esc(c.name)}.</b> ${esc(RACES[c.race].text)}</p>`), ...clsCards(p).map(c => `<p class="ability"><b>${esc(c.name)}.</b> ${esc(CLASSES[c.cls].text)}</p>`),
+    p.dualRace && `<p class="ability"><b>${esc(p.dualRace.name)}.</b> ${p.raceCard2 ? 'Дві раси одночасно.' : 'Можна мати другу расу. Поки її немає — монстри не мають бонусів проти твоєї раси.'}</p>`,
+    p.dualCls && `<p class="ability"><b>${esc(p.dualCls.name)}.</b> ${p.clsCard2 ? 'Два класи одночасно.' : 'Можна мати другий клас. Поки його немає — монстри не мають бонусів проти твого класу.'}</p>`].filter(Boolean).join('') || `<p class="ability">Немає раси й класу. ${mine ? 'Зіграй карту раси чи класу з руки поза боєм.' : ''}</p>`;
   const mood = p.type === 'bot' && v && v !== p ? `<h3>Характер</h3><div class="kv"><span>Складність</span><b style="color:var(--text)">${DIFF[p.diff || 2].name}</b></div><div class="kv"><span>Ставлення до тебе</span><b style="color:var(--text)">${attitude(p, v)}</b></div><p class="hint" style="margin-top:6px">Бот памʼятає, хто йому допомагав і хто підставляв. Від цього залежить, чи погодиться він допомогти і чи захоче нашкодити.</p>` : '';
   const handsUsed = sum(p.gear.filter(g => g.slot === 'hands'), g => g.hands), bigN = p.gear.filter(g => g.big).length;
   const s = slotItems(p);
@@ -49,16 +59,17 @@ function openCharSheet(i) {
     <div><h3>Сила в бою</h3>${rows.join('')}
       <h3>Втеча</h3><div class="kv"><span>Потрібно на кубику</span><b>${need <= 1 ? 'будь-яке' : need + '+'}</b></div><div class="kv"><span>Шанс утекти</span><b>${Math.round(chance * 100)}%</b></div>${fleeSrc.length ? `<p class="hint" style="margin-top:6px">${esc(fleeSrc.join(' · '))}</p>` : ''}
       <h3>Здібності</h3>${abil}
+      <h3>Тривалі прокляття</h3>${(p.curses || []).length ? p.curses.map(k => `<div class="kv off-curse"><span>${artIcon(k)} ${esc(k.name)}</span><b>${esc(k.bad.text)}</b></div>`).join('') + '<p class="hint">Зняти можна картою «Бабусина замова» чи «Свята вода з-під крана».</p>' : '<p class="hint">Немає. Пощастило!</p>'}
       ${mood}
       <h3>Запаси</h3>
       <div class="kv"><span>Золото</span><b>${p.gold} / 1000</b></div><div class="meter" aria-hidden="true"><i style="width:${Math.min(100, p.gold / 10)}%"></i></div>
       <div class="kv"><span>Карти в руці</span><b>${p.hand.length} / ${handLimit(p)}</b></div>
       <div class="kv"><span>Зайняті руки</span><b>${handsUsed} / 2</b></div>
-      <div class="kv"><span>Великі речі</span><b>${bigN} / ${race(p) === 'dwarf' ? '∞' : 1}</b></div>
+      <div class="kv"><span>Великі речі</span><b>${bigN} / ${hasRace(p, 'dwarf') ? '∞' : 1}</b></div>
     </div></div>
     <div class="row end"><button class="btn primary" type="button" data-close>Закрити</button></div>`, 'wide');
   $('#sheet').querySelectorAll('[data-g]').forEach(b => b.onclick = () => {
-    const c = [p.raceCard, p.clsCard, ...p.gear].find(x => x && x.uid === +b.dataset.g); if (!c) return;
+    const c = [...rcCards(p), ...p.gear].find(x => x && x.uid === +b.dataset.g); if (!c) return;
     closeModal(); openCardMenu(c, mine ? 'gear' : 'view');
   });
 }
@@ -93,7 +104,7 @@ function renderPlayers() {
     row.querySelector('.btype').textContent = p.type === 'bot' ? `бот ${'★'.repeat(p.diff || 2)}` : p.type === 'remote' ? 'мережа' : (NET.role === 'client' && p.idx === NET.me ? 'ти' : '');
     row.querySelector('.blvl').textContent = p.level;
     row.querySelector('.bs').innerHTML = `${ICO.sword} ${baseStr(p)}`;
-    const rc = [p.raceCard && p.raceCard.name, p.clsCard && p.clsCard.name].filter(Boolean).join(' · ') || 'без раси й класу';
+    const rc = (rcNames(p) || 'без раси й класу') + ((p.curses || []).length ? ` · ⛓${p.curses.length}` : '');
     row.querySelector('.bmeta').innerHTML = `${ICO[p.sex === 'f' ? 'f' : 'm']} ${esc(rc)} · карт ${p.hand.length} · ${p.gold} зол.`;
     const pipsEl = row.querySelectorAll('.track i');
     pipsEl.forEach((pip, k) => pip.classList.toggle('on', k < p.level));
@@ -167,7 +178,10 @@ function renderCombat() {
   });
   if (epicFor(p)) mods.unshift(`<span class="tag m">Епічна зона: рівень монстрів ×2</span>`);
   cb.mons.forEach(x => { const vb = vsBonus(x.c, p); if (vb) mods.push(`<span class="tag m">${esc(x.c.name)}: бонус проти тебе +${vb}</span>`); });
-  if (cb.mons.some(x => x.c.undead) && (cls(p) === 'cleric' || (h && cls(h) === 'cleric'))) mods.push('<span class="tag h">Жрець проти нежиті +3</span>');
+  if (cb.mons.some(x => x.c.undead) && (hasCls(p, 'cleric') || (h && hasCls(h, 'cleric')))) mods.push('<span class="tag h">Жрець проти нежиті +3</span>');
+  [p, h].filter(Boolean).forEach(q => (q.curses || []).forEach(k => { const v = { monday: '−2', sneeze: '−1', magnet: 'монстри +2', sack: 'скарбів −1' }[k.bad.p]; if (v) mods.push(`<span class="tag m">⛓ ${q === p ? '' : esc(q.name) + ': '}${esc(k.name)} ${v}</span>`); }));
+  if (raceShield(p) && cb.mons.some(x => x.c.vs && Object.keys(x.c.vs).some(k => hasRace(p, k)))) mods.push(`<span class="tag h">${esc(p.dualRace.name)}: бонус проти раси не діє</span>`);
+  if (clsShield(p) && cb.mons.some(x => x.c.vs && Object.keys(x.c.vs).some(k => hasCls(p, k)))) mods.push(`<span class="tag h">${esc(p.dualCls.name)}: бонус проти класу не діє</span>`);
   const localOthers = NET.role !== 'client' && G.players.some(q => q.type === 'human' && q !== p && q.idx !== cb.helper);
   const canMeddle = localOthers && !G.over && (!G.busy || G.window) && G.players.filter(q => q.type === 'human').length > 1;
   const pct = Math.round(s.hero / (s.hero + s.mon) * 100);

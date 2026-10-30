@@ -23,6 +23,7 @@ const BAD = {
   cls: { t: 'class', text: 'Втрачаєш клас.' },
   gear: { t: 'gear', text: 'Втрачаєш усе спорядження.' },
   sex: { t: 'sex', text: 'Твоя стать змінюється. Речі «лише для» іншої статі перестають діяти.' },
+  persist: (p, text) => ({ t: 'persist', p, text }),
   death: { t: 'death', text: 'Смерть: втрачаєш усі речі й карти. Рівень, раса й клас лишаються.' }
 };
 
@@ -131,6 +132,19 @@ function buildDoorDeck(epic = false, types = { undead: true, dragon: true }) {
   K('Оновлення системи', '💻', BAD.lvl(1), 'Перезавантаження займе три години.');
   K('Мамин дзвінок', '📞', BAD.hand(2), 'Поки слухав про сусідів, загубив карти.');
   K('Невдалий манікюр', '💅', BAD.slot('hands'), 'Тепер нічого не втримаєш.');
+  // тривалі прокляття: діють, поки їх не знімуть
+  const KP = (name, art, p, text, flavor) => d.push(mk({ deck: 'door', kind: 'curse', persist: true, name, art, bad: BAD.persist(p, text), flavor }));
+  KP('Вічний понеділок', '📆', 'monday', '−2 у бою.', 'Тиждень почався. І не закінчується.');
+  KP('Свинцеві капці', '🩴', 'lead', '−1 до втечі.', 'Тікати? У цьому?');
+  KP('Дірява кишеня', '👖', 'pocket', 'Тримаєш у руці на 1 карту менше.', 'Карти випадають. Як і надія.');
+  KP('Інфляція', '📉', 'inflation', 'Продаєш речі лише за півціни.', 'Учора було дорожче. Завтра буде дешевше.');
+  KP('Ніхто не любить', '💔', 'lonely', 'Ніхто не може допомагати тобі в бою.', 'Навіть кіт пішов до сусідів.');
+  KP('Магніт для монстрів', '🧲', 'magnet', 'Монстри мають +2 проти тебе.', 'Вони просто тебе обожнюють.');
+  KP('Дірявий мішок', '🎒', 'sack', 'За перемогу отримуєш на 1 скарб менше.', 'Щось весь час шурхотить і зникає.');
+  KP('Вічний нежить', '🤧', 'sneeze', '−1 у бою й −1 до втечі: постійно чхаєш.', 'Найстрашніша нежить — та, що в носі.');
+  // подвійні карти: дві раси або два класи
+  for (let i = 0; i < 2; i++) d.push(mk({ deck: 'door', kind: 'dual', dual: 'race', name: 'Родовід із сюрпризом', art: '🧬', flavor: 'Прабабця — ельфійка, прадід — гном. Не питай.' }));
+  for (let i = 0; i < 2; i++) d.push(mk({ deck: 'door', kind: 'dual', dual: 'class', name: 'Сумісництво', art: '💼', flavor: 'Удень воїн, увечері маг, на вихідних жрець.' }));
   for (let i = 0; i < 4; i++) d.push(mk({ deck: 'door', kind: 'wander', name: 'Приблудна потвора', art: '🐾', flavor: 'Почула шум і вирішила зазирнути.' }));
 
   const X = (name, art, bonus, tr, flavor) => d.push(mk({ deck: 'door', kind: 'mod', name, art, bonus, tr, flavor }));
@@ -217,6 +231,7 @@ function buildTreasureDeck(types = { undead: true, dragon: true }) {
   O('Коктейль «Вогник»', 3, 200, '🍹', { fire: true }); O('Бойовий борщ', 4, 250, '🍜'); O('Мотиваційна промова', 3, 200, '📣'); O('Сирник сили', 2, 100, '🧀');
   O('Гнилий помідор', -3, 150, '🍅'); O('Гнилий помідор', -3, 150, '🍅'); O('Кислий лимон', -2, 100, '🍋');
   O('Снодійне', -4, 250, '💤'); O('Лід за комір', -3, 200, '🧊'); O('Підніжка', -2, 100, '🦶');
+  for (const [nm, art, fl] of [['Бабусина замова', '🙏', 'Тьху-тьху-тьху, щоб не наврочили.'], ['Бабусина замова', '🙏', 'Тьху-тьху-тьху, щоб не наврочили.'], ['Свята вода з-під крана', '🚰', 'Освячена особисто. Майже.']]) t.push(mk({ deck: 'treasure', kind: 'uncurse', name: nm, value: 300, art, flavor: fl }));
   t.push(mk({ deck: 'treasure', kind: 'flee', name: 'Бананова шкірка', value: 200, art: '🍌' }));
   t.push(mk({ deck: 'treasure', kind: 'flee', name: 'Таємні двері', value: 300, art: '🚪' }));
   for (const [nm, art] of [['Зілля «Це не я»', '👉'], ['Зілля «Це не я»', '👉'], ['Стрілочник', '🧭'], ['Цап-відбувайло', '🐐']]) t.push(mk({ deck: 'treasure', kind: 'redirect', name: nm, value: 300, art }));
@@ -264,7 +279,7 @@ function buildTreasureDeck(types = { undead: true, dragon: true }) {
   return t.filter(c => !(c.vsT && c.vsT.dragon && !c.fire && c.name !== 'Вогнегасник') || types.dragon);
 }
 
-const KIND_FIND = { race: 'Нова раса', class: 'Новий клас', mod: 'Підсилювач монстрів', wander: 'Приблудна потвора' };
+const KIND_FIND = { dual: 'Особлива карта', race: 'Нова раса', class: 'Новий клас', mod: 'Підсилювач монстрів', wander: 'Приблудна потвора' };
 const reqName = r => r ? (r.sex ? (r.sex === 'f' ? 'жінок' : 'чоловіків') : r.race ? RACES[r.race].name : CLASSES[r.cls].name) : '';
 const sgn = n => n > 0 ? '+' + n : n < 0 ? '−' + Math.abs(n) : String(n);
 
@@ -278,7 +293,9 @@ function cardInfo(c) {
       t.push('Халепа: ' + c.bad.text);
       return { type: 'Монстр', corner: c.lvl, text: t.join(' '), flavor: c.flavor, foot: [`${c.treasures} ${plural(c.treasures, 'скарб', 'скарби', 'скарбів')}`, `+${c.levels} ${plural(c.levels, 'рівень', 'рівні', 'рівнів')}`] };
     }
-    case 'curse': return { type: 'Прокляття', corner: '!', text: c.bad.text, flavor: c.flavor, foot: ['Діє одразу', ''] };
+    case 'curse': return c.persist ? { type: 'Прокляття', corner: '⛓', text: c.bad.text + ' Діє, поки не знімеш.', flavor: c.flavor, foot: ['Діє постійно', ''] } : { type: 'Прокляття', corner: '!', text: c.bad.text, flavor: c.flavor, foot: ['Діє одразу', ''] };
+    case 'dual': return c.dual === 'race' ? { type: 'Особлива', corner: '×2', text: 'Можеш мати дві раси одночасно. Поки раса лише одна (або жодної) — монстри не мають бонусів проти твоєї раси.', flavor: c.flavor, foot: ['Зіграй поза боєм', ''] } : { type: 'Особлива', corner: '×2', text: 'Можеш мати два класи одночасно. Поки клас лише один (або жодного) — монстри не мають бонусів проти твого класу.', flavor: c.flavor, foot: ['Зіграй поза боєм', ''] };
+    case 'uncurse': return { type: 'Разова', corner: '', text: 'Знімає одне тривале прокляття — з тебе або з будь-кого іншого. Поза боєм.', flavor: c.flavor, foot: [`${c.value} зол.`, ''] };
     case 'race': return { type: 'Раса', corner: '', text: RACES[c.race].text, flavor: RACES[c.race].flavor, foot: ['Зіграй поза боєм', ''] };
     case 'class': return { type: 'Клас', corner: '', text: CLASSES[c.cls].text, flavor: CLASSES[c.cls].flavor, foot: ['Зіграй поза боєм', ''] };
     case 'mod': return { type: 'Підсилювач', corner: sgn(c.bonus), text: `${sgn(c.bonus)} до сили монстра, ${sgn(c.tr)} ${plural(Math.abs(c.tr), 'скарб', 'скарби', 'скарбів')}. Грай у будь-якому бою.`, flavor: c.flavor, foot: ['На монстра', ''] };
@@ -307,6 +324,9 @@ function typeBadge(c) {
     if (c.undead) return { t: 'Нежить', e: '💀', bg: '#2d5a46', bd: '#9fe0bd', fg: '#e4fff0' };
     return { t: 'Звичайний', e: '', bg: '#6b5642', bd: '#e6d6bf', fg: '#fff4e0' };
   }
+  if (c.kind === 'curse' && c.persist) return { t: 'Тривале', e: '⛓️', bg: '#4a2a55', bd: '#d9a6ff', fg: '#fbefff' };
+  if (c.kind === 'dual') return { t: c.dual === 'race' ? 'Дві раси' : 'Два класи', e: '✨', bg: '#2f4867', bd: '#a9c8f0', fg: '#eef5ff' };
+  if (c.kind === 'uncurse') return { t: 'Знімає прокляття', e: '', bg: '#2d5a46', bd: '#9fe0bd', fg: '#e4fff0' };
   if (c.fire) return { t: 'Вогняна', e: '🔥', bg: '#b4431a', bd: '#ffc27a', fg: '#fff4e6' };
   if (c.vsT && c.vsT.dragon) return { t: 'Драконобій', e: '🛡️', bg: '#2f4867', bd: '#a9c8f0', fg: '#eef5ff' };
   return null;

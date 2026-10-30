@@ -463,7 +463,7 @@ function destroySeat(p) {
 function syncSeat(p) {
   if (!p.seat) return;
   const grp = p.seat.equipG; [...grp.children].forEach(disposeMesh);
-  const items = [p.raceCard, p.clsCard, ...p.gear].filter(Boolean); const n = items.length;
+  const items = [...rcCards(p), ...(p.curses || []), ...p.gear].filter(Boolean); const n = items.length;
   const gap = Math.min(.8, 5.4 / Math.max(1, n));
   items.forEach((c, i) => {
     const m = cardMesh(c); m.scale.setScalar(.62);

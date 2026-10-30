@@ -4,14 +4,14 @@
 const sameAct = (a, b) => !!a && !!b && a.k === b.k && (a.uid || 0) === (b.uid || 0) && (a.side || '') === (b.side || '') && (a.target == null ? -1 : a.target) === (b.target == null ? -1 : b.target) && (a.mon || 0) === (b.mon || 0);
 function findOwnCard(p, uid) {
   const h = p.hand.find(c => c.uid === uid); if (h) return { c: h, where: 'hand' };
-  const g = [p.raceCard, p.clsCard, ...p.gear].find(c => c && c.uid === uid); return g ? { c: g, where: 'gear' } : null;
+  const g = [...rcCards(p), ...p.gear].find(c => c && c.uid === uid); return g ? { c: g, where: 'gear' } : null;
 }
 const flatActs = list => list.flatMap(a => a.sub ? a.sub : [a]);
 function actAllowed(p, act) {
   if (!act || G.over) return false;
   if (act.k === 'pass') return waitingOn().includes(p);
   if (act.k === 'trade') return canTrade(p) && !!G.players[act.target] && act.target !== p.idx;
-  if (act.k === 'help') { const cb = G.combat; return !G.busy && G.phase === 'combat' && !!cb && p === fighter() && cb.helper == null && !!G.players[act.target] && act.target !== p.idx && !cb.asked.has(act.target); }
+  if (act.k === 'help') { const cb = G.combat; return !G.busy && G.phase === 'combat' && !!cb && p === fighter() && !curseN(p, 'lonely') && cb.helper == null && !!G.players[act.target] && act.target !== p.idx && !cb.asked.has(act.target); }
   if (act.uid) { const f = findOwnCard(p, act.uid); return !!f && flatActs(cardActions(f.c, f.where, p)).some(a => !a.dis && sameAct(a.act, act)); }
   return dockActs(p).some(a => a.act && !a.dis && sameAct(a.act, act));
 }
@@ -38,14 +38,16 @@ async function execAct(p, a) {
     case 'flee': return fleeCombat();
     case 'end': return endTurn((a.give || []).map(u => p.hand.find(x => x.uid === u)).filter(Boolean));
     case 'discard': return doDiscard(p, c);
-    case 'rc2hand': { p[c.kind === 'race' ? 'raceCard' : 'clsCard'] = null; giveCard(p, c); log(`${nameTag(p)} знімає ${c.kind === 'race' ? 'расу' : 'клас'} «${esc(c.name)}» і повертає карту в руку.`); syncSeat(p); return; }
+    case 'rc2hand': { removeRC(p, c); giveCard(p, c); log(`${nameTag(p)} знімає «${esc(c.name)}» і повертає карту в руку.`); syncSeat(p); return; }
     case 'help': return askHelp(a.target, { tr: a.tr | 0, cards: (a.cards || []).map(u => p.hand.find(x => x.uid === u)).filter(Boolean) });
     case 'trouble': return lookForTrouble(c);
     case 'equip': return doEquip(p, c);
     case 'unequip': return unequip(p, c);
     case 'sell': return doSell(p, c);
-    case 'rc': return doPlayRC(p, c);
-    case 'droprc': { p[c.kind === 'race' ? 'raceCard' : 'clsCard'] = null; discard(c); log(`${nameTag(p)} скидає ${c.kind === 'race' ? 'расу' : 'клас'} «${esc(c.name)}» у скид.`); syncSeat(p); return; }
+    case 'rc': return doPlayRC(p, c, a.side === 'second');
+    case 'dual': return doPlayDual(p, c);
+    case 'uncurse': return doUncurse(p, c, G.players[a.target], a.mon);
+    case 'droprc': { removeRC(p, c); discard(c); log(`${nameTag(p)} скидає «${esc(c.name)}» у скид.`); syncSeat(p); return; }
     case 'levelup': return doLevelUp(p, c);
     case 'curse': return doCurse(p, c, G.players[a.target]);
     case 'shot': return playIntoCombat(p, c, a.side);
@@ -67,9 +69,9 @@ function cardActions(c, where, v = viewerP()) {
   const combatOk = inCombat && (free || win);
   const acts = [];
   const A = (label, act, extra = {}) => acts.push({ label, act, ...extra });
-  const sell = () => { if (free && myTurn && !inCombat && c.value) A(`Продати за ${c.value} зол.`, { k: 'sell', uid: c.uid }); };
+  const sell = () => { if (free && myTurn && !inCombat && c.value) A(`Продати за ${sellPrice(v, c)} зол.`, { k: 'sell', uid: c.uid }); };
   if (where === 'gear') {
-    if (c.kind === 'race' || c.kind === 'class') { if (free && !inCombat) { A('Зняти в руку', { k: 'rc2hand', uid: c.uid }); A('Скинути в скид', { k: 'droprc', uid: c.uid }); } return acts; }
+    if (c.kind === 'race' || c.kind === 'class' || c.kind === 'dual') { if (free && !inCombat) { A('Зняти в руку', { k: 'rc2hand', uid: c.uid }); A('Скинути в скид', { k: 'droprc', uid: c.uid }); } return acts; }
     if (free && !inCombat) A('Зняти в руку', { k: 'unequip', uid: c.uid });
     sell(); return acts;
   }
@@ -78,7 +80,20 @@ function cardActions(c, where, v = viewerP()) {
   const fp = fighter();
   switch (c.kind) {
     case 'gear': if (free && !inCombat) A('Спорядити', { k: 'equip', uid: c.uid }, { dis: canEquip(v, c) }); sell(); break;
-    case 'race': case 'class': if (free && !inCombat) A(`Стати: ${c.name}`, { k: 'rc', uid: c.uid }, { why: (c.kind === 'race' ? v.raceCard : v.clsCard) ? 'Поточна карта повернеться в руку.' : '' }); break;
+    case 'race': case 'class': {
+      if (!(free && !inCombat)) break;
+      const isR = c.kind === 'race', first = isR ? v.raceCard : v.clsCard, second = isR ? v.raceCard2 : v.clsCard2, dual = isR ? v.dualRace : v.dualCls;
+      const same = isR ? hasRace(v, c.race) : hasCls(v, c.cls);
+      if (first && dual && !second && !same) A(`${isR ? 'Друга раса' : 'Другий клас'}: ${c.name}`, { k: 'rc', uid: c.uid, side: 'second' });
+      A(first ? `Замінити на: ${c.name}` : `Стати: ${c.name}`, { k: 'rc', uid: c.uid }, { why: first ? 'Поточна карта повернеться в руку.' : '' });
+      break;
+    }
+    case 'dual': if (free && !inCombat) A(c.dual === 'race' ? 'Зіграти: дві раси' : 'Зіграти: два класи', { k: 'dual', uid: c.uid }, { dis: (c.dual === 'race' ? v.dualRace : v.dualCls) ? 'У тебе вже є така карта.' : null }); break;
+    case 'uncurse': {
+      const cursed = G.players.filter(q => (q.curses || []).length);
+      if (free && !inCombat) A('Зняти прокляття…', null, { dis: cursed.length ? null : 'Ні на кому немає тривалих проклять.', sub: cursed.flatMap(q => q.curses.map(k => ({ label: `${q === v ? 'З себе' : q.name}: «${k.name}»`, act: { k: 'uncurse', uid: c.uid, target: q.idx, mon: k.uid } }))) });
+      sell(); break;
+    }
     case 'levelup': if (free && !inCombat) A('Підняти рівень', { k: 'levelup', uid: c.uid }, { dis: v.level >= G.goal - 1 ? `${G.goal}-й рівень — лише за перемогу над монстром.` : null }); break;
     case 'oneshot':
       if (combatOk) {
@@ -107,7 +122,7 @@ function cardActions(c, where, v = viewerP()) {
     case 'curse': if (free && !inCombat) A('Наслати прокляття…', null, { sub: G.players.filter(q => q !== v).map(q => ({ label: `${q.name} · рів. ${q.level}`, act: { k: 'curse', uid: c.uid, target: q.idx } })) }); break;
   }
   if (free && !inCombat) A('Скинути в скид', { k: 'discard', uid: c.uid });
-  if (isFighter && free && cls(v) === 'wizard' && cb.wiz < 3 && !['oneshot', 'flee'].includes(c.kind)) A('Спалити заради +2 (Маг)', { k: 'wizard', uid: c.uid });
+  if (isFighter && free && hasCls(v, 'wizard') && cb.wiz < 3 && !['oneshot', 'flee'].includes(c.kind)) A('Спалити заради +2 (Маг)', { k: 'wizard', uid: c.uid });
   return acts;
 }
 function dockActs(v) {
@@ -127,7 +142,7 @@ function dockActs(v) {
     const fp = fighter(); if (v !== fp) return acts;
     const s = sides(), cb = G.combat;
     acts.push({ label: 'Битися!', act: { k: 'fight' }, cls: 'primary pulse', dis: !s.win });
-    acts.push({ label: 'Покликати на поміч', fn: openHelp, dis: cb.helper != null || G.players.every(q => q === fp || cb.asked.has(q.idx)) });
+    acts.push({ label: 'Покликати на поміч', fn: openHelp, dis: curseN(fp, 'lonely') ? 'Прокляття «Ніхто не любить»: допомагати тобі ніхто не може.' : cb.helper != null || G.players.every(q => q === fp || cb.asked.has(q.idx)) });
     acts.push({ label: 'Тікати', act: { k: 'flee' }, cls: 'danger' });
     return acts;
   }
@@ -244,6 +259,9 @@ function openRules() {
   <li><b>Вогняні речі</b> (🔥) дають ще <b>+2 проти нежиті</b>, але <b>на драконів не діють</b> зовсім — їхній бонус пропадає в бою з драконом. Так само вогняні разові карти.</li>
   <li><b>Драконобійні речі</b> (🛡️) мають додатковий бонус лише проти драконів.</li>
   <li>Разові карти зі знаком «−» послаблюють: кинь на монстра, щоб тобі було легше, або на героя, щоб йому було важче.</li></ul>
+  <h3>Дві раси, два класи й тривалі прокляття</h3>
+  <ul><li><b>Родовід із сюрпризом</b> дозволяє мати дві раси, <b>Сумісництво</b> — два класи. Карта лежить в особливому місці картки персонажа. Поки друга раса (чи клас) не зіграна, монстри не отримують бонусів проти твоєї раси (класу).</li>
+  <li><b>Тривалі прокляття</b> (⛓) не зникають одразу: вони висять на гравцеві й діють, поки їх не знімуть картою <b>Бабусина замова</b> чи <b>Свята вода з-під крана</b>. Зняти можна і з себе, і з друга.</li></ul>
   <h3>Поміч і торг</h3>
   <ul><li>Кличучи на поміч, ти пропонуєш ціну: скільки скарбів із бою віддаси і які карти з руки додаси одразу.</li>
   <li>Боти памʼятають, хто їм допомагав, а хто підставляв, і торгуються відповідно. Приязність показано у відсотках: 50% — нейтрально, вище — дружба, нижче — образа. Від неї залежить, чи допоможе бот і скільки попросить. З часом і добро, і образи забуваються (приблизно наполовину за пів партії). Хто допоміг лише після торгу — отримує менше вдячності, а хто вициганив усі скарби — зовсім трохи. Що вища складність, то більше вони вимагають, частіше шкодять лідеру й довше тримають образу. Ставлення бота видно в його картці та у вікні поміченого виклику.</li></ul>
@@ -372,7 +390,7 @@ async function newGame() {
   faceCache.forEach(t => t.dispose()); faceCache.clear();
   syncDeck('door'); syncDeck('treasure'); syncDiscardTop('door'); syncDiscardTop('treasure');
   NET.conns.clear();
-  G.players = s.rows.map((r, i) => ({ idx: i, name: r.name, type: r.type, sex: r.sex || 'm', diff: r.diff || 2, color: COLORS[i], level: 1, gold: 0, hand: [], gear: [], raceCard: null, clsCard: null, died: false, mem: {} }));
+  G.players = s.rows.map((r, i) => ({ idx: i, name: r.name, type: r.type, sex: r.sex || 'm', diff: r.diff || 2, color: COLORS[i], level: 1, gold: 0, hand: [], gear: [], raceCard: null, raceCard2: null, clsCard2: null, dualRace: null, dualCls: null, curses: [], clsCard: null, died: false, mem: {} }));
   s.rows.forEach((r, i) => { if (r.type === 'remote' && r.conn) { r.conn._pidx = i; NET.conns.set(i, r.conn); } });
   G.players.forEach(buildSeat);
   const firstHuman = G.players.find(p => p.type === 'human');

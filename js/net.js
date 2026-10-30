@@ -29,7 +29,7 @@ function snapFor(i) {
   return {
     gid: G.gid, goal: G.goal, cur: G.cur, phase: G.phase, busy: G.busy, over: G.over, log: G.log.slice(-60),
     dN: G.doorDeck.length, tN: G.treasureDeck.length, dTop: G.doorDiscard[G.doorDiscard.length - 1] || null, tTop: G.treasureDiscard[G.treasureDiscard.length - 1] || null,
-    players: G.players.map(p => ({ idx: p.idx, name: p.name, type: p.type, color: p.color, sex: p.sex, diff: p.diff, level: p.level, gold: p.gold, gear: p.gear, raceCard: p.raceCard, clsCard: p.clsCard, died: p.died, mem: p.type === 'bot' ? p.mem : null, hand: p.idx === i ? p.hand : p.hand.length })),
+    players: G.players.map(p => ({ idx: p.idx, name: p.name, type: p.type, color: p.color, sex: p.sex, diff: p.diff, level: p.level, gold: p.gold, gear: p.gear, raceCard: p.raceCard, clsCard: p.clsCard, raceCard2: p.raceCard2, clsCard2: p.clsCard2, dualRace: p.dualRace, dualCls: p.dualCls, curses: p.curses || [], died: p.died, mem: p.type === 'bot' ? p.mem : null, hand: p.idx === i ? p.hand : p.hand.length })),
     cb: cb ? { fighter: cb.fighter, mons: cb.mons.map(x => x.c), mods: cb.mods, pShots: cb.pShots, mShots: cb.mShots, helper: cb.helper, wiz: cb.wiz, asked: [...cb.asked], passed: [...cb.passed], offer: cb.offer } : null,
     win: G.window ? G.window.humans.map(h => h.idx) : null
   };
@@ -185,7 +185,7 @@ function clientOnData(d) {
   }
 }
 function fillPlayer(p, sp) {
-  Object.assign(p, { name: sp.name, type: sp.type, color: sp.color, sex: sp.sex, diff: sp.diff, level: sp.level, gold: sp.gold, gear: sp.gear, raceCard: sp.raceCard, clsCard: sp.clsCard, mem: sp.mem || {}, died: sp.died });
+  Object.assign(p, { name: sp.name, type: sp.type, color: sp.color, sex: sp.sex, diff: sp.diff, level: sp.level, gold: sp.gold, gear: sp.gear, raceCard: sp.raceCard, clsCard: sp.clsCard, raceCard2: sp.raceCard2 || null, clsCard2: sp.clsCard2 || null, dualRace: sp.dualRace || null, dualCls: sp.dualCls || null, curses: sp.curses || [], mem: sp.mem || {}, died: sp.died });
   p.hand = Array.isArray(sp.hand) ? sp.hand : Array.from({ length: sp.hand }, (_, k) => ({ hidden: true, kind: 'hidden', uid: -1 - k, deck: 'door', name: '?' }));
 }
 function applySnap(s) {
@@ -210,7 +210,7 @@ function applySnap(s) {
   G.combat = s.cb ? { ...s.cb, mons: s.cb.mons.map(c => ({ c })), asked: new Set(s.cb.asked), passed: new Set(s.cb.passed), interfered: new Set(), meshes: new Map() } : null;
   G.window = s.win ? { humans: s.win.map(i => G.players[i]).filter(Boolean) } : null;
   G.players.forEach(p => {
-    const sig = JSON.stringify([p.raceCard && p.raceCard.uid, p.clsCard && p.clsCard.uid, p.gear.map(g => g.uid), p.sex]);
+    const sig = JSON.stringify([rcCards(p).map(c => c.uid), (p.curses || []).map(c => c.uid), p.gear.map(g => g.uid), p.sex]);
     if (p._sig !== sig) { p._sig = sig; syncSeat(p); }
     else { const ps = p.level + '|' + G.cur + '|' + p.name; if (p._ps !== ps) { p._ps = ps; plateDraw(p); } }
   });
