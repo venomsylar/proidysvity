@@ -303,3 +303,8 @@ button.slot:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
 .cpick.on::after{content:'✓';position:absolute;top:-7px;right:-7px;width:24px;height:24px;border-radius:50%;background:var(--brass);color:#23170b;font:700 14px/24px var(--f-ui);text-align:center;box-shadow:0 2px 6px rgba(0,0,0,.4)}
 .ctag{font-size:11px;color:var(--muted)}
 .card .art img{display:block;width:calc(48px*var(--k));height:calc(48px*var(--k));margin:calc(-3px*var(--k)) auto calc(-2px*var(--k))}
+.setup-title{display:flex;align-items:center;gap:10px}
+.setup-ver{pointer-events:auto;cursor:pointer;font:700 12px/1 var(--f-ui);letter-spacing:.04em;color:var(--muted);background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:99px;padding:4px 10px;position:relative}
+.setup-ver:hover{color:var(--text);border-color:var(--brass)}
+.setup-ver.new{color:#1b1512;background:var(--brass);border-color:var(--brass)}
+.setup-ver.new::after{content:'';position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;background:#ef6b5d;box-shadow:0 0 0 2px #000}

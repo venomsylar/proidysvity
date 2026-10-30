@@ -3,8 +3,13 @@
 /* ============================== ВЕРСІЯ І СПИСОК ЗМІН ==============================
    Нова версія: збільш APP_VERSION, додай запис на початок CHANGELOG
    і онови ?v=… біля файлів в index.html (щоб телефони не брали старі файли з кешу). */
-const APP_VERSION = 25;
+const APP_VERSION = 26;
 const CHANGELOG = [
+  { v: 26, date: '2026-10-30', title: 'Екран завантаження', items: [
+    'Поки гра завантажується, крутиться спінер і видно, що саме зараз готується, зі смужкою прогресу.',
+    'Якщо щось не завантажилось (наприклад, немає інтернету), зʼявиться пояснення й кнопка «Спробувати ще».',
+    'Номер версії видно й на початковому екрані — натисни, щоб побачити список змін.'
+  ] },
   { v: 25, date: '2026-10-30', title: 'Малюнки на всіх картах', items: [
     'Кожна з 201 карти тепер має власну мультяшну ілюстрацію: монстри, дракони, нежить, прокляття, речі, разові карти, раси й класи.',
     'Малюнки видно на 3D-столі, у руці, у вікнах обміну й допомоги.'
@@ -128,3 +133,19 @@ const CHANGELOG = [
     '3D-стіл, анімації карт, гра з ботами або людьми за одним пристроєм.'
   ] }
 ];
+
+/* екран завантаження */
+function loaderSet(text, frac) {
+  const t = document.getElementById('ldText'), b = document.getElementById('ldBar');
+  if (t && text != null) t.textContent = text;
+  if (b && frac != null) b.style.width = Math.round(Math.max(0, Math.min(1, frac)) * 100) + '%';
+}
+function loaderFail(text) {
+  const l = document.getElementById('loader'); if (!l) return;
+  l.classList.add('err'); const e = document.getElementById('ldErrText'); if (e && text) e.textContent = text;
+}
+function loaderDone() {
+  const l = document.getElementById('loader'); if (!l) return;
+  l.classList.add('done'); setTimeout(() => l.remove(), 600);
+}
+(() => { const e = document.getElementById('ldVer'); if (e) e.textContent = 'версія ' + APP_VERSION; loaderSet('Завантажуємо 3D-рушій…', .1); })();

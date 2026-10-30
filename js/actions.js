@@ -285,7 +285,7 @@ function openSetup() {
       </div>
       <button class="btn small ghost" type="button" data-del="${i}" ${s.rows.length <= 2 ? 'disabled' : ''} aria-label="Прибрати гравця">✕</button></div>`;
   };
-  const html = () => `<h2>Пройдисвіти</h2>
+  const html = () => `<h2 class="setup-title">Пройдисвіти <button class="ver setup-ver${seenVersion() < APP_VERSION ? ' new' : ''}" type="button" id="setupVer" title="Що нового">v${APP_VERSION}</button></h2>
     <p>Настільна гра про похід у підземелля: вибивай двері, бий монстрів, збирай мотлох і підставляй друзів.</p>
     <h3>Гравці (2–6)</h3>
     <div id="rows">${s.rows.map(row).join('')}</div>
@@ -328,6 +328,7 @@ function openSetup() {
       else if (b.id === 'netStop') { save(); stopHosting(); rerender(); }
       else if (b.id === 'rulesB') { save(); openRules(); const back = $('#sheet').querySelector('[data-close]'); back.textContent = 'Назад'; back.onclick = () => openSetup(); }
       else if (b.id === 'startB') { save(); closeModal(); newGame(); }
+      else if (b.id === 'setupVer') { save(); openChangelog(); }
     };
   };
   const rerender = () => { if (!NET.setupOpen) return; $('#sheet').innerHTML = html(); bind(); };

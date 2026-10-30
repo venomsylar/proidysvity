@@ -7,9 +7,34 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&family=Pangolin&family=Rubik:wght@400;500;700&family=Underdog&display=swap">
-<link rel="stylesheet" href="css/style.css?v=25">
+<link rel="stylesheet" href="css/style.css?v=26">
+<style>
+#loader{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:radial-gradient(circle at 50% 40%,#2a1d16,#0e0a09 70%);color:#f3e6cf;font-family:Rubik,system-ui,sans-serif;transition:opacity .45s ease}
+#loader.done{opacity:0;pointer-events:none}
+#loader .lbox{display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center;padding:24px}
+#loader .ltitle{font-family:Underdog,Georgia,serif;font-size:42px;color:#e0a93b;text-shadow:0 2px 0 #000,0 0 18px rgba(224,169,59,.35)}
+#loader .lver{font-size:12px;letter-spacing:.08em;color:#a8957c;min-height:1em}
+#loader .spin{width:64px;height:64px;border-radius:50%;border:6px solid rgba(224,169,59,.18);border-top-color:#e0a93b;border-right-color:#e0a93b;animation:lspin .9s linear infinite}
+#loader .ltext{font-size:14px;color:#cdbb9f;min-height:1.3em}
+#loader .lbar{width:220px;height:6px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
+#loader .lbar i{display:block;height:100%;width:0;background:#e0a93b;border-radius:99px;transition:width .2s}
+#loader .lerr{display:none;color:#ef6b5d;max-width:320px}
+#loader.err .spin,#loader.err .lbar{display:none}
+#loader.err .lerr{display:block}
+#loader button{font:inherit;font-weight:700;padding:9px 18px;border-radius:10px;border:0;background:#e0a93b;color:#23170b;cursor:pointer}
+@keyframes lspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){#loader .spin{animation-duration:2.4s}}
+</style>
 </head>
 <body>
+<div id="loader" role="status" aria-live="polite"><div class="lbox">
+  <div class="ltitle">Пройдисвіти</div>
+  <div class="lver" id="ldVer"></div>
+  <div class="spin" aria-hidden="true"></div>
+  <div class="ltext" id="ldText">Завантажуємо гру…</div>
+  <div class="lbar"><i id="ldBar"></i></div>
+  <div class="lerr" id="ldErr"><p id="ldErrText">Не вдалося завантажити гру. Перевір зʼєднання з інтернетом.</p><button type="button" onclick="location.reload()">Спробувати ще</button></div>
+</div></div>
 <div id="scene"></div>
 <div id="ui">
   <div class="topbar" id="topbar">
@@ -52,18 +77,18 @@
 <div class="peek" id="peek" hidden aria-hidden="true"></div>
 <div class="modal" id="modal" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="js/version.js?v=25"></script>
-<script src="js/utils.js?v=25"></script>
-<script src="js/art.js?v=25"></script>
-<script src="js/cards.js?v=25"></script>
-<script src="js/state.js?v=25"></script>
-<script src="js/scene3d.js?v=25"></script>
-<script src="js/sound.js?v=25"></script>
-<script src="js/game.js?v=25"></script>
-<script src="js/actions.js?v=25"></script>
-<script src="js/net.js?v=25"></script>
-<script src="js/ui.js?v=25"></script>
-<script src="js/main.js?v=25"></script>
+<script src="js/version.js?v=26"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" onerror="window.__threeFail=1"></script>
+<script src="js/utils.js?v=26"></script>
+<script src="js/art.js?v=26"></script>
+<script src="js/cards.js?v=26"></script>
+<script src="js/state.js?v=26"></script>
+<script src="js/scene3d.js?v=26"></script>
+<script src="js/sound.js?v=26"></script>
+<script src="js/game.js?v=26"></script>
+<script src="js/actions.js?v=26"></script>
+<script src="js/net.js?v=26"></script>
+<script src="js/ui.js?v=26"></script>
+<script src="js/main.js?v=26"></script>
 </body>
 </html>
