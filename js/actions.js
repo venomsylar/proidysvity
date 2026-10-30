@@ -82,8 +82,14 @@ function cardActions(c, where, v = viewerP()) {
     case 'levelup': if (free && !inCombat) A('Підняти рівень', { k: 'levelup', uid: c.uid }, { dis: v.level >= G.goal - 1 ? `${G.goal}-й рівень — лише за перемогу над монстром.` : null }); break;
     case 'oneshot':
       if (combatOk) {
-        if (isFighter || isHelper) A(`У бій за себе (+${c.bonus})`, { k: 'shot', uid: c.uid, side: 'hero' });
-        else { A(`Підсилити монстра (+${c.bonus})`, { k: 'shot', uid: c.uid, side: 'mon' }); A(`Допомогти герою (+${c.bonus})`, { k: 'shot', uid: c.uid, side: 'hero' }); }
+        const pos = c.bonus > 0, ty = combatTypes(cb), hv = shotVal(c, ty, true), note = c.fire && ty.dragon ? ' — дракон не боїться вогню' : '';
+        if (pos) {
+          if (isFighter || isHelper) A(`У бій за себе (${sgn(hv)})${note}`, { k: 'shot', uid: c.uid, side: 'hero' });
+          else { A(`Підсилити монстра (+${c.bonus})`, { k: 'shot', uid: c.uid, side: 'mon' }); A(`Допомогти герою (${sgn(hv)})${note}`, { k: 'shot', uid: c.uid, side: 'hero' }); }
+        } else {
+          if (isFighter || isHelper) A(`Послабити монстра (${c.bonus})`, { k: 'shot', uid: c.uid, side: 'mon' });
+          else { A(`Послабити героя (${c.bonus})`, { k: 'shot', uid: c.uid, side: 'hero' }); A(`Послабити монстра (${c.bonus})`, { k: 'shot', uid: c.uid, side: 'mon' }); }
+        }
       }
       sell(); break;
     case 'flee': if (inCombat && free && (isFighter || isHelper)) A('Втекти з бою', { k: 'smoke', uid: c.uid }); sell(); break;
@@ -167,7 +173,7 @@ function showModal(html, cls = '') { NET.setupOpen = false; $('#sheet').classNam
 function closeModal() { $('#modal').hidden = true; NET.setupOpen = false; }
 function confirmModal(title, text, yes, no) {
   return new Promise(res => {
-    showModal(`<h2>${esc(title)}</h2><p>${esc(text)}</p><div class="row end"><button class="btn ghost" id="mNo" type="button">${esc(no)}</button><button class="btn primary" id="mYes" type="button">${esc(yes)}</button></div>`);
+    showModal(`<h2>${esc(title)}</h2><p>${esc(text).replace(/\n/g, '<br>')}</p><div class="row end"><button class="btn ghost" id="mNo" type="button">${esc(no)}</button><button class="btn primary" id="mYes" type="button">${esc(yes)}</button></div>`);
     $('#mYes').onclick = () => { closeModal(); res(true); }; $('#mNo').onclick = () => { closeModal(); res(false); };
   });
 }
@@ -189,7 +195,7 @@ function openHelp() {
     <div class="seg" role="group" aria-label="Скільки скарбів пропонуєш">${Array.from({ length: T + 1 }, (_, k) => `<button type="button" data-tr="${k}" aria-pressed="${st.tr === k}">${k}</button>`).join('')}</div>
     ${offerable.length ? `<h3>Карти з руки на додачу</h3><div class="ochips">${offerable.map(c => `<button type="button" class="ochip" data-oc="${c.uid}" aria-pressed="${st.cards.has(c.uid)}">${c.art} ${esc(c.name)}</button>`).join('')}</div>` : ''}
     <h3>Кого кличеш</h3>
-    <div class="list">${opts.map(q => `<button class="btn" type="button" data-h="${q.idx}"><b style="color:${q.color}">${esc(q.name)}</b> · сила ${baseStr(q)} · рівень ${q.level}${q.type === 'bot' ? ` · бот (${DIFF[q.diff || 2].name.toLowerCase()}), ставлення: ${attitude(q, p)}` : q.type === 'remote' ? ' · на іншому пристрої' : ''}</button>`).join('') || '<p class="hint">Більше нікого просити.</p>'}</div>
+    <div class="list">${opts.map(q => `<button class="btn" type="button" data-h="${q.idx}"><b style="color:${q.color}">${esc(q.name)}</b> · сила ${baseStr(q)} · рівень ${q.level} · ${(f => f.win ? `<span style="color:var(--good,#7fd081)">разом ${f.hero} проти ${f.mon} ✅</span>` : `<span style="color:var(--bad,#ef6b5d)">разом ${f.hero} проти ${f.mon} ❌</span>`)(togetherWith(q.idx))}${q.type === 'bot' ? ` · бот (${DIFF[q.diff || 2].name.toLowerCase()}), ставлення: ${attitude(q, p)}` : q.type === 'remote' ? ' · на іншому пристрої' : ''}</button>`).join('') || '<p class="hint">Більше нікого просити.</p>'}</div>
     <div class="row end"><button class="btn ghost" type="button" data-close>Скасувати</button></div>`;
   showModal(draw());
   $('#sheet').onclick = e => {
@@ -225,9 +231,14 @@ function openRules() {
   <ul><li>Твоя сила — рівень плюс бонуси спорядження. Перемагаєш, якщо сила більша за суму всіх монстрів (воїн — і за нічиєї): отримуєш рівні й скарби з усіх.</li>
   <li>Програєш — грай разові карти, клич на поміч або тікай: кидок кубика 5+ <b>окремо від кожного монстра</b>. Не втік — спрацьовує Халепа саме цього монстра.</li>
   <li>Суперники можуть грати на монстрів підсилювачі й разові карти, <b>підкидати мертвяків</b> (нежить з руки — у бій, де вже є нежить) і грати <b>Приблудну потвору</b>, щоб додати будь-якого монстра з руки.</li></ul>
+  <h3>Нежить, дракони й вогонь</h3>
+  <ul><li>На старті можна вибрати, які монстри будуть у колоді: звичайні є завжди, <b>нежить</b> і <b>дракони</b> — за бажанням. Тип видно на плашці під малюнком карти.</li>
+  <li><b>Вогняні речі</b> (🔥) дають ще <b>+2 проти нежиті</b>, але <b>на драконів не діють</b> зовсім — їхній бонус пропадає в бою з драконом. Так само вогняні разові карти.</li>
+  <li><b>Драконобійні речі</b> (🛡️) мають додатковий бонус лише проти драконів.</li>
+  <li>Разові карти зі знаком «−» послаблюють: кинь на монстра, щоб тобі було легше, або на героя, щоб йому було важче.</li></ul>
   <h3>Поміч і торг</h3>
   <ul><li>Кличучи на поміч, ти пропонуєш ціну: скільки скарбів із бою віддаси і які карти з руки додаси одразу.</li>
-  <li>Боти памʼятають, хто їм допомагав, а хто підставляв, і торгуються відповідно. Що вища складність, то більше вони вимагають, частіше шкодять лідеру й довше тримають образу. Ставлення бота видно в його картці та у вікні поміченого виклику.</li></ul>
+  <li>Боти памʼятають, хто їм допомагав, а хто підставляв, і торгуються відповідно. Приязність показано у відсотках: 50% — нейтрально, вище — дружба, нижче — образа. Від неї залежить, чи допоможе бот і скільки попросить. З часом і добро, і образи забуваються (приблизно наполовину за пів партії). Хто допоміг лише після торгу — отримує менше вдячності, а хто вициганив усі скарби — зовсім трохи. Що вища складність, то більше вони вимагають, частіше шкодять лідеру й довше тримають образу. Ставлення бота видно в його картці та у вікні поміченого виклику.</li></ul>
   <h3>Стать, речі й золото</h3>
   <ul><li>Стать обирається на старті. Деякі речі лише для жінок або чоловіків, а прокляття «Зміна статі» змінює її — і ці речі перестають діяти.</li>
   <li>Один головний убір, броня, взуття, дві руки й одна велика річ (гному — більше). Деякі речі лише для певної раси чи класу.</li>
@@ -247,7 +258,10 @@ function openRules() {
 }
 
 /* --- налаштування партії --- */
-const setupState = { rows: [{ name: 'Мандрівник', type: 'human', sex: 'm', diff: 2 }, { name: 'Мотря', type: 'bot', sex: 'f', diff: 2 }, { name: 'Опанас', type: 'bot', sex: 'm', diff: 2 }, { name: 'Одарка', type: 'bot', sex: 'f', diff: 2 }], speed: 1, goal: 10, anim: 1.5 };
+const setupState = { types: loadMonTypes(), rows: [{ name: 'Мандрівник', type: 'human', sex: 'm', diff: 2 }, { name: 'Мотря', type: 'bot', sex: 'f', diff: 2 }, { name: 'Опанас', type: 'bot', sex: 'm', diff: 2 }, { name: 'Одарка', type: 'bot', sex: 'f', diff: 2 }], speed: 1, goal: 10, anim: 1.5 };
+function loadMonTypes() { try { const t = JSON.parse(localStorage.getItem('pdsv-montypes') || 'null'); if (t) return { undead: t.undead !== false, dragon: t.dragon !== false }; } catch (e) { } return { undead: true, dragon: true }; }
+function saveMonTypes(t) { try { localStorage.setItem('pdsv-montypes', JSON.stringify(t)); } catch (e) { } }
+const monTypesText = t => ['звичайні', t.undead && 'нежить', t.dragon && 'дракони'].filter(Boolean).join(', ');
 const FEMALE_NAMES = new Set(['Мотря', 'Одарка', 'Ганна', 'Соломія']);
 let rerenderSetup = null;
 function openSetup() {
@@ -281,6 +295,13 @@ function openSetup() {
     <h3>Мета</h3>
     <div class="seg" role="group" aria-label="Мета гри">${[[10, 'До 10 рівня'], [20, 'До 20 рівня · епік']].map(([v, l]) => `<button type="button" data-goal="${v}" aria-pressed="${s.goal === v}">${l}</button>`).join('')}</div>
     <p class="hint" style="margin-top:8px">${s.goal === 20 ? 'Епічна гра: з 10-го рівня кожен монстр для тебе має подвійний рівень. У колоді зʼявляються монстри 16–20 рівнів.' : 'Класична партія: перший, хто дійде до 10-го рівня, перемагає.'}</p>
+    <h3>Монстри в колоді</h3>
+    <div class="checks" role="group" aria-label="Типи монстрів">
+      <label class="chk"><input type="checkbox" checked disabled> Звичайні</label>
+      <label class="chk"><input type="checkbox" data-mt="undead" ${s.types.undead ? 'checked' : ''}> 💀 Нежить</label>
+      <label class="chk"><input type="checkbox" data-mt="dragon" ${s.types.dragon ? 'checked' : ''}> 🐉 Дракони</label>
+    </div>
+    <p class="hint" style="margin-top:8px">${s.types.undead || s.types.dragon ? `Граємо з такими монстрами: ${monTypesText(s.types)}.${s.types.dragon ? ' Дракони не бояться вогняних речей, зате є драконобійна зброя.' : ''}${s.types.undead ? ' Вогонь палить нежить: вогняні речі дають проти неї +2.' : ''}` : 'Лише звичайні монстри — без нежиті й драконів.'}</p>
     <h3>Темп ботів</h3>
     <div class="seg" role="group" aria-label="Темп ботів">${[[1.4, 'Спокійний'], [1, 'Звичайний'], [.45, 'Швидкий']].map(([v, l]) => `<button type="button" data-sp="${v}" aria-pressed="${s.speed === v}">${l}</button>`).join('')}</div>
     <h3>Вигляд столу</h3>
@@ -290,7 +311,7 @@ function openSetup() {
     <div class="row end"><button class="btn ghost" type="button" id="rulesB">Правила</button><button class="btn primary" type="button" id="startB">Почати гру</button></div>`;
   const save = () => s.rows.forEach((r, i) => { const el = $('#pname-' + i); if (el && r.type !== 'remote') r.name = el.value.trim() || (r.type === 'bot' ? BOT_NAMES[i] : `Гравець ${i + 1}`); });
   const bind = () => {
-    $('#sheet').onchange = e => { const sel = e.target.closest('[data-diff]'); if (sel) { save(); s.rows[+sel.dataset.diff].diff = +sel.value; } };
+    $('#sheet').onchange = e => { const sel = e.target.closest('[data-diff]'); if (sel) { save(); s.rows[+sel.dataset.diff].diff = +sel.value; } const mt = e.target.closest('[data-mt]'); if (mt) { save(); s.types[mt.dataset.mt] = mt.checked; saveMonTypes(s.types); rerender(); } };
     $('#sheet').onclick = e => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.t) { save(); s.rows[+b.dataset.i].type = b.dataset.t; rerender(); }
@@ -318,7 +339,7 @@ async function newGame() {
   G.players.forEach(destroySeat);
   if (G.combat) { G.combat.mons.forEach(x => disposeMesh(x.m)); G.combat.meshes.forEach(disposeMesh); }
   T.die.visible = false;
-  Object.assign(G, { reveal: -1, gid: G.gid + 1, players: [], doorDeck: shuffle(buildDoorDeck(s.goal > 10)), treasureDeck: shuffle(buildTreasureDeck()), doorDiscard: [], treasureDiscard: [], cur: 0, viewer: -1, phase: 'deal', combat: null, busy: true, over: false, window: null, log: [], fresh: new Set(), pendingSetup: false });
+  Object.assign(G, { reveal: -1, gid: G.gid + 1, players: [], doorDeck: shuffle(buildDoorDeck(s.goal > 10, s.types)), treasureDeck: shuffle(buildTreasureDeck(s.types)), types: { ...s.types }, doorDiscard: [], treasureDiscard: [], cur: 0, viewer: -1, phase: 'deal', combat: null, busy: true, over: false, window: null, log: [], fresh: new Set(), pendingSetup: false });
   faceCache.forEach(t => t.dispose()); faceCache.clear();
   syncDeck('door'); syncDeck('treasure'); syncDiscardTop('door'); syncDiscardTop('treasure');
   NET.conns.clear();
@@ -330,7 +351,7 @@ async function newGame() {
   cam.az = firstHuman ? seatAngle(firstHuman.idx) : 0; cam.userAz = 0; cam.userEl = 0;
   NET.conns.forEach((c, i) => sendConn(c, { t: 'start', you: i }));
   renderUI();
-  log(`Нова гра до ${G.goal}-го рівня. Кожен отримує 4 карти дверей і 4 карти скарбів.`, 'turn');
+  log(`Нова гра до ${G.goal}-го рівня. Монстри: ${monTypesText(G.types || setupState.types)}. Кожен отримує 4 карти дверей і 4 карти скарбів.`, 'turn');
   const jobs = []; let k = 0;
   const soloHuman = G.players.filter(q => q.type === 'human').length === 1;
   for (let r = 0; r < 4; r++) for (const deck of ['door', 'treasure']) for (const p of G.players) {

@@ -20,7 +20,7 @@ function confirmFor(p, title, text, yes, no) { return p.type === 'remote' ? askR
 async function startTurn() {
   if (G.over || NET.role === 'client' || G.phase !== 'next') return;
   if (G.pendingSetup) { G.pendingSetup = false; openSetup(); return; }
-  const p = cur(); G.phase = 'start'; G.combat = null;
+  const p = cur(); G.phase = 'start'; G.combat = null; forgetTick(p);
   G.players.forEach(plateDraw);
   log(`Хід: ${nameTag(p)} · рівень ${p.level}`, 'turn');
   banner(`Хід: ${p.name}`, p.color); sfx('turn'); netAll({ t: 'fx', type: 'banner', a: { text: `Хід: ${p.name}`, color: p.color } });
@@ -162,7 +162,8 @@ function meddleOptions(b) {
   const cb = G.combat, p = fighter(), opts = [];
   const undeadIn = cb.mons.some(x => x.c.undead);
   b.hand.forEach(c => {
-    if ((c.kind === 'mod' && c.bonus > 0) || c.kind === 'oneshot') opts.push({ pw: c.bonus, run: () => playIntoCombat(b, c, 'mon') });
+    if (c.kind === 'mod' && c.bonus > 0) opts.push({ pw: c.bonus, run: () => playIntoCombat(b, c, 'mon') });
+    if (c.kind === 'oneshot') { const toMon = c.bonus > 0, ty = combatTypes(cb), pw = Math.abs(shotVal(c, ty, !toMon)); if (pw) opts.push({ pw, run: () => playIntoCombat(b, c, toMon ? 'mon' : 'hero') }); }
     if (c.kind === 'monster' && c.undead && undeadIn) opts.push({ pw: monLvl(c, p) + vsBonus(c, p), mon: true, run: () => addMonster(b, c, null) });
   });
   const w = b.hand.find(c => c.kind === 'wander');
@@ -177,9 +178,9 @@ async function botsInterfere() {
     const cb = G.combat;
     if (b === p || b.idx === cb.helper || b.type !== 'bot' || cb.interfered.has(b.idx)) continue;
     const s = sides(); if (!s.win) continue;
-    const D = DIFF[b.diff || 2]; const mem = (b.mem && b.mem[p.idx]) || 0;
+    const D = DIFF[b.diff || 2]; const an = affN(b, p);
     const winning = p.level + levelsGain() >= G.goal;
-    const chance = winning ? D.block : D.meddle + (p.level >= leader ? D.lead : 0) + (p.level >= G.goal * .6 ? .1 : 0) - mem * D.grudge;
+    const chance = winning ? D.block : D.meddle + (p.level >= leader ? D.lead : 0) + (p.level >= G.goal * .6 ? .1 : 0) - an * D.grudge * 6;
     if (Math.random() > clamp(chance, 0, 1)) continue;
     const need = s.hero - s.mon + (s.tie ? 1 : 0);
     const opts = meddleOptions(b); if (!opts.length) continue;
@@ -191,7 +192,7 @@ async function botsInterfere() {
     await botDelay(350);
     await pick.run();
     if (winning) say(`${b.name} не дає ${p.name} виграти!`);
-    else if (mem <= -3 && (b.diff || 2) >= 2) say(`${b.name} мстить ${p.name}!`, 1800);
+    else if (affinity(b, p) < 26 && (b.diff || 2) >= 2) say(`${b.name} мстить ${p.name}!`, 1800);
   }
   return any;
 }
@@ -219,7 +220,7 @@ function passWindow(p) {
 
 /* --- допомога й торг --- */
 function pickJunk(p) { const j = p.hand.filter(c => !['oneshot', 'flee', 'levelup'].includes(c.kind)).sort((a, b) => keepScore(p, a) - keepScore(p, b)); return j[0] || null; }
-const cardWorth = c => c.kind === 'gear' ? c.value / 400 : c.kind === 'levelup' ? 2 : c.kind === 'oneshot' ? .4 + c.bonus * .15 : .6;
+const cardWorth = c => c.kind === 'gear' ? c.value / 400 : c.kind === 'levelup' ? 2 : c.kind === 'oneshot' ? .4 + Math.abs(c.bonus) * .15 : .6;
 function offerText(o, open = true) {
   const parts = [];
   if (o.tr) parts.push(`${o.tr} ${plural(o.tr, 'скарб', 'скарби', 'скарбів')}`);
@@ -227,16 +228,61 @@ function offerText(o, open = true) {
   return parts.join(' і ') || 'нічого, лише вдячність';
 }
 function botHelpDecision(h, p, offer) {
-  const D = DIFF[h.diff || 2], T = treasureCount(), mem = (h.mem && h.mem[p.idx]) || 0;
+  const D = DIFF[h.diff || 2], T = treasureCount(), aff = affinity(h, p), an = affN(h, p);
   if (p.level + levelsGain() >= G.goal) return { ok: h.diff === 1 && Math.random() < .25, why: 'Ще чого! Ти ж тоді переможеш.' };
   const value = offer.tr + sum(offer.cards, cardWorth);
-  const demand = Math.max(h.diff === 3 ? 1 : 0, Math.round(T * D.demand) - Math.floor(mem / 3));
-  if (value + 1e-9 < demand) return { ok: false, why: mem < -2 ? `Після всього? Мінімум ${demand} ${plural(demand, 'скарб', 'скарби', 'скарбів')}.` : `За таку ціну? Хочу хоча б ${demand} ${plural(demand, 'скарб', 'скарби', 'скарбів')}.` };
-  let chance = D.help + mem * .08 + (race(h) === 'elf' ? .15 : 0) + (value - demand) * .1;
+  const demand = Math.max(h.diff === 3 ? 1 : 0, Math.round(T * D.demand) - Math.round(an * 1.5));
+  if (value + 1e-9 < demand && aff >= 11) { const c = Math.ceil(demand - sum(offer.cards, cardWorth) - 1e-9); if (c > offer.tr && c <= T && Math.random() < [0, .6, .8, .95][h.diff || 2]) return { ok: false, counter: c, why: `За ${c} — домовились.` }; }
+  if (value + 1e-9 < demand) return { ok: false, why: aff < 26 ? `Після всього? Мінімум ${demand} ${plural(demand, 'скарб', 'скарби', 'скарбів')}.` : `За таку ціну? Хочу хоча б ${demand} ${plural(demand, 'скарб', 'скарби', 'скарбів')}.` };
+  let chance = D.help + an * .5 + (race(h) === 'elf' ? .15 : 0) + (value - demand) * .1;
   const top = Math.max(...G.players.map(q => q.level));
   if (p.level === top && p.level >= h.level + 2) chance -= .2 * (h.diff || 2);
   const ok = Math.random() < clamp(chance, .03, .97);
-  return { ok, why: ok ? '' : mem <= -2 ? 'Памʼятаю, як ти мені «допоміг». Ні.' : 'Не цього разу.' };
+  return { ok, why: ok ? '' : aff < 30 ? 'Памʼятаю, як ти мені «допоміг». Ні.' : 'Не цього разу.' };
+}
+function botAcceptCounter(p, h, counter) {
+  const T = treasureCount(), f = togetherWith(h.idx);
+  if (!f.win) return false;
+  if (p.level + levelsGain() >= G.goal) return true;
+  if ((p.diff || 2) === 3 && counter >= T && T > 1) return Math.random() < .4;
+  return Math.random() < [0, .95, .85, .75][p.diff || 2];
+}
+/* вікно для людини, яку кличуть: допомогти, відмовити або попросити більше */
+function helpAskModal(title, text, tr, T) {
+  return new Promise(res => {
+    const st = { c: Math.min(T, tr + 1) };
+    const draw = () => `<h2>${esc(title)}</h2><p>${esc(text).replace(/\n/g, '<br>')}</p>
+      ${T > tr ? `<h3>Або попроси більше</h3><p class="hint">Скільки скарбів із ${T} хочеш за допомогу:</p><div class="seg" role="group" aria-label="Скільки скарбів просиш">${Array.from({ length: T - tr }, (_, k) => tr + 1 + k).map(n => `<button type="button" data-hc="${n}" aria-pressed="${st.c === n}">${n}</button>`).join('')}</div>` : ''}
+      <div class="row end"><button class="btn ghost" type="button" id="haNo">Відмовити</button>${T > tr ? `<button class="btn" type="button" id="haMore">Попросити ${st.c}</button>` : ''}<button class="btn primary" type="button" id="haYes">Допомогти</button></div>`;
+    showModal(draw());
+    const fin = r => { $('#sheet').onclick = null; closeModal(); res(r); };
+    $('#sheet').onclick = e => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.hc) { st.c = +b.dataset.hc; $('#sheet').innerHTML = draw(); }
+      else if (b.id === 'haYes') fin({ ok: true });
+      else if (b.id === 'haNo') fin({ ok: false });
+      else if (b.id === 'haMore') fin({ ok: false, counter: st.c });
+    };
+  });
+}
+function helpAskFor(h, tr, T, title, text) {
+  if (h.type !== 'remote') return helpAskModal(title, text, tr, T);
+  return new Promise(res => {
+    const id = ++NET.askSeq; let tm;
+    const done = (ok, pick) => { if (!NET.asks.has(id)) return; NET.asks.delete(id); clearTimeout(tm); netSendTo(h.idx, { t: 'askEnd', id }); res({ ok: !!ok, counter: Number.isFinite(pick) ? pick : null }); };
+    done.who = h.idx; NET.asks.set(id, done);
+    tm = setTimeout(() => done(false), 45000);
+    netSendTo(h.idx, { t: 'helpAsk', id, title, text, tr, T });
+  });
+}
+function togetherWith(i) { const cb = G.combat, was = cb.helper; cb.helper = i; const s = sides(); cb.helper = was; return s; }
+/* прогноз для того, кого кличуть: чи переможуть разом */
+function helpForecast(i) {
+  const cb = G.combat, p = fighter(), h = G.players[i]; if (!cb || !h) return '';
+  const now = sides(), tog = togetherWith(i);
+  const mine = tog.hero - now.hero;
+  const verdict = tog.win ? `✅ Разом ви перемагаєте (${tog.hero} проти ${tog.mon}${tog.hero === tog.mon ? ', нічия на користь воїна' : ''}).` : `❌ Разом ще не вистачає ${tog.mon - tog.hero + (tog.tie ? 0 : 1)} (${tog.hero} проти ${tog.mon}).`;
+  return `Зараз: ${p.name} ${now.hero} проти монстрів ${now.mon}. Твоя сила в цьому бою: +${mine}.\n${verdict} Суперники ще можуть втрутитися.`;
 }
 async function askHelp(i, offer) {
   const cb = G.combat, p = fighter(), h = G.players[i]; if (!cb || !h) return false;
@@ -245,13 +291,23 @@ async function askHelp(i, offer) {
   offer = { tr: clamp(offer.tr | 0, 0, T), cards: (offer.cards || []).filter(c => p.hand.includes(c)) };
   log(`${nameTag(p)} кличе на поміч ${nameTag(h)} і пропонує ${esc(offerText(offer, false))}.`);
   renderUI();
-  let ok, why = '';
-  if (h.type === 'bot') { await botDelay(600); const d = botHelpDecision(h, p, offer); ok = d.ok; why = d.why; }
-  else ok = await confirmFor(h, `${h.name}, допоможеш?`, `${p.name} кличе тебе на поміч у бою з «${monNames()}». Твоя сила: ${baseStr(h)}. Пропонує: ${offerText(offer)}${race(h) === 'elf' ? ', а ти як ельф ще й отримаєш рівень' : ''}.`, 'Допомогти', 'Відмовити');
+  let ok, why = '', counter = null, haggled = false;
+  if (h.type === 'bot') { await botDelay(600); const d = botHelpDecision(h, p, offer); ok = d.ok; why = d.why; counter = d.counter == null ? null : d.counter; }
+  else { const r = await helpAskFor(h, offer.tr, T, `${h.name}, допоможеш?`, `${p.name} кличе тебе на поміч у бою з «${monNames()}».\n${helpForecast(i)}\nПропонує: ${offerText(offer)}${race(h) === 'elf' ? ', а ти як ельф ще й отримаєш рівень' : ''}.`); ok = r.ok; counter = r.counter; }
   if (!G.combat) return false;
+  if (!ok && counter != null && counter > offer.tr && counter <= T) {
+    haggled = true;
+    log(`${nameTag(h)} торгується: допоможе за ${counter} ${plural(counter, 'скарб', 'скарби', 'скарбів')} замість ${offer.tr}.${why ? ` <i>«${esc(why)}»</i>` : ''}`); renderUI();
+    let yes;
+    if (p.type === 'bot') { await botDelay(500); yes = botAcceptCounter(p, h, counter); }
+    else { const f = togetherWith(i); yes = await confirmFor(p, `${h.name} хоче більше`, `${h.name} допоможе, якщо віддаси ${counter} ${plural(counter, 'скарб', 'скарби', 'скарбів')} із ${T}${offer.cards.length ? ' і обіцяні карти' : ''} (ти пропонував ${offer.tr}).\nРазом: ${f.hero} проти ${f.mon} ${f.win ? '✅ перемагаєте' : '❌ навіть разом не вистачає'}.`, 'Згоден', 'Ні, дорого'); }
+    if (!G.combat) return false;
+    if (yes) { offer.tr = counter; ok = true; why = ''; log(`${nameTag(p)} погоджується на ціну ${nameTag(h)}.`); }
+    else { log(`${nameTag(p)} не погоджується на ціну ${nameTag(h)}.`); memo(h, p, -.5); renderUI(); return false; }
+  }
   if (ok) {
     cb.helper = i; cb.offer = { tr: offer.tr };
-    memo(p, h, 3); if (h.type === 'bot' && offer.tr + sum(offer.cards, cardWorth) >= T * .5) memo(h, p, 1);
+    memo(p, h, haggled ? (offer.tr >= T && T > 1 ? 1 : 2) : 3); if (h.type === 'bot' && offer.tr + sum(offer.cards, cardWorth) >= T * .5) memo(h, p, 1);
     sfx('help'); log(`${nameTag(h)} приєднується до бою на боці ${nameTag(p)}.`); ringFx(h.seat.anchor, 0x7fd081); say(`${h.name} допомагає!`);
     for (const c of offer.cards) {
       removeFromHand(p, c); const m = cardMesh(c); scene.add(m);
@@ -259,6 +315,7 @@ async function askHelp(i, offer) {
     }
   } else {
     memo(p, h, -1);
+    if (haggled) { renderUI(); return false; }
     log(`${nameTag(h)} відмовляє в допомозі.${why ? ` <i>«${esc(why)}»</i>` : ''}`);
     if (why) tell(p, `${h.name}: «${why}»`, 2600);
   }
@@ -270,7 +327,7 @@ function pickRedirectTarget(p) {
   if (!others.length) return null;
   if (p.diff === 1) return others[rnd(others.length)];
   const top = Math.max(...G.players.map(q => q.level));
-  const grudge = q => -((p.mem && p.mem[q.idx]) || 0);
+  const grudge = q => grudgeOf(p, q);
   const score = q => (baseStr(q) <= s.mon ? 3 : 0) + (q.level === top ? 2 + (p.diff === 3 ? 2 : 0) : 0) + grudge(q) * .8 + q.level * .2;
   return others.sort((a, b) => score(b) - score(a))[0];
 }
@@ -289,17 +346,18 @@ async function botDrive() {
         continue;
       }
       const need = s.mon - s.hero + (s.tie ? 0 : 1);
-      const shots = p.hand.filter(c => c.kind === 'oneshot').sort((x, y) => y.bonus - x.bonus);
+      const ty = combatTypes(cb), sv = c => Math.abs(shotVal(c, ty, c.bonus > 0));
+      const shots = p.hand.filter(c => c.kind === 'oneshot' && sv(c) > 0).sort((x, y) => sv(y) - sv(x));
       const junkN = cls(p) === 'wizard' ? Math.min(3 - cb.wiz, p.hand.filter(c => !['oneshot', 'flee', 'levelup', 'redirect'].includes(c.kind)).length) : 0;
-      const potential = sum(shots, c => c.bonus) + junkN * 2;
+      const potential = sum(shots, sv) + junkN * 2;
       if (potential >= need) {
         let got = 0;
-        for (const c of shots) { if (got >= need) break; await botDelay(300); await playIntoCombat(p, c, 'hero'); got += c.bonus; }
+        for (const c of shots) { if (got >= need) break; await botDelay(300); await playIntoCombat(p, c, c.bonus > 0 ? 'hero' : 'mon'); got += sv(c); }
         while (got < need && cls(p) === 'wizard' && cb.wiz < 3) { const j = pickJunk(p); if (!j) break; await botDelay(250); await wizardDiscard(p, j); got += 2; }
         continue;
       }
       if (cb.helper == null) {
-        const like = q => (p.mem && p.mem[q.idx]) || 0;
+        const like = q => affN(p, q) * 5;
         const cand = G.players.filter(q => q !== p && !cb.asked.has(q.idx) && baseStr(q) + potential >= need).sort((x, y) => (baseStr(y) + like(y) * .7) - (baseStr(x) + like(x) * .7));
         if (cand.length) {
           const T = treasureCount(), frac = [0, .6, .5, .35][p.diff || 2];
@@ -492,13 +550,13 @@ const tradeItems = p => [...p.gear, ...p.hand.filter(c => c.kind === 'gear')];
 const findTradeItem = (p, uid) => tradeItems(p).find(c => c.uid === uid);
 const itemWorth = (b, c) => c.value * (usable(b, c) ? 1 : .6) + (usable(b, c) ? c.bonus * 120 + (c.flee || 0) * 60 : 0);
 function botTradeOffer(b, p, give) {
-  const D = b.diff || 2, mem = (b.mem && b.mem[p.idx]) || 0;
+  const D = b.diff || 2, aff = affinity(b, p), an = affN(b, p);
   const top = Math.max(...G.players.map(q => q.level));
   if (D === 3 && p.level === top && p.level >= b.level + 2) return { ok: false, why: 'Лідерам нічого не продаю.' };
-  if (mem <= -4) return { ok: false, why: 'З тобою? Ніколи.' };
+  if (aff < 11) return { ok: false, why: 'З тобою? Ніколи.' };
   if (!give.length) return { ok: false, why: 'А ти що даєш? Нічого? От і я нічого.' };
   const gain = sum(give, c => itemWorth(b, c));
-  const factor = [0, .85, 1.05, 1.35][D] - mem * .04;
+  const factor = [0, .85, 1.05, 1.35][D] - an * .3;
   let budget = gain / Math.max(.5, factor);
   const pool = tradeItems(b).map(c => ({ c, w: itemWorth(b, c) })).sort((x, y) => (x.w - y.w) || (y.c.value - x.c.value));
   const take = [];
@@ -703,7 +761,7 @@ async function botManage(p) {
   const curse = p.hand.find(c => c.kind === 'curse');
   const D = DIFF[p.diff || 2];
   if (curse && Math.random() < D.curse) {
-    const grudge = q => -((p.mem && p.mem[q.idx]) || 0);
+    const grudge = q => grudgeOf(p, q);
     const targets = G.players.filter(q => q !== p && badHits(q, curse.bad));
     let t = null;
     if (p.diff === 1) t = targets[rnd(targets.length)] || null;

@@ -218,19 +218,21 @@ function drawCardFace(g, c, W, H) {
   g.beginPath(); g.arc(W / 2, 210, 58, 0, Math.PI * 2); g.fill();
   g.setLineDash([8, 7]); g.lineWidth = 3; g.strokeStyle = 'rgba(27,21,18,.45)'; g.stroke(); g.setLineDash([]);
   g.font = '84px ' + EMOJI_FONT; g.fillStyle = '#1b1512'; g.fillText(c.art, W / 2, 215);
-  if (c.kind === 'monster') {
-    const und = c.undead, lab = und ? 'НЕЖИТЬ' : 'ЗВИЧАЙНИЙ';
-    g.font = '700 19px Rubik, sans-serif'; const tw = g.measureText(lab).width + (und ? 64 : 34), bx = W / 2 - tw / 2, by = 249;
+  const bdg = typeBadge(c);
+  if (bdg) {
+    const lab = bdg.t.toUpperCase();
+    g.font = '700 19px Rubik, sans-serif'; const tw = g.measureText(lab).width + (bdg.e ? 64 : 34), bx = W / 2 - tw / 2, by = 249;
     g.save(); g.shadowColor = 'rgba(0,0,0,.35)'; g.shadowBlur = 6; g.shadowOffsetY = 2;
-    rr(g, bx, by, tw, 32, 16); g.fillStyle = und ? '#2d5a46' : '#6b5642'; g.fill(); g.restore();
-    g.lineWidth = 3; g.strokeStyle = und ? '#9fe0bd' : '#e6d6bf'; rr(g, bx, by, tw, 32, 16); g.stroke();
-    g.fillStyle = und ? '#e4fff0' : '#fff4e0'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    if (und) { g.font = '700 19px Rubik, sans-serif'; g.fillText(lab, W / 2 + 13, by + 17); g.font = '20px ' + EMOJI_FONT; g.fillText('💀', bx + 24, by + 17); }
+    rr(g, bx, by, tw, 32, 16); g.fillStyle = bdg.bg; g.fill(); g.restore();
+    g.lineWidth = 3; g.strokeStyle = bdg.bd; rr(g, bx, by, tw, 32, 16); g.stroke();
+    g.fillStyle = bdg.fg; g.textAlign = 'center'; g.textBaseline = 'middle';
+    if (bdg.e) { g.fillText(lab, W / 2 + 13, by + 17); g.font = '20px ' + EMOJI_FONT; g.fillText(bdg.e, bx + 24, by + 17); }
     else g.fillText(lab, W / 2, by + 17);
   }
+  const ty = bdg ? 298 : 294;
   g.font = '20px Pangolin, cursive'; g.fillStyle = '#1b1512';
-  const nl = wrapText(g, i.text, W / 2, c.kind === 'monster' ? 298 : 294, W - 56, 23, i.flavor ? 4 : 6, false);
-  if (i.flavor) { g.font = 'italic 17px Pangolin, cursive'; g.fillStyle = '#4a3a2d'; wrapText(g, i.flavor, W / 2, (c.kind === 'monster' ? 298 : 294) + nl * 23 + 8, W - 64, 19, Math.max(1, Math.min(3, 6 - nl)), false); }
+  const nl = wrapText(g, i.text, W / 2, ty, W - 56, 23, i.flavor ? 4 : 6, false);
+  if (i.flavor) { g.font = 'italic 17px Pangolin, cursive'; g.fillStyle = '#4a3a2d'; wrapText(g, i.flavor, W / 2, ty + nl * 23 + 8, W - 64, 19, Math.max(1, Math.min(3, 6 - nl)), false); }
   g.setLineDash([6, 6]); g.strokeStyle = 'rgba(27,21,18,.4)'; g.lineWidth = 2; g.beginPath(); g.moveTo(32, H - 58); g.lineTo(W - 32, H - 58); g.stroke(); g.setLineDash([]);
   g.font = '700 19px Rubik, sans-serif'; g.textAlign = 'left'; g.fillText(i.foot[0], 34, H - 36);
   g.textAlign = 'right'; g.fillText(i.foot[1], W - 34, H - 36);

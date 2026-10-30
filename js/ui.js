@@ -153,11 +153,18 @@ function renderCombat() {
   if (!cb || G.phase !== 'combat') { el.hidden = true; return; }
   const s = sides(), p = fighter(), h = cb.helper != null ? G.players[cb.helper] : null;
   const tr = treasureCount(), gain = levelsGain();
-  const mods = [...cb.mods, ...cb.mShots].map(c => `<span class="tag m">${esc(c.name)} ${sgn(c.bonus)}</span>`)
-    .concat(cb.pShots.map(c => `<span class="tag h">${esc(c.name)} ${sgn(c.bonus)}</span>`))
+  const ty = combatTypes(cb);
+  const mods = [...cb.mods, ...cb.mShots].map(c => `<span class="tag ${shotVal(c, ty, false) < 0 ? 'h' : 'm'}">${esc(c.name)} ${sgn(shotVal(c, ty, false))}</span>`)
+    .concat(cb.pShots.map(c => `<span class="tag ${c.bonus < 0 ? 'm' : 'h'}">${esc(c.name)} ${sgn(shotVal(c, ty, true))}${c.fire && ty.dragon && c.bonus > 0 ? ' (вогонь не діє)' : ''}</span>`))
     .concat(cb.wiz ? [`<span class="tag h">Магія +${cb.wiz * 2}</span>`] : [])
     .concat(h ? [`<span class="tag h">${esc(h.name)} +${baseStr(h)}${cb.offer ? ` · обіцяно ${cb.offer.tr} ${plural(cb.offer.tr, 'скарб', 'скарби', 'скарбів')}` : ''}</span>`] : []);
-  if (cb.mons.length > 1) mods.unshift(...cb.mons.map(x => `<span class="tag m">${x.c.art} ${esc(x.c.name)} ${monLvl(x.c, p)}${x.c.undead ? ' · 💀 нежить' : ''}</span>`));
+  if (cb.mons.length > 1) mods.unshift(...cb.mons.map(x => `<span class="tag m">${x.c.art} ${esc(x.c.name)} ${monLvl(x.c, p)}${x.c.dragon ? ' · 🐉 дракон' : ''}${x.c.undead ? ' · 💀 нежить' : ''}</span>`));
+  [p, h].filter(Boolean).forEach(q => {
+    const a = typeAdj(q, ty), who = q === p ? '' : esc(q.name) + ': ';
+    if (a.fireOff) mods.push(`<span class="tag m">${who}🔥 Дракон не боїться вогню ${a.fireOff}</span>`);
+    if (a.fireUndead) mods.push(`<span class="tag h">${who}🔥 Вогонь палить нежить +${a.fireUndead}</span>`);
+    if (a.slayer) mods.push(`<span class="tag h">${who}🛡️ Драконобій +${a.slayer}</span>`);
+  });
   if (epicFor(p)) mods.unshift(`<span class="tag m">Епічна зона: рівень монстрів ×2</span>`);
   cb.mons.forEach(x => { const vb = vsBonus(x.c, p); if (vb) mods.push(`<span class="tag m">${esc(x.c.name)}: бонус проти тебе +${vb}</span>`); });
   if (cb.mons.some(x => x.c.undead) && (cls(p) === 'cleric' || (h && cls(h) === 'cleric'))) mods.push('<span class="tag h">Жрець проти нежиті +3</span>');

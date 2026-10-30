@@ -24,7 +24,21 @@ const DIFF = {
   2: { name: 'Середній', help: .6, demand: .45, meddle: .16, lead: .35, block: .9, curse: .8, grudge: .07 },
   3: { name: 'Важкий', help: .42, demand: .7, meddle: .3, lead: .55, block: 1, curse: 1, grudge: .1 }
 };
-function attitude(b, toward) { const m = (b.mem && b.mem[toward.idx]) || 0; return m >= 4 ? 'дружнє' : m >= 1 ? 'приязне' : m > -2 ? 'нейтральне' : m > -5 ? 'ворожість' : 'лютує'; }
+/* приязність бота: сирі бали памʼяті → 0…100 % (50 — нейтрально); бали поступово забуваються */
+const memOf = (b, q) => (b && q && b.mem && b.mem[q.idx]) || 0;
+const affinity = (b, q) => Math.round(50 + 50 * Math.tanh(memOf(b, q) / 6));
+const affN = (b, q) => (affinity(b, q) - 50) / 50;
+const grudgeOf = (b, q) => -affN(b, q) * 5;
+const MOODS = [[90, 'найкращі друзі'], [75, 'дружнє'], [60, 'приязне'], [41, 'нейтральне'], [26, 'насторожене'], [11, 'вороже'], [0, 'лютує']];
+const moodName = a => MOODS.find(([t]) => a >= t)[1];
+function attitude(b, toward) { const a = affinity(b, toward); return `${moodName(a)} · ${a}%`; }
+/* пів-життя образ і вдячності — приблизно половина середньої партії (класика ≈ 9 кіл, епік ≈ 16); важкі боти памʼятають довше */
+function forgetTick(p) {
+  if (!p.mem) return;
+  const half = (G.goal > 10 ? 8 : 4.5) * [1, .7, 1, 1.4][p.diff || 2];
+  const k = Math.pow(.5, 1 / half);
+  for (const i in p.mem) { p.mem[i] *= k; if (Math.abs(p.mem[i]) < .05) delete p.mem[i]; }
+}
 const handLimit = p => race(p) === 'dwarf' ? 6 : 5;
 
 function draw(deck) {
@@ -64,14 +78,28 @@ function gearAfter(p, c) { const rem = equipConflicts(p, c); return p.gear.filte
 function treasureCount() { const cb = G.combat; return Math.max(0, sum(cb.mons, x => x.c.treasures) + sum(cb.mods, m => m.tr)); }
 const levelsGain = () => sum(G.combat.mons, x => x.c.levels);
 const monNames = () => G.combat ? G.combat.mons.map(x => x.c.name).join(' + ') : '';
+/* вогонь і дракони: вогняні речі +2 проти нежиті, на драконів не діють; драконобійні речі — бонус проти драконів */
+const combatTypes = cb => ({ undead: cb.mons.some(x => x.c.undead), dragon: cb.mons.some(x => x.c.dragon) });
+function typeAdj(q, ty) {
+  const r = { fireOff: 0, fireUndead: 0, slayer: 0 };
+  for (const g of q.gear) {
+    if (!usable(q, g)) continue;
+    if (g.fire && ty.dragon) r.fireOff -= g.bonus; else if (g.fire && ty.undead) r.fireUndead += 2;
+    if (g.vsT && g.vsT.dragon && ty.dragon) r.slayer += g.vsT.dragon;
+  }
+  return r;
+}
+const adjSum = r => r.fireOff + r.fireUndead + r.slayer;
+const shotVal = (c, ty, heroSide) => !heroSide || !c.fire || c.bonus < 0 ? c.bonus : ty.dragon ? 0 : c.bonus + (ty.undead ? 2 : 0);
 function sides() {
   const cb = G.combat, p = fighter();
   const h = cb.helper != null ? G.players[cb.helper] : null;
-  const undead = cb.mons.some(x => x.c.undead);
-  let hero = baseStr(p) + sum(cb.pShots, c => c.bonus) + cb.wiz * 2;
+  const ty = combatTypes(cb), undead = ty.undead;
+  let hero = baseStr(p) + adjSum(typeAdj(p, ty)) + sum(cb.pShots, c => shotVal(c, ty, true)) + cb.wiz * 2;
   if (cls(p) === 'cleric' && undead) hero += 3;
-  if (h) { hero += baseStr(h); if (cls(h) === 'cleric' && undead) hero += 3; }
-  let mon = sum(cb.mons, x => monLvl(x.c, p) + vsBonus(x.c, p)) + sum(cb.mods, c => c.bonus) + sum(cb.mShots, c => c.bonus);
+  if (h) { hero += baseStr(h) + adjSum(typeAdj(h, ty)); if (cls(h) === 'cleric' && undead) hero += 3; }
+  hero = Math.max(0, hero);
+  let mon = sum(cb.mons, x => monLvl(x.c, p) + vsBonus(x.c, p)) + sum(cb.mods, c => c.bonus) + sum(cb.mShots, c => shotVal(c, ty, false));
   mon = Math.max(1, mon);
   const tie = cls(p) === 'warrior' || (h && cls(h) === 'warrior');
   return { hero, mon, tie, win: hero > mon || (hero === mon && tie) };
@@ -81,7 +109,7 @@ function keepScore(p, c) {
   switch (c.kind) {
     case 'levelup': return p.level < G.goal - 1 ? 900 : 60;
     case 'flee': return 500;
-    case 'oneshot': return 200 + c.bonus * 60;
+    case 'oneshot': return 200 + Math.abs(c.bonus) * 60;
     case 'gear': return (usable(p, c) ? 120 : 20) + c.value * 0.3;
     case 'race': return p.raceCard ? 110 : 600;
     case 'class': return p.clsCard ? 110 : 600;

@@ -29,9 +29,9 @@ const BAD = {
 let UID = 0;
 const mk = o => (o.uid = ++UID, o);
 
-function buildDoorDeck(epic = false) {
+function buildDoorDeck(epic = false, types = { undead: true, dragon: true }) {
   const d = [];
-  const M = (name, lvl, treasures, art, bad, o = {}) => d.push(mk({ deck: 'door', kind: 'monster', name, lvl, treasures, art, bad: o.bt ? { ...bad, text: o.bt } : bad, levels: o.levels || 1, undead: !!o.undead, vs: o.vs || null, flavor: o.flavor || '' }));
+  const M = (name, lvl, treasures, art, bad, o = {}) => d.push(mk({ deck: 'door', kind: 'monster', name, lvl, treasures, art, bad: o.bt ? { ...bad, text: o.bt } : bad, levels: o.levels || 1, undead: !!o.undead, dragon: !!o.dragon, vs: o.vs || null, flavor: o.flavor || '' }));
   const DEATH = 'Смерть: усі речі й карти — у скид.';
   M('Хробак-книгоїд', 1, 1, '🐛', BAD.hand(2), { flavor: 'Прочитав усе. Навіть правила.', bt: 'Гризе твої карти, як конспект перед іспитом. Скинь 2 випадкові карти.' });
   M('Злий Вареник', 1, 1, '🥟', BAD.slot('feet'), { flavor: 'Ліплений з образою.', bt: 'Стрибає тобі на ноги зі сметаною. Взуття не відмити — втрачаєш його.' });
@@ -58,9 +58,9 @@ function buildDoorDeck(epic = false) {
   M('Кракен із калюжі', 12, 3, '🦑', BAD.gear, { flavor: 'Калюжа виявилася глибшою.', bt: 'Тягне в калюжу все, що на тобі. Втрачаєш усе спорядження.' });
   M('Чорт-юрист', 14, 4, '😈', BAD.lvl(3), { levels: 2, flavor: 'Прочитай дрібний шрифт. Запізно.', bt: 'Ти підписав. Дрібним шрифтом. −3 рівні.' });
   M('Мімік-холодильник', 14, 4, '❄️', BAD.gear, { levels: 2, flavor: 'Всередині лише гірчиця і зуби.', bt: 'Ти відчинив дверцята. Речей у тебе більше немає.' });
-  M('Змій-стажер', 16, 4, '🐉', BAD.death, { levels: 2, flavor: 'Три голови, нуль досвіду, повно вогню.', bt: 'Три голови вчаться дихати вогнем. На тобі. ' + DEATH });
+  M('Змій-стажер', 16, 4, '🐉', BAD.death, { levels: 2, dragon: true, flavor: 'Три голови, нуль досвіду, повно вогню.', bt: 'Три голови вчаться дихати вогнем. На тобі. ' + DEATH });
   M('Лич-бюрократ', 18, 4, '☠️', BAD.death, { levels: 2, undead: true, flavor: 'Приходьте завтра. Назавжди.', bt: 'Видає довідку про твою смерть. Печатка є. ' + DEATH });
-  M('Дракон-скнара', 20, 5, '🐲', BAD.death, { levels: 2, flavor: 'Спить на золоті. Прокидається на тобі.', bt: 'Ти торкнувся його золота. ' + DEATH });
+  M('Дракон-скнара', 20, 5, '🐲', BAD.death, { levels: 2, dragon: true, flavor: 'Спить на золоті. Прокидається на тобі.', bt: 'Ти торкнувся його золота. ' + DEATH });
   M('Хомʼяк-скнара', 1, 1, '🐹', BAD.hand(1), { flavor: 'Щоки — його банк.', bt: 'Набиває щоки твоїми картами. Скинь 1 випадкову карту.' });
   M('Сонечко-шантажистка', 2, 1, '🐞', BAD.gold, { flavor: 'Мила лише на вигляд.', bt: 'Знає твої секрети. Мовчання коштує все твоє золото.' });
   M('Качка-контролерка', 3, 1, '🦆', BAD.slot('feet'), { flavor: 'Кря. Ваш квиточок?', bt: 'Квитка в тебе нема. Штраф — твоє взуття.' });
@@ -86,7 +86,18 @@ function buildDoorDeck(epic = false) {
   M('Пан Глитай', 13, 3, '💸', BAD.best, { vs: { dwarf: 3 }, flavor: 'Скуповує все. Навіть совість.', bt: 'Купує твою найдорожчу річ за одну копійку. Копійку теж забирає.' });
   M('Голем зі старих меблів', 14, 4, '🛋️', BAD.lvl(3), { levels: 2, flavor: 'Зібраний зі старої стінки.', bt: 'Розчавлює диваном. −3 рівні.' });
   M('Дух дедлайну', 16, 4, '⌛', BAD.gear, { levels: 2, undead: true, flavor: 'Він уже тут. Він завжди тут.', bt: 'Ти нічого не встиг. Втрачаєш усе спорядження.' });
+  // дракони: вогонь їм не шкодить
+  M('Дракончик-запальничка', 3, 1, '🦎', BAD.slot('head'), { dragon: true, flavor: 'Мріє стати великим. Поки що — прикурює.', bt: 'Підпалює чуб разом із шапкою. Втрачаєш головний убір.' });
+  M('Дракон на дієті', 5, 2, '🥗', BAD.hand(2), { dragon: true, flavor: 'Рахує калорії. Ти — дві тисячі.', bt: 'Хрумтить твоїми картами як салатом. Скинь 2 випадкові карти.' });
+  M('Змій-шашличник', 6, 2, '🍢', BAD.slot('hands'), { dragon: true, flavor: 'Маринад — його таємна зброя.', bt: 'Нанизує твою зброю на шампур. Втрачаєш усе, що в руках.' });
+  M('Дракон-майнер', 7, 2, '🪙', BAD.gold, { dragon: true, vs: { dwarf: 3 }, flavor: 'Майнить на старій відеокарті. Гріється нею ж.', bt: 'Переплавляє твоє золото в криптовалюту. Втрачаєш усе золото.' });
+  M('Дракон «Опалювальний сезон»', 8, 2, '🌋', BAD.slot('body'), { dragon: true, flavor: 'Вмикає батареї в травні.', bt: 'Така спека, що броня розплавилася. Втрачаєш броню.' });
+  M('Дракониха-свекруха', 9, 3, '🐲', BAD.lvl(2), { dragon: true, vs: { f: 3 }, flavor: 'Пече пиріжки власним полумʼям.', bt: 'Каже, що ти не так тримаєш меч, і ти в це віриш. −2 рівні.' });
+  M('Кістяний дракон', 12, 3, '🐉', BAD.gear, { dragon: true, undead: true, flavor: 'Помер давно, а вогонь не згас.', bt: 'Розсипається й збирається знову — уже з твоїми речами. Втрачаєш усе спорядження.' });
+  M('Дракон-екскурсовод', 14, 4, '🗺️', BAD.lvl(3), { levels: 2, dragon: true, flavor: 'Ліворуч — печера. Праворуч — теж печера.', bt: 'Проводить екскурсію своїм шлунком. Ледве вибрався: −3 рівні.' });
   if (epic) {
+    M('Дракон із замку', 17, 4, '🏰', BAD.best, { levels: 2, dragon: true, flavor: 'Принцесу давно віддав. Скарби — ніколи.', bt: 'Забирає твою найдорожчу річ до своєї колекції.' });
+    M('Вогняний Змій-Аспід', 19, 5, '☄️', BAD.death, { levels: 2, dragon: true, flavor: 'Падає з неба замість метеориту.', bt: 'Приземляється просто на тебе. ' + DEATH });
     M('Сонце, що не заходить', 19, 5, '☀️', BAD.death, { levels: 2, flavor: 'Сонцезахисний крем не допоможе.', bt: 'Засмага до кісток. ' + DEATH });
     M('Титан-прибиральник', 17, 4, '🧽', BAD.gear, { levels: 2, flavor: 'Прибирає все. Взагалі все.', bt: 'Прибирає все, що на тобі лежить. Втрачаєш усе спорядження.' });
     M('Динозавр-пенсіонер', 16, 4, '🦖', BAD.lvl(3), { levels: 2, flavor: 'Памʼятає, як усе було дешевше.', bt: 'Розповідає про молодість три години. −3 рівні.' });
@@ -133,12 +144,12 @@ function buildDoorDeck(epic = false) {
 
   for (const r of Object.keys(RACES)) for (let i = 0; i < 3; i++) d.push(mk({ deck: 'door', kind: 'race', race: r, name: RACES[r].name, art: RACES[r].art }));
   for (const c of Object.keys(CLASSES)) for (let i = 0; i < 3; i++) d.push(mk({ deck: 'door', kind: 'class', cls: c, name: CLASSES[c].name, art: CLASSES[c].art }));
-  return d;
+  return d.filter(c => c.kind !== 'monster' || ((!c.undead || types.undead) && (!c.dragon || types.dragon)));
 }
 
-function buildTreasureDeck() {
+function buildTreasureDeck(types = { undead: true, dragon: true }) {
   const t = [];
-  const Gr = (name, slot, bonus, value, art, o = {}) => t.push(mk({ deck: 'treasure', kind: 'gear', name, slot, bonus, value, art, hands: o.hands || (slot === 'hands' ? 1 : 0), big: !!o.big, req: o.req || null, flee: o.flee || 0 }));
+  const Gr = (name, slot, bonus, value, art, o = {}) => t.push(mk({ deck: 'treasure', kind: 'gear', name, slot, bonus, value, art, hands: o.hands || (slot === 'hands' ? 1 : 0), big: !!o.big, req: o.req || null, flee: o.flee || 0, fire: !!o.fire, vsT: o.vsT || null }));
   Gr('Каструля-шолом', 'head', 1, 200, '🍲');
   Gr('Шапка-вушанка', 'head', 2, 400, '🧢');
   Gr('Корона з фольги', 'head', 3, 600, '👑');
@@ -172,7 +183,7 @@ function buildTreasureDeck() {
   Gr('Лабораторний халат', 'body', 2, 400, '🥼');
   Gr('Сандалі зі шкарпетками', 'feet', 2, 400, '👡');
   Gr('Ракетка для мух', 'hands', 2, 300, '🏸');
-  Gr('Вогнегасник', 'hands', 3, 500, '🧯');
+  Gr('Вогнегасник', 'hands', 3, 500, '🧯', { vsT: { dragon: 2 } });
   Gr('Дідова скалка', 'hands', 2, 200, '🥢');
   Gr('Золотий унітаз', 'misc', 3, 900, '🚽', { big: true });
   Gr('Кіт на плечі', 'misc', 1, 200, '😼', { flee: 1 });
@@ -187,11 +198,25 @@ function buildTreasureDeck() {
   Gr('Книга заклинань', 'misc', 3, 500, '📖', { req: { cls: 'wizard' } });
   Gr('Талісман-півник', 'misc', 2, 400, '🐓');
   Gr('Повітряна кулька', 'misc', 0, 300, '🎈', { flee: 2 });
-  const O = (name, bonus, value, art) => t.push(mk({ deck: 'treasure', kind: 'oneshot', name, bonus, value, art }));
+  // вогняні речі: +2 проти нежиті, але на драконів не діють
+  Gr('Палаючий меч', 'hands', 3, 600, '🔥', { fire: true });
+  Gr('Вогняна сокира', 'hands', 4, 700, '🪓', { hands: 2, big: true, fire: true });
+  Gr('Факел', 'hands', 2, 300, '🕯️', { fire: true });
+  Gr('Шолом-мангал', 'head', 2, 400, '♨️', { fire: true });
+  Gr('Броня-жаровня', 'body', 3, 600, '🏮', { big: true, fire: true });
+  Gr('Чоботи-вуглинки', 'feet', 1, 400, '🥾', { flee: 1, fire: true });
+  // проти драконів
+  Gr('Азбестовий фартух', 'body', 1, 400, '🦺', { vsT: { dragon: 3 } });
+  Gr('Ніж для драконячих стейків', 'hands', 1, 400, '🔪', { vsT: { dragon: 4 } });
+  const O = (name, bonus, value, art, o = {}) => t.push(mk({ deck: 'treasure', kind: 'oneshot', name, bonus, value, art, fire: !!o.fire }));
   O('Зілля сміливості', 2, 100, '🧪'); O('Зілля сміливості', 2, 100, '🧪');
-  O('Банка огірків', 3, 200, '🥒'); O('Вогняне зілля', 5, 300, '🔥');
+  O('Банка огірків', 3, 200, '🥒'); O('Вогняне зілля', 5, 300, '🧉', { fire: true });
   O('Петарда', 4, 200, '🧨'); O('Петарда', 4, 200, '🧨'); O('Сліпуча фара', 3, 200, '🔦');
   O('Бабусине зілля', 4, 250, '🍯'); O('Енергетик', 3, 200, '🥤'); O('Перцевий балончик', 4, 250, '🌶️'); O('Мильна піна', 2, 100, '🧼'); O('Відбивна перед бійкою', 3, 200, '🥩'); O('Гучний свисток', 2, 100, '📯');
+  // нові разові: плюс собі або мінус суперникові
+  O('Коктейль «Вогник»', 3, 200, '🍹', { fire: true }); O('Бойовий борщ', 4, 250, '🍜'); O('Мотиваційна промова', 3, 200, '📣'); O('Сирник сили', 2, 100, '🧀');
+  O('Гнилий помідор', -3, 150, '🍅'); O('Гнилий помідор', -3, 150, '🍅'); O('Кислий лимон', -2, 100, '🍋');
+  O('Снодійне', -4, 250, '💤'); O('Лід за комір', -3, 200, '🧊'); O('Підніжка', -2, 100, '🦶');
   t.push(mk({ deck: 'treasure', kind: 'flee', name: 'Бананова шкірка', value: 200, art: '🍌' }));
   t.push(mk({ deck: 'treasure', kind: 'flee', name: 'Таємні двері', value: 300, art: '🚪' }));
   for (const [nm, art] of [['Зілля «Це не я»', '👉'], ['Зілля «Це не я»', '👉'], ['Стрілочник', '🧭'], ['Цап-відбувайло', '🐐']]) t.push(mk({ deck: 'treasure', kind: 'redirect', name: nm, value: 300, art }));
@@ -228,20 +253,26 @@ function buildTreasureDeck() {
     'Ручка, сильніша за меч': 'Пише скарги, які вбивають.', 'Кастет воїна': 'Аргумент у будь-якій суперечці.', 'Книга заклинань': 'Половина сторінок вирвана.',
     'Талісман-півник': 'Кукурікає на небезпеку.', 'Повітряна кулька': 'Відлітаєш, коли треба.', 'Енергетик': 'Серце калатає, монстр боїться.',
     'Перцевий балончик': 'Гостро. Дуже гостро.', 'Мильна піна': 'Монстр послизнувся на піні.', 'Таємні двері': 'Відчинив — і нема тебе.', 'Зілля сміливості': 'На смак — як мікстура від кашлю.', 'Банка огірків': 'Мамині. Відкриваються лише в бою.',
-    'Вогняне зілля': 'Не пити. Кидати.', 'Петарда': 'Лякає монстрів, котів і сусідів.', 'Сліпуча фара': 'Дальнє світло просто в очі.', 'Димова шашка': 'Тебе тут не було.'
+    'Вогняне зілля': 'Не пити. Кидати.', 'Палаючий меч': 'Гасити не можна — образиться.', 'Вогняна сокира': 'Рубає дрова і монстрів одразу на вугілля.',
+    'Факел': 'Світить, гріє, лякає мертвяків.', 'Шолом-мангал': 'Голова гаряча, шашлик готовий.', 'Броня-жаровня': 'Обійми — і монстр засмажений.',
+    'Чоботи-вуглинки': 'Тікаєш — а за тобою слід із диму.', 'Азбестовий фартух': 'Дракони плачуть від безсилля.', 'Ніж для драконячих стейків': 'Гострий. Голодний. Терплячий.',
+    'Коктейль «Вогник»': 'Пʼєш — і дихаєш вогнем. Недовго.', 'Бойовий борщ': 'Із часником. Для хоробрості.', 'Мотиваційна промова': '«Ти зможеш!» — кричить невідомий.',
+    'Сирник сили': 'Як у бабусі. Тільки сильніший.', 'Гнилий помідор': 'Кидай у того, хто зазнався.', 'Кислий лимон': 'Скривишся — і вже не до бійки.',
+    'Снодійне': 'Солодких снів посеред бою.', 'Лід за комір': 'Бадьорить. Дуже. Не вчасно.', 'Підніжка': 'Класика жанру.', 'Петарда': 'Лякає монстрів, котів і сусідів.', 'Сліпуча фара': 'Дальнє світло просто в очі.', 'Димова шашка': 'Тебе тут не було.'
   };
   t.forEach(c => { if (!c.flavor && FL[c.name]) c.flavor = FL[c.name]; });
-  return t;
+  return t.filter(c => !(c.vsT && c.vsT.dragon && !c.fire && c.name !== 'Вогнегасник') || types.dragon);
 }
 
 const KIND_FIND = { race: 'Нова раса', class: 'Новий клас', mod: 'Підсилювач монстрів', wander: 'Приблудна потвора' };
 const reqName = r => r ? (r.sex ? (r.sex === 'f' ? 'жінок' : 'чоловіків') : r.race ? RACES[r.race].name : CLASSES[r.cls].name) : '';
-const sgn = n => (n > 0 ? '+' : '') + n;
+const sgn = n => n > 0 ? '+' + n : n < 0 ? '−' + Math.abs(n) : String(n);
 
 function cardInfo(c) {
   switch (c.kind) {
     case 'monster': {
       const t = [];
+      if (c.dragon) t.push('Дракон: вогняні речі й зілля проти нього не діють.');
       if (c.undead) t.push('Нежить: можна підкинути в бій до іншої нежиті.');
       if (c.vs) for (const k in c.vs) t.push(`+${c.vs[k]} проти ${VS_NAMES[k]}.`);
       t.push('Халепа: ' + c.bad.text);
@@ -256,9 +287,11 @@ function cardInfo(c) {
       if (c.big) t.push('Велика річ.');
       if (c.flee) t.push(`+${c.flee} до втечі.`);
       if (c.req) t.push('Лише для: ' + reqName(c.req) + '.');
+      if (c.fire) t.push('Вогняна: +2 проти нежиті, на драконів не діє.');
+      if (c.vsT && c.vsT.dragon) t.push(`+${c.vsT.dragon} проти драконів.`);
       return { type: 'Річ', corner: c.bonus ? '+' + c.bonus : '', text: t.join(' '), flavor: c.flavor, foot: [`${c.value} зол.`, c.bonus ? `+${c.bonus} до сили` : ''] };
     }
-    case 'oneshot': return { type: 'Разова', corner: '+' + c.bonus, text: `Зіграй у бою: +${c.bonus} будь-якій стороні.`, flavor: c.flavor, foot: [`${c.value} зол.`, ''] };
+    case 'oneshot': return { type: 'Разова', corner: sgn(c.bonus), text: (c.bonus > 0 ? `Зіграй у бою: +${c.bonus} будь-якій стороні.` : `Зіграй у бою: ${c.bonus} будь-якій стороні — послаб монстра чи героя.`) + (c.fire ? ' Вогняна: на драконів не діє, проти нежиті ще +2.' : ''), flavor: c.flavor, foot: [`${c.value} зол.`, ''] };
     case 'redirect': return { type: 'Разова', corner: '', text: 'Зіграй у будь-якому бою: бій з усіма монстрами переходить до іншого гравця на твій вибір.', flavor: c.flavor, foot: [`${c.value} зол.`, ''] };
     case 'flee': return { type: 'Разова', corner: '', text: 'Зіграй у бою: ти автоматично втікаєш.', flavor: c.flavor, foot: [`${c.value} зол.`, ''] };
     case 'wander': return { type: 'Особлива', corner: '', text: 'Зіграй у будь-якому бою разом із монстром з руки: він приєднується до бою.', flavor: c.flavor, foot: ['У бою', ''] };
@@ -267,7 +300,18 @@ function cardInfo(c) {
   return { type: '', corner: '', text: '', foot: ['', ''] };
 }
 
+function typeBadge(c) {
+  if (c.kind === 'monster') {
+    if (c.dragon && c.undead) return { t: 'Нежить-дракон', e: '💀', bg: '#4a2a55', bd: '#d9a6ff', fg: '#fbefff' };
+    if (c.dragon) return { t: 'Дракон', e: '🐉', bg: '#8a2c14', bd: '#ffb26b', fg: '#fff1e2' };
+    if (c.undead) return { t: 'Нежить', e: '💀', bg: '#2d5a46', bd: '#9fe0bd', fg: '#e4fff0' };
+    return { t: 'Звичайний', e: '', bg: '#6b5642', bd: '#e6d6bf', fg: '#fff4e0' };
+  }
+  if (c.fire) return { t: 'Вогняна', e: '🔥', bg: '#b4431a', bd: '#ffc27a', fg: '#fff4e6' };
+  if (c.vsT && c.vsT.dragon) return { t: 'Драконобій', e: '🛡️', bg: '#2f4867', bd: '#a9c8f0', fg: '#eef5ff' };
+  return null;
+}
 function cardHTML(c, extra = '') {
   const i = cardInfo(c);
-  return `<div class="card ${c.deck} ${extra}" data-uid="${c.uid}" tabindex="0" role="button" aria-label="${esc(c.name)}"><div class="band"><span>${esc(i.type)}</span><b>${esc(i.corner)}</b></div><div class="nm">${esc(c.name)}</div><div class="art" aria-hidden="true">${c.art}</div>${c.kind === 'monster' ? `<div class="mtype ${c.undead ? 'und' : ''}">${c.undead ? '💀 Нежить' : 'Звичайний'}</div>` : ''}<div class="tx">${esc(i.text)}${i.flavor ? `<i>${esc(i.flavor)}</i>` : ''}</div><div class="ft"><span>${esc(i.foot[0])}</span><span>${esc(i.foot[1])}</span></div></div>`;
+  return `<div class="card ${c.deck} ${extra}" data-uid="${c.uid}" tabindex="0" role="button" aria-label="${esc(c.name)}"><div class="band"><span>${esc(i.type)}</span><b>${esc(i.corner)}</b></div><div class="nm">${esc(c.name)}</div><div class="art" aria-hidden="true">${c.art}</div>${(b => b ? `<div class="mtype" style="background:${b.bg};color:${b.fg};border-color:${b.bd}">${b.e ? b.e + ' ' : ''}${b.t}</div>` : '')(typeBadge(c))}<div class="tx">${esc(i.text)}${i.flavor ? `<i>${esc(i.flavor)}</i>` : ''}</div><div class="ft"><span>${esc(i.foot[0])}</span><span>${esc(i.foot[1])}</span></div></div>`;
 }
