@@ -129,7 +129,7 @@ function buildExtras(type) {
       const cup = new THREE.Mesh(new THREE.CylinderGeometry(.25, .12, .35, 10), new THREE.MeshStandardMaterial({ color: 0x55555c, metalness: .6, roughness: .5 })); cup.position.set(x, 1.4, z); T.extras.add(cup);
       const flame = new THREE.Sprite(new THREE.SpriteMaterial({ map: T.dot, color: 0xff8a2a, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })); flame.position.set(x, 1.85, z); flame.scale.setScalar(1.1); T.extras.add(flame);
       const light = new THREE.PointLight(0xff7a2a, 1.1, 18, 1.4); light.position.set(x, 2.1, z); T.extras.add(light);
-      T.torches.push({ light, flame });
+      light.visible = QUALITY[QUAL].torchLights; T.torches.push({ light, flame });
     }
   }
   if (type === 'stars') {
@@ -163,9 +163,13 @@ function applySkin(id) {
 }
 function openSkins(back) {
   const hex = n => '#' + n.toString(16).padStart(6, '0');
-  showModal(`<h2>Вигляд столу</h2><p>Вибір зберігається лише на цьому пристрої й не впливає на інших гравців.</p>
+  showModal(`<h2>Стіл і графіка</h2><p>Вибір зберігається лише на цьому пристрої й не впливає на інших гравців.</p>
     <div class="skins">${Object.entries(SKINS).map(([id, S]) => `<button type="button" class="skin" data-skin="${id}" aria-pressed="${id === SKIN_ID}"><span class="sw" style="background:radial-gradient(circle at 50% 45%, ${S.felt[0]} 0 50%, ${S.felt[1]} 51% 60%, ${hex(S.ring)} 61% 66%, ${S.wood[0]} 67%)"></span><b>${S.name}</b><small>${S.desc}</small></button>`).join('')}</div>
+    <h3>Якість графіки</h3>
+    <div class="seg" role="group" aria-label="Якість графіки">${Object.entries(QUALITY).map(([id, q]) => `<button type="button" data-q="${id}" aria-pressed="${id === QUAL}">${q.name}</button>`).join('')}</div>
+    <p class="hint" id="qDesc" style="margin-top:8px">${QUALITY[QUAL].desc}</p>
     <div class="row end"><button class="btn primary" type="button" id="skDone">Готово</button></div>`);
+  $('#sheet').querySelectorAll('[data-q]').forEach(b => b.onclick = () => { applyQuality(b.dataset.q); $('#sheet').querySelectorAll('[data-q]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); $('#qDesc').textContent = QUALITY[QUAL].desc; });
   $('#sheet').querySelectorAll('[data-skin]').forEach(b => b.onclick = () => { applySkin(b.dataset.skin); $('#sheet').querySelectorAll('[data-skin]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
   $('#skDone').onclick = () => { closeModal(); if (back) back(); };
 }
@@ -302,10 +306,29 @@ const fromHandOf = p => isViewerHuman(p) ? handPose() : seatPose(p.idx, false);
 const toHandOf = p => isViewerHuman(p) ? handPose() : seatPose(p.idx, false);
 function seatAnchor(i) { const w = rotY(0, TABLE_Y, 7.55, seatAngle(i)); return new THREE.Vector3(w.x, w.y, w.z); }
 
+/* --- якість графіки: менше пікселів і кадрів, коли нічого не рухається, — ноутбук не гріється --- */
+const QUALITY = {
+  eco: { name: 'Економна', desc: 'Найменше нагріву й шуму: 30 кадрів у русі, 20 у спокої, звичайна чіткість.', dpr: 1, fpsActive: 30, fpsIdle: 20, shadow: 512, live: false, sway: false, torchLights: false },
+  bal: { name: 'Збалансована', desc: 'Плавно, коли щось рухається, і вдвічі менше кадрів у спокої. Підходить більшості.', dpr: 1.5, fpsActive: 60, fpsIdle: 30, shadow: 1024, live: false, sway: false, torchLights: true },
+  high: { name: 'Максимальна', desc: 'Повна чіткість і 60 кадрів завжди. Найгарніше, але ноутбук гріється.', dpr: 2, fpsActive: 60, fpsIdle: 60, shadow: 2048, live: true, sway: true, torchLights: true }
+};
+let QUAL = (() => { try { const q = localStorage.getItem('pdsv-quality'); return QUALITY[q] ? q : 'bal'; } catch (e) { return 'bal'; } })();
+function applyQuality(id) {
+  if (!QUALITY[id]) return; QUAL = id; const Q = QUALITY[id];
+  try { localStorage.setItem('pdsv-quality', id); } catch (e) { }
+  if (!renderer) return;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, Q.dpr));
+  viewW = 0; resize();
+  if (T.spot && T.spot.shadow.mapSize.x !== Q.shadow) { T.spot.shadow.mapSize.set(Q.shadow, Q.shadow); if (T.spot.shadow.map) { T.spot.shadow.map.dispose(); T.spot.shadow.map = null; } }
+  renderer.shadowMap.autoUpdate = Q.live; renderer.shadowMap.needsUpdate = true;
+  if (!Q.sway && T.lamp) T.lamp.rotation.set(0, 0, 0);
+  if (T.torches) T.torches.forEach(t => { t.light.visible = Q.torchLights; });
+}
+
 /* --- побудова сцени --- */
 function init3D() {
-  renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: QUAL === 'high' ? 'high-performance' : QUAL === 'eco' ? 'low-power' : 'default' });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, QUALITY[QUAL].dpr));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1;
@@ -323,7 +346,7 @@ function init3D() {
   const shade = new THREE.Mesh(new THREE.ConeGeometry(1.5, 1.1, 40, 1, true), new THREE.MeshStandardMaterial({ color: 0x2b3a2e, metalness: .6, roughness: .4, side: THREE.DoubleSide })); shade.position.y = -6.4; lamp.add(shade);
   const bulb = new THREE.Mesh(new THREE.SphereGeometry(.32, 20, 14), new THREE.MeshBasicMaterial({ color: 0xffe0a0 })); bulb.position.y = -6.9; lamp.add(bulb); T.bulb = bulb;
   const spot = new THREE.SpotLight(0xffcf8a, 2.3, 50, Math.PI / 4.4, 0.55, 1.2);
-  spot.position.y = -6.9; spot.castShadow = true; spot.shadow.mapSize.set(2048, 2048); spot.shadow.bias = -0.0005; spot.shadow.camera.near = 4; spot.shadow.camera.far = 30;
+  spot.position.y = -6.9; spot.castShadow = true; spot.shadow.mapSize.set(QUALITY[QUAL].shadow, QUALITY[QUAL].shadow); spot.shadow.bias = -0.0005; spot.shadow.camera.near = 4; spot.shadow.camera.far = 30;
   lamp.add(spot); spot.target.position.set(0, 0, 0); scene.add(spot.target); T.spot = spot;
   T.lamp = lamp;
   const rim = new THREE.DirectionalLight(0x86a8ff, 0.32); rim.position.set(-10, 7, -12); scene.add(rim); T.rim = rim;
@@ -386,6 +409,7 @@ function init3D() {
   addEventListener('resize', resize);
   new ResizeObserver(resize).observe($('#dock'));
   resize();
+  applyQuality(QUAL);
   requestAnimationFrame(loop);
 }
 
@@ -549,10 +573,19 @@ function camTo(az) {
 }
 
 /* --- цикл --- */
-let lastT = performance.now();
+let lastT = performance.now(), lastShadow = 0, camSig = '', modalEl = null;
+T.lastInput = 0;
 function loop(now) {
   requestAnimationFrame(loop);
-  const dt = Math.min(.05, (now - lastT) / 1000); lastT = now;
+  const Q = QUALITY[QUAL];
+  const sig = (cam.az + cam.userAz).toFixed(4) + '|' + (cam.el + cam.userEl).toFixed(4) + '|' + cam.zoom.toFixed(4) + '|' + Math.round(cam.offK || 0) + '|' + Math.round(cam.offTarget || 0);
+  const moving = T.anims.length > 0 || T.fx.length > 0 || sig !== camSig || now - T.lastInput < 700;
+  modalEl = modalEl || $('#modal');
+  const fps = moving ? Q.fpsActive : !modalEl.hidden ? 10 : Q.fpsIdle;
+  if (now - lastT < 1000 / fps - 4) return;
+  camSig = sig;
+  const dt = Math.min(.1, (now - lastT) / 1000); lastT = now;
+  if (!Q.live && (T.anims.length || T.fx.length || now - lastShadow > 1000)) { renderer.shadowMap.needsUpdate = true; lastShadow = now; }
   for (let i = T.anims.length - 1; i >= 0; i--) {
     const a = T.anims[i]; const t = Math.min(1, (now - a.t0) / a.dur);
     a.fn(a.e(t), t);
@@ -571,7 +604,7 @@ function loop(now) {
   }
   const s = now / 1000;
   if (!reduceMotion) {
-    T.lamp.rotation.z = Math.sin(s * .55) * .035; T.lamp.rotation.x = Math.cos(s * .41) * .025;
+    if (Q.sway) { T.lamp.rotation.z = Math.sin(s * .55) * .035; T.lamp.rotation.x = Math.cos(s * .41) * .025; }
     T.warm.intensity = (T.warmBase || 0) * (1 + Math.sin(s * 7.3) * .08 + Math.sin(s * 13.1) * .06);
     const P = T.dust.geometry.attributes.position.array, mode = T.dustMode;
     for (let i = 0; i < P.length; i += 3) {
@@ -659,7 +692,7 @@ function bindPointer() {
     return hit ? hit.object : null;
   };
   el.addEventListener('pointerdown', e => { el.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); down = { x: e.clientX, y: e.clientY, moved: 0 }; if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); zoom0 = cam.zoom; } });
-  el.addEventListener('pointermove', e => {
+  el.addEventListener('pointermove', e => { T.lastInput = performance.now();
     const prev = ptrs.get(e.pointerId);
     if (!prev) { const o = pick(e); el.style.cursor = o && (o.userData.card || o.userData.player != null || (o === T.decks.door && canKickNow())) ? 'pointer' : 'grab'; if (o && o.userData.card && canHover) showPeek(o.userData.card, e); else hidePeek(); return; }
     const dx = e.clientX - prev.x, dy = e.clientY - prev.y; prev.x = e.clientX; prev.y = e.clientY;
@@ -680,6 +713,6 @@ function bindPointer() {
     el.style.cursor = 'grab';
   };
   el.addEventListener('pointerup', up); el.addEventListener('pointerleave', hidePeek); el.addEventListener('pointercancel', e => { ptrs.delete(e.pointerId); down = null; });
-  el.addEventListener('wheel', e => { e.preventDefault(); cam.zoom = clamp(cam.zoom * (1 + e.deltaY * .0012), .55, 1.6); }, { passive: false });
+  el.addEventListener('wheel', e => { e.preventDefault(); T.lastInput = performance.now(); cam.zoom = clamp(cam.zoom * (1 + e.deltaY * .0012), .55, 1.6); }, { passive: false });
   el.addEventListener('dblclick', () => animate(500, (t) => { cam.userAz *= (1 - t); cam.userEl *= (1 - t); cam.zoom += (1 - cam.zoom) * t; }));
 }
