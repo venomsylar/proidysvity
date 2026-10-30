@@ -598,7 +598,7 @@ function cardsConfirmFor(p, title, text, groups, yes, no) {
     netSendTo(p.idx, { t: 'cardsAsk', id, title, text, groups, yes, no });
   });
 }
-function tradeChip(c) { return `${c.art} ${esc(c.name)}${c.bonus ? ' +' + c.bonus : ''}${c.value ? ' · ' + c.value + ' зол.' : ''}`; }
+function tradeChip(c) { return `${artIcon(c)} ${esc(c.name)}${c.bonus ? ' +' + c.bonus : ''}${c.value ? ' · ' + c.value + ' зол.' : ''}`; }
 /* вибір зустрічної пропозиції (бачить лише той, кого просять) */
 function tradePickModal(t, fromName, giveInfo) {
   return new Promise(res => {
@@ -677,7 +677,7 @@ function openCharityPick(v, act) {
   const dest = recips.length ? `Вони підуть гравцеві з найнижчим рівнем: <b>${recips.map(r => `<span style="color:${r.color}">${esc(r.name)}</span>`).join(', ')}</b>${recips.length > 1 ? ' (по черзі)' : ''}.` : 'Ти сам на найнижчому рівні, тож вони підуть у скид.';
   const draw = () => `<h2>Забагато карт</h2><p>У руці ${v.hand.length} карт при ліміті ${lim}. Вибери <b>${excess}</b> ${plural(excess, 'карту', 'карти', 'карт')}, яких позбудешся. ${dest}</p>
     <p class="hint">Порада: замість цього можна спорядити речі чи продати їх — закрий це вікно.</p>
-    <div class="ochips" style="margin-top:10px">${v.hand.map(c => `<button type="button" class="ochip" data-ch="${c.uid}" aria-pressed="${sel.has(c.uid)}">${c.art} ${esc(c.name)} · ${esc(cardInfo(c).type.toLowerCase())}</button>`).join('')}</div>
+    <div class="ochips" style="margin-top:10px">${v.hand.map(c => `<button type="button" class="ochip" data-ch="${c.uid}" aria-pressed="${sel.has(c.uid)}">${artIcon(c)} ${esc(c.name)} · ${esc(cardInfo(c).type.toLowerCase())}</button>`).join('')}</div>
     <div class="row end"><button class="btn ghost" type="button" data-close>Назад</button><button class="btn primary" type="button" id="chGo" ${sel.size === excess ? '' : 'disabled'}>Віддати й завершити хід (${sel.size}/${excess})</button></div>`;
   const redraw = () => { $('#sheet').innerHTML = draw(); $('#sheet').querySelectorAll('[data-close]').forEach(x => x.onclick = closeModal); };
   showModal(draw());

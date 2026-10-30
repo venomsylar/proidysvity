@@ -31,3 +31,6 @@ function loadCardArt(onProgress) {
     img.src = 'images/cards/' + s + '.svg?v=' + APP_VERSION;
   })));
 }
+
+/* значок карти: малюнок, якщо є, інакше емодзі */
+function artIcon(c, cls = 'ai') { const im = artFor(c); return im ? `<img class="${cls}" src="${im.src}" alt="">` : (c && c.art) || ''; }

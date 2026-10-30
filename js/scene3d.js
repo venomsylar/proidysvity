@@ -583,7 +583,7 @@ function loop(now) {
   const sig = (cam.az + cam.userAz).toFixed(4) + '|' + (cam.el + cam.userEl).toFixed(4) + '|' + cam.zoom.toFixed(4) + '|' + Math.round(cam.offK || 0) + '|' + Math.round(cam.offTarget || 0);
   const moving = T.anims.length > 0 || T.fx.length > 0 || sig !== camSig || now - T.lastInput < 700;
   modalEl = modalEl || $('#modal');
-  const fps = moving ? Q.fpsActive : !modalEl.hidden ? 10 : Q.fpsIdle;
+  const fps = (typeof MENU !== 'undefined' && MENU.open) || (!moving && !modalEl.hidden) ? 10 : moving ? Q.fpsActive : Q.fpsIdle;
   if (now - lastT < 1000 / fps - 4) return;
   camSig = sig;
   const dt = Math.min(.1, (now - lastT) / 1000); lastT = now;

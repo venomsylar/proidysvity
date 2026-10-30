@@ -193,7 +193,7 @@ function openHelp() {
     <p>Помічник додає свою силу до твоєї. Запропонуй ціну: скарби з цього бою віддаси після перемоги, а карти з руки — одразу, якщо погодиться.</p>
     <h3>Скарби з цього бою (усього ${T})</h3>
     <div class="seg" role="group" aria-label="Скільки скарбів пропонуєш">${Array.from({ length: T + 1 }, (_, k) => `<button type="button" data-tr="${k}" aria-pressed="${st.tr === k}">${k}</button>`).join('')}</div>
-    ${offerable.length ? `<h3>Карти з руки на додачу</h3><div class="ochips">${offerable.map(c => `<button type="button" class="ochip" data-oc="${c.uid}" aria-pressed="${st.cards.has(c.uid)}">${c.art} ${esc(c.name)}</button>`).join('')}</div>` : ''}
+    ${offerable.length ? `<h3>Карти з руки на додачу</h3><div class="ochips">${offerable.map(c => `<button type="button" class="ochip" data-oc="${c.uid}" aria-pressed="${st.cards.has(c.uid)}">${artIcon(c)} ${esc(c.name)}</button>`).join('')}</div>` : ''}
     <h3>Кого кличеш</h3>
     <div class="list">${opts.map(q => `<button class="btn" type="button" data-h="${q.idx}"><b style="color:${q.color}">${esc(q.name)}</b> · сила ${baseStr(q)} · рівень ${q.level} · ${(f => f.win ? `<span style="color:var(--good,#7fd081)">разом ${f.hero} проти ${f.mon} ✅</span>` : `<span style="color:var(--bad,#ef6b5d)">разом ${f.hero} проти ${f.mon} ❌</span>`)(togetherWith(q.idx))}${q.type === 'bot' ? ` · бот (${DIFF[q.diff || 2].name.toLowerCase()}), ставлення: ${attitude(q, p)}` : q.type === 'remote' ? ' · на іншому пристрої' : ''}</button>`).join('') || '<p class="hint">Більше нікого просити.</p>'}</div>
     <div class="row end"><button class="btn ghost" type="button" data-close>Скасувати</button></div>`;
@@ -325,7 +325,7 @@ function openSetup() {
     <div class="row" style="margin-top:0"><span class="hint">Зараз: <b style="color:var(--text)">${esc(SKIN.name)}</b></span><button class="btn small" type="button" id="skinB">Змінити</button></div>
     <h3>Анімація карт</h3>
     <div class="seg" role="group" aria-label="Швидкість анімації карт">${[[2.1, 'Повільна'], [1.5, 'Звичайна'], [.9, 'Швидка']].map(([v, l]) => `<button type="button" data-an="${v}" aria-pressed="${s.anim === v}">${l}</button>`).join('')}</div>
-    <div class="row end"><button class="btn ghost" type="button" id="rulesB">Правила</button><button class="btn primary" type="button" id="startB">Почати гру</button></div>`;
+    <div class="row end">${MENU.open ? '<button class="btn ghost" type="button" id="setupBack">Назад</button>' : ''}<button class="btn ghost" type="button" id="rulesB">Правила</button><button class="btn primary" type="button" id="startB">Почати гру</button></div>`;
   const save = () => s.rows.forEach((r, i) => { const el = $('#pname-' + i); if (el && r.type !== 'remote') r.name = el.value.trim() || (r.type === 'bot' ? BOT_NAMES[i] : `Гравець ${i + 1}`); });
   const bind = () => {
     $('#sheet').onchange = e => { const sel = e.target.closest('[data-diff]'); if (sel) { save(); s.rows[+sel.dataset.diff].diff = +sel.value; storeSetup(); } const mt = e.target.closest('[data-mt]'); if (mt) { save(); s.types[mt.dataset.mt] = mt.checked; saveMonTypes(s.types); rerender(); } };
@@ -347,6 +347,7 @@ function openSetup() {
       else if (b.id === 'rulesB') { save(); openRules(); const back = $('#sheet').querySelector('[data-close]'); back.textContent = 'Назад'; back.onclick = () => openSetup(); }
       else if (b.id === 'startB') { save(); storeSetup(); closeModal(); newGame(); }
       else if (b.id === 'setupVer') { save(); openChangelog(); }
+      else if (b.id === 'setupBack') { save(); storeSetup(); if (NET.role === 'host') stopHosting(); closeModal(); }
     };
   };
   const rerender = () => { storeSetup(); if (!NET.setupOpen) return; $('#sheet').innerHTML = html(); bind(); };
@@ -354,6 +355,7 @@ function openSetup() {
   showModal(html()); NET.setupOpen = true; bind();
 }
 async function newGame() {
+  hideMainMenu();
   const s = setupState; botSpeed = s.speed; ANIM = s.anim || 1.5; G.goal = s.goal;
   G.players.forEach(destroySeat);
   if (G.combat) { G.combat.mons.forEach(x => disposeMesh(x.m)); G.combat.meshes.forEach(disposeMesh); }

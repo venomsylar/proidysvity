@@ -37,7 +37,7 @@ async function boot() {
   loaderSet('Розкладаємо стіл…', .95);
   try { init3D(); } catch (e) { loaderFail('Цей браузер не зміг запустити 3D-графіку. Спробуй інший браузер.'); throw e; }
   renderUI();
-  openSetup();
+  openMainMenu();
   loaderSet('Готово!', 1); loaderDone();
 }
 boot();

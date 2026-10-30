@@ -12,12 +12,12 @@ function slotHTML(p, c, label, area, big, extra = '') {
   const off = c.kind === 'gear' && !usable(p, c);
   const bonus = c.kind === 'gear' && (c.bonus || c.flee) ? `<span class="sb">${c.bonus ? '+' + c.bonus : ''}${c.flee ? ` ↗${c.flee}` : ''}</span>` : '';
   const tip = `${label}: ${c.name}${off ? ` (не діє — лише для: ${reqName(c.req)})` : ''}`;
-  return `<button type="button" class="slot ${c.kind !== 'gear' ? 'rc' : ''} ${off ? 'off' : ''}" style="grid-area:${area}" data-g="${c.uid}" title="${esc(tip)}" aria-label="${esc(tip)}"><span class="se" aria-hidden="true">${c.art}</span>${big ? `<span class="sn">${esc(c.name)}</span>` : ''}${bonus}${extra}</button>`;
+  return `<button type="button" class="slot ${c.kind !== 'gear' ? 'rc' : ''} ${off ? 'off' : ''}" style="grid-area:${area}" data-g="${c.uid}" title="${esc(tip)}" aria-label="${esc(tip)}"><span class="se" aria-hidden="true">${artIcon(c, "")}</span>${big ? `<span class="sn">${esc(c.name)}</span>` : ''}${bonus}${extra}</button>`;
 }
 function dollHTML(p, big) {
   const s = slotItems(p);
   const misc = s.misc.length ? slotHTML(p, s.misc[0], 'Дрібниці', 'misc', big && s.misc.length === 1, s.misc.length > 1 ? `<span class="cnt">×${s.misc.length}</span>` : '') : slotHTML(p, null, 'Дрібниці', 'misc', big);
-  const rh = s.two ? `<div class="slot twin" style="grid-area:rh" title="Дворучна річ: ${esc(s.R.name)}"><span class="se" aria-hidden="true">${s.R.art}</span><span class="sl">дві руки</span></div>` : slotHTML(p, s.R, 'Права рука', 'rh', big);
+  const rh = s.two ? `<div class="slot twin" style="grid-area:rh" title="Дворучна річ: ${esc(s.R.name)}"><span class="se" aria-hidden="true">${artIcon(s.R, "")}</span><span class="sl">дві руки</span></div>` : slotHTML(p, s.R, 'Права рука', 'rh', big);
   return `<div class="doll ${big ? 'big' : ''}">${SIL}
     ${slotHTML(p, p.raceCard, 'Раса', 'race', big)}${slotHTML(p, s.head, 'Голова', 'head', big)}${slotHTML(p, p.clsCard, 'Клас', 'cls', big)}
     ${slotHTML(p, s.L, 'Ліва рука', 'lh', big)}${slotHTML(p, s.body, 'Тіло', 'body', big)}${rh}
@@ -33,8 +33,8 @@ function openCharSheet(i) {
   const v = viewerP();
   const rcName = [p.raceCard && p.raceCard.name, p.clsCard && p.clsCard.name].filter(Boolean).join(' · ') || 'без раси й класу';
   const rows = [`<div class="kv"><span>Рівень</span><b>${p.level}</b></div>`];
-  p.gear.forEach(c => { const on = usable(p, c); if (c.bonus || !on) rows.push(`<div class="kv ${on ? '' : 'off'}"><span>${c.art} ${esc(c.name)}${on ? '' : ` — лише для: ${esc(reqName(c.req))}`}</span><b>${on ? '+' + c.bonus : '0'}</b></div>`); });
-  if (cls(p) === 'warrior') rows.push('<div class="kv"><span>⚔️ Воїн</span><b>+1</b></div>');
+  p.gear.forEach(c => { const on = usable(p, c); if (c.bonus || !on) rows.push(`<div class="kv ${on ? '' : 'off'}"><span>${artIcon(c)} ${esc(c.name)}${on ? '' : ` — лише для: ${esc(reqName(c.req))}`}</span><b>${on ? '+' + c.bonus : '0'}</b></div>`); });
+  if (cls(p) === 'warrior') rows.push(`<div class="kv"><span>${artIcon(p.clsCard)} Воїн</span><b>+1</b></div>`);
   rows.push(`<div class="kv total"><span>Разом</span><b>${baseStr(p)}</b></div>`);
   const fb = fleeBonus(p), need = Math.max(1, 5 - fb);
   let chance = Math.min(6, 7 - need) / 6; if (race(p) === 'halfling') chance = 1 - Math.pow(1 - chance, 2);
@@ -43,7 +43,7 @@ function openCharSheet(i) {
   const mood = p.type === 'bot' && v && v !== p ? `<h3>Характер</h3><div class="kv"><span>Складність</span><b style="color:var(--text)">${DIFF[p.diff || 2].name}</b></div><div class="kv"><span>Ставлення до тебе</span><b style="color:var(--text)">${attitude(p, v)}</b></div><p class="hint" style="margin-top:6px">Бот памʼятає, хто йому допомагав і хто підставляв. Від цього залежить, чи погодиться він допомогти і чи захоче нашкодити.</p>` : '';
   const handsUsed = sum(p.gear.filter(g => g.slot === 'hands'), g => g.hands), bigN = p.gear.filter(g => g.big).length;
   const s = slotItems(p);
-  const miscList = s.misc.length > 1 ? `<div class="misc-list">${s.misc.map(c => `<button class="tag" type="button" data-g="${c.uid}">${c.art} ${esc(c.name)}${c.bonus ? ' +' + c.bonus : ''}</button>`).join('')}</div>` : '';
+  const miscList = s.misc.length > 1 ? `<div class="misc-list">${s.misc.map(c => `<button class="tag" type="button" data-g="${c.uid}">${artIcon(c)} ${esc(c.name)}${c.bonus ? ' +' + c.bonus : ''}</button>`).join('')}</div>` : '';
   showModal(`<div class="cs-head" style="--pc:${p.color}"><div class="cs-lvl"><small>рівень</small>${p.level}</div><div><h2>${esc(p.name)}</h2><div class="hint">${esc(rcName)} · ${sexName(p)} · ${typeName(p)}${mine ? ' · це ти' : ''}</div></div></div>
     <div class="cs-grid"><div>${dollHTML(p, true)}${miscList}<p class="hint" style="text-align:center;margin-top:10px">${mine ? 'Клацни річ, щоб зняти чи продати її.' : 'Клацни річ, щоб роздивитися.'}</p></div>
     <div><h3>Сила в бою</h3>${rows.join('')}
@@ -92,9 +92,9 @@ function renderPlayers() {
     row.querySelector('.bt').hidden = !isCur;
     row.querySelector('.btype').textContent = p.type === 'bot' ? `бот ${'★'.repeat(p.diff || 2)}` : p.type === 'remote' ? 'мережа' : (NET.role === 'client' && p.idx === NET.me ? 'ти' : '');
     row.querySelector('.blvl').textContent = p.level;
-    row.querySelector('.bs').textContent = `⚔ ${baseStr(p)}`;
+    row.querySelector('.bs').innerHTML = `${ICO.sword} ${baseStr(p)}`;
     const rc = [p.raceCard && p.raceCard.name, p.clsCard && p.clsCard.name].filter(Boolean).join(' · ') || 'без раси й класу';
-    row.querySelector('.bmeta').textContent = `${p.sex === 'f' ? '♀' : '♂'} ${rc} · карт ${p.hand.length} · ${p.gold} зол.`;
+    row.querySelector('.bmeta').innerHTML = `${ICO[p.sex === 'f' ? 'f' : 'm']} ${esc(rc)} · карт ${p.hand.length} · ${p.gold} зол.`;
     const pipsEl = row.querySelectorAll('.track i');
     pipsEl.forEach((pip, k) => pip.classList.toggle('on', k < p.level));
     if (p._ui !== p.level) {
@@ -158,7 +158,7 @@ function renderCombat() {
     .concat(cb.pShots.map(c => `<span class="tag ${c.bonus < 0 ? 'm' : 'h'}">${esc(c.name)} ${sgn(shotVal(c, ty, true))}${c.fire && ty.dragon && c.bonus > 0 ? ' (вогонь не діє)' : ''}</span>`))
     .concat(cb.wiz ? [`<span class="tag h">Магія +${cb.wiz * 2}</span>`] : [])
     .concat(h ? [`<span class="tag h">${esc(h.name)} +${baseStr(h)}${cb.offer ? ` · обіцяно ${cb.offer.tr} ${plural(cb.offer.tr, 'скарб', 'скарби', 'скарбів')}` : ''}</span>`] : []);
-  if (cb.mons.length > 1) mods.unshift(...cb.mons.map(x => `<span class="tag m">${x.c.art} ${esc(x.c.name)} ${monLvl(x.c, p)}${x.c.dragon ? ' · 🐉 дракон' : ''}${x.c.undead ? ' · 💀 нежить' : ''}</span>`));
+  if (cb.mons.length > 1) mods.unshift(...cb.mons.map(x => `<span class="tag m">${artIcon(x.c)} ${esc(x.c.name)} ${monLvl(x.c, p)}${x.c.dragon ? ' · 🐉 дракон' : ''}${x.c.undead ? ' · 💀 нежить' : ''}</span>`));
   [p, h].filter(Boolean).forEach(q => {
     const a = typeAdj(q, ty), who = q === p ? '' : esc(q.name) + ': ';
     if (a.fireOff) mods.push(`<span class="tag m">${who}🔥 Дракон не боїться вогню ${a.fireOff}</span>`);
@@ -173,7 +173,7 @@ function renderCombat() {
   const pct = Math.round(s.hero / (s.hero + s.mon) * 100);
   const bad = cb.mons.length > 1 ? `${cb.mons.length} монстри — тікати доведеться від кожного окремо` : cb.mons[0].c.bad.text;
   el.innerHTML = `<div class="cside hero"><div class="cl">${esc(p.name)}${h ? ' + ' + esc(h.name) : ''}</div><div class="big">${s.hero}</div></div>
-    <div class="vs">${s.win ? 'перемагає' : 'програє'}<b>⚔</b></div>
+    <div class="vs">${s.win ? 'перемагає' : 'програє'}<b>${ICO.sword}</b></div>
     <div class="cside mon"><div class="cl">${esc(monNames())}</div><div class="big">${s.mon}</div></div>
     <div class="cbar" aria-hidden="true"><i style="width:${pct}%"></i></div>
     ${mods.length ? `<div class="cmods">${mods.join('')}</div>` : ''}
@@ -197,6 +197,6 @@ $('#players').addEventListener('click', e => { const c = e.target.closest('[data
 $('#players').addEventListener('keydown', e => { if (e.key !== 'Enter' && e.key !== ' ') return; const c = e.target.closest('[data-p]'); if (c) { e.preventDefault(); openCharSheet(+c.dataset.p); } });
 $('#btnLog').onclick = () => { const l = $('#log'); l.hidden = !l.hidden; };
 $('#btnLogClose').onclick = () => { $('#log').hidden = true; };
-$('#btnNew').onclick = () => { if (NET.role === 'client') { toast('Нову партію запускає господар кімнати.'); return; } if (!G.busy || G.over || G.phase === 'setup') openSetup(); else { G.pendingSetup = true; toast('Нова гра почнеться після цього ходу'); } };
+$('#btnNew').onclick = () => openMainMenu();
 addEventListener('keydown', e => { if (e.key === 'Escape') { closeMenu(); } });
 if (innerWidth < 760) $('#log').hidden = true;

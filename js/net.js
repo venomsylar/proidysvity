@@ -123,7 +123,7 @@ function openJoin() {
     $('#sheet').onclick = e => {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.js) { keep(); st.sex = b.dataset.js; show(); }
-      else if (b.id === 'jBack') openSetup();
+      else if (b.id === 'jBack') { if (MENU.open) closeModal(); else openSetup(); }
       else if (b.id === 'jGo') { keep(); if (st.code.length < 4) { show('Введи код із 5 символів.'); return; } b.disabled = true; b.textContent = 'Підключаємося…'; joinRoom(st.code, st.name || 'Гість', st.sex, err => show(err)); }
     };
   };
@@ -150,7 +150,7 @@ function showLobby(l) {
   showModal(`<h2>Кімната ${esc(l.code)}</h2><p>Ти в кімнаті. Чекаємо, поки господар почне гру.</p>
     <div class="list">${l.rows.map((r, i) => `<div class="tag" style="font-size:13px;padding:6px 10px"><span class="dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${COLORS[i]};margin-right:6px"></span>${esc(r.name)} · ${r.type === 'bot' ? 'бот' : r.type === 'remote' ? 'по мережі' : 'господар'}${i === l.you ? ' · це ти' : ''}</div>`).join('') || '<p class="hint">Отримуємо список гравців…</p>'}</div>
     <div class="row end"><button class="btn ghost" type="button" id="leaveB">Вийти</button></div>`);
-  $('#leaveB').onclick = () => { leaveRoom(); openSetup(); };
+  $('#leaveB').onclick = () => { leaveRoom(); openMainMenu(); };
 }
 function leaveRoom() {
   try { NET.conn && NET.conn.close(); } catch (e) { }
@@ -165,14 +165,14 @@ function leaveRoom() {
 function lostHost() {
   leaveRoom();
   showModal(`<h2>Звʼязок утрачено</h2><p>Господар кімнати відключився або закрив гру.</p><div class="row end"><button class="btn primary" type="button" id="lhB">До меню</button></div>`);
-  $('#lhB').onclick = () => openSetup();
+  $('#lhB').onclick = () => openMainMenu();
 }
 function clientOnData(d) {
   if (!d || typeof d !== 'object') return;
   switch (d.t) {
     case 'lobby': showLobby(d); break;
-    case 'full': { const r = d.reason; leaveRoom(); showModal(`<h2>Не вийшло</h2><p>${esc(r || 'Кімната недоступна.')}</p><div class="row end"><button class="btn primary" type="button" id="fB">До меню</button></div>`); $('#fB').onclick = () => openSetup(); break; }
-    case 'start': NET.me = d.you; closeModal(); break;
+    case 'full': { const r = d.reason; leaveRoom(); showModal(`<h2>Не вийшло</h2><p>${esc(r || 'Кімната недоступна.')}</p><div class="row end"><button class="btn primary" type="button" id="fB">До меню</button></div>`); $('#fB').onclick = () => openMainMenu(); break; }
+    case 'start': NET.me = d.you; closeModal(); hideMainMenu(); break;
     case 'snap': applySnap(d.s); break;
     case 'fly': onNetFly(d); break;
     case 'fx': onNetFx(d); break;
