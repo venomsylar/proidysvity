@@ -2093,26 +2093,77 @@ const canTrade = p => !!p && !G.busy && !G.over && !G.combat && p === cur() && [
 const tradeItems = p => [...p.gear, ...p.hand.filter(c => c.kind === 'gear')];
 const findTradeItem = (p, uid) => tradeItems(p).find(c => c.uid === uid);
 const itemWorth = (b, c) => c.value * (usable(b, c) ? 1 : .6) + (usable(b, c) ? c.bonus * 120 + (c.flee || 0) * 60 : 0);
-function botTradeDecision(b, p, give, take) {
+function botTradeOffer(b, p, give) {
   const D = b.diff || 2, mem = (b.mem && b.mem[p.idx]) || 0;
-  if (!take.length) return { ok: true, why: '' };
   const top = Math.max(...G.players.map(q => q.level));
   if (D === 3 && p.level === top && p.level >= b.level + 2) return { ok: false, why: 'Лідерам нічого не продаю.' };
   if (mem <= -4) return { ok: false, why: 'З тобою? Ніколи.' };
-  const gain = sum(give, c => itemWorth(b, c)), loss = sum(take, c => itemWorth(b, c));
+  if (!give.length) return { ok: false, why: 'А ти що даєш? Нічого? От і я нічого.' };
+  const gain = sum(give, c => itemWorth(b, c));
   const factor = [0, .85, 1.05, 1.35][D] - mem * .04;
-  if (gain >= loss * factor) return { ok: true, why: '' };
-  return { ok: false, why: gain < loss * .6 ? 'Це грабунок, а не обмін!' : 'Мало. Додай ще щось.' };
+  let budget = gain / Math.max(.5, factor);
+  const pool = tradeItems(b).map(c => ({ c, w: itemWorth(b, c) })).sort((x, y) => (x.w - y.w) || (y.c.value - x.c.value));
+  const take = [];
+  for (const it of pool) { if (take.length >= give.length + 1) break; if (it.w <= budget) { take.push(it.c); budget -= it.w; } }
+  if (!take.length) return gain >= 300 ? { ok: true, take: [], why: 'Дати натомість нічого не можу, але подарунок візьму!' } : { ok: false, why: 'Мені це ні до чого.' };
+  return { ok: true, take, why: '' };
 }
-async function doTrade(p, t, give, take) {
-  if (!t || (!give.length && !take.length)) return;
+function tradeChip(c) { return `${c.art} ${esc(c.name)}${c.bonus ? ' +' + c.bonus : ''}${c.value ? ' · ' + c.value + ' зол.' : ''}`; }
+/* вибір зустрічної пропозиції (бачить лише той, кого просять) */
+function tradePickModal(t, fromName, giveInfo) {
+  return new Promise(res => {
+    const items = tradeItems(t), sel = new Set();
+    const draw = () => `<h2>${esc(t.name)}, обмін?</h2><p><b>${esc(fromName)}</b> пропонує тобі:</p>
+      <div class="ochips">${giveInfo.length ? giveInfo.map(c => `<span class="tag">${tradeChip(c)}</span>`).join('') : '<p class="hint">нічого — просто просить щось дати</p>'}</div>
+      <h3>Що ти готовий дати натомість</h3><p class="hint">Цей список бачиш лише ти. ${esc(fromName)} побачить тільки те, що ти вибереш, і вирішить, чи згоден.</p>
+      <div class="ochips">${items.map(c => `<button type="button" class="ochip" data-tp="${c.uid}" aria-pressed="${sel.has(c.uid)}">${tradeChip(c)}${t.gear.includes(c) ? ' · вдягнено' : ' · у руці'}</button>`).join('') || '<p class="hint">У тебе немає речей для обміну.</p>'}</div>
+      <div class="row end"><button class="btn ghost" type="button" id="tpNo">Відмовитись</button><button class="btn primary" type="button" id="tpGo" ${sel.size || giveInfo.length ? '' : 'disabled'}>${sel.size ? `Запропонувати (${sel.size})` : 'Взяти без нічого натомість'}</button></div>`;
+    showModal(draw());
+    $('#sheet').onclick = e => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.tp) { const u = +b.dataset.tp; sel.has(u) ? sel.delete(u) : sel.add(u); $('#sheet').innerHTML = draw(); }
+      else if (b.id === 'tpNo') { $('#sheet').onclick = null; closeModal(); res(null); }
+      else if (b.id === 'tpGo') { $('#sheet').onclick = null; closeModal(); res([...sel]); }
+    };
+  });
+}
+function askRemoteTrade(t, fromName, giveInfo, timeout = 90000) {
+  return new Promise(res => {
+    const id = ++NET.askSeq; let tm;
+    const done = (ok, pick) => { if (!NET.asks.has(id)) return; NET.asks.delete(id); clearTimeout(tm); netSendTo(t.idx, { t: 'askEnd', id }); res(ok && Array.isArray(pick) ? pick : null); };
+    done.who = t.idx; NET.asks.set(id, done);
+    tm = setTimeout(() => done(false), timeout);
+    netSendTo(t.idx, { t: 'tradeAsk', id, from: fromName, give: giveInfo });
+  });
+}
+async function humanTradeOffer(t, p, give) {
+  const info = give.map(c => ({ art: c.art, name: c.name, bonus: c.bonus, value: c.value }));
+  if (t.type === 'remote') { const pick = await askRemoteTrade(t, p.name, info); return pick && pick.map(u => findTradeItem(t, u)).filter(Boolean); }
+  const pv = G.viewer, pr = G.reveal, priv = privacy();
+  if (priv) { G.reveal = -1; closeMenu(); renderUI(); await curtain(t); }
+  const pick = await tradePickModal(t, p.name, info);
+  if (priv) {
+    G.reveal = -1; renderUI();
+    const back = G.players[pv];
+    if (back && back.type === 'human') { await curtain(back); G.viewer = pv; G.reveal = pv; } else { G.viewer = pv; G.reveal = pr; }
+    renderUI();
+  }
+  return pick && pick.map(u => findTradeItem(t, u)).filter(Boolean);
+}
+async function doTrade(p, t, give) {
+  if (!t || t === p) return;
   const names = l => l.length ? l.map(c => '«' + c.name + '»').join(', ') : 'нічого';
-  log(`${nameTag(p)} пропонує обмін гравцеві ${nameTag(t)}: віддає ${esc(names(give))}, просить ${esc(names(take))}.`);
+  log(`${nameTag(p)} пропонує обмін гравцеві ${nameTag(t)}${give.length ? `: віддає ${esc(names(give))}` : ''}.`);
   renderUI();
-  let ok, why = '';
-  if (t.type === 'bot') { await botDelay(550); const d = botTradeDecision(t, p, give, take); ok = d.ok; why = d.why; }
-  else ok = await confirmFor(t, `${t.name}, міняємось?`, `${p.name} пропонує обмін. Ти отримаєш: ${names(give)}. Віддаси: ${names(take)}.`, 'Міняємось', 'Ні, дякую');
-  if (!ok) { log(`${nameTag(t)} відмовляється від обміну.${why ? ` <i>«${esc(why)}»</i>` : ''}`); tell(p, `${t.name}: ${why ? '«' + why + '»' : 'відмова'}`, 2600); memo(p, t, -.5); return; }
+  let take = null, why = '';
+  if (t.type === 'bot') { await botDelay(650); const d = botTradeOffer(t, p, give); take = d.ok ? d.take : null; why = d.why; }
+  else take = await humanTradeOffer(t, p, give);
+  if (!take) { log(`${nameTag(t)} відмовляється від обміну.${why ? ` <i>«${esc(why)}»</i>` : ''}`); tell(p, `${t.name}: ${why ? '«' + why + '»' : 'відмова'}`, 2600); memo(p, t, -.5); return; }
+  if (!give.length && !take.length) return;
+  if (give.some(c => !findTradeItem(p, c.uid)) || take.some(c => !findTradeItem(t, c.uid))) { tell(p, 'Речі вже змінилися — обмін скасовано.'); return; }
+  const ok = await confirmFor(p, `${t.name} відповідає`, `${why ? '«' + why + '» ' : ''}За ${names(give)} ${t.name} ${take.length ? 'пропонує натомість: ' + names(take) : 'нічого не дає натомість'}. Згоден?`, take.length ? 'Міняємось' : 'Подарувати', 'Відмовитись');
+  if (!ok) { log(`${nameTag(p)} не погоджується на пропозицію ${nameTag(t)}.`); memo(t, p, -.3); return; }
+  if (give.some(c => !findTradeItem(p, c.uid)) || take.some(c => !findTradeItem(t, c.uid))) { tell(p, 'Речі вже змінилися — обмін скасовано.'); return; }
   const move = async (from, to, c) => {
     if (from.gear.includes(c)) from.gear.splice(from.gear.indexOf(c), 1); else removeFromHand(from, c);
     const m = cardMesh(c); scene.add(m);
@@ -2148,27 +2199,25 @@ function openCharityPick(v, act) {
 function openTrade() {
   const p = viewerP(); if (!canTrade(p)) return;
   const others = G.players.filter(q => q !== p);
-  const st = { t: others[0].idx, give: new Set(), take: new Set() };
+  const st = { t: others[0].idx, give: new Set() };
   const chip = (c, set, key) => `<button type="button" class="ochip" data-${key}="${c.uid}" aria-pressed="${set.has(c.uid)}">${c.art} ${esc(c.name)}${c.bonus ? ' +' + c.bonus : ''} · ${c.value} зол.</button>`;
   const draw = () => {
     const t = G.players[st.t];
-    const mine = tradeItems(p), theirs = t.gear;
-    const gv = sum(mine.filter(c => st.give.has(c.uid)), c => c.value), tv = sum(theirs.filter(c => st.take.has(c.uid)), c => c.value);
-    return `<h2>Обмін речами</h2><p>Можна мінятися речами на своєму ході поза боєм. Отримані речі потрапляють у руку — вдягнеш їх, коли захочеш.</p>
+    const mine = tradeItems(p);
+    const gv = sum(mine.filter(c => st.give.has(c.uid)), c => c.value);
+    return `<h2>Обмін речами</h2><p>Вибери, з ким мінятися і що пропонуєш. Суперник сам вирішить, що дати натомість (його карт ти не бачиш), а ти потім погодишся або відмовишся. Отримані речі потрапляють у руку.</p>
       <h3>З ким</h3><div class="seg" role="group" aria-label="З ким мінятися">${others.map(q => `<button type="button" data-tt="${q.idx}" aria-pressed="${st.t === q.idx}">${esc(q.name)}</button>`).join('')}</div>
       ${t.type === 'bot' ? `<p class="hint" style="margin-top:8px">Бот, ${DIFF[t.diff || 2].name.toLowerCase()}. Ставлення до тебе: ${attitude(t, p)}. Що вища складність, то вигіднішу пропозицію він хоче.</p>` : ''}
       <h3>Ти віддаєш (${gv} зол.)</h3><div class="ochips">${mine.map(c => chip(c, st.give, 'gv')).join('') || '<p class="hint">У тебе немає речей.</p>'}</div>
-      <h3>Ти отримуєш від ${esc(t.name)} (${tv} зол.)</h3><div class="ochips">${theirs.map(c => chip(c, st.take, 'tk')).join('') || '<p class="hint">На цьому гравці нічого не вдягнено.</p>'}</div>
-      <div class="row end"><button class="btn ghost" type="button" data-close>Скасувати</button><button class="btn primary" type="button" id="trGo" ${st.give.size || st.take.size ? '' : 'disabled'}>Запропонувати обмін</button></div>`;
+      <div class="row end"><button class="btn ghost" type="button" data-close>Скасувати</button><button class="btn primary" type="button" id="trGo">${st.give.size ? 'Запропонувати обмін' : 'Попросити щось без пропозиції'}</button></div>`;
   };
   const redraw = () => { $('#sheet').innerHTML = draw(); $('#sheet').querySelectorAll('[data-close]').forEach(x => x.onclick = closeModal); };
   showModal(draw());
   $('#sheet').onclick = e => {
     const b = e.target.closest('button'); if (!b) return;
-    if (b.dataset.tt) { st.t = +b.dataset.tt; st.take.clear(); redraw(); }
+    if (b.dataset.tt) { st.t = +b.dataset.tt; redraw(); }
     else if (b.dataset.gv) { const u = +b.dataset.gv; st.give.has(u) ? st.give.delete(u) : st.give.add(u); redraw(); }
-    else if (b.dataset.tk) { const u = +b.dataset.tk; st.take.has(u) ? st.take.delete(u) : st.take.add(u); redraw(); }
-    else if (b.id === 'trGo') { closeModal(); dispatch({ k: 'trade', target: st.t, give: [...st.give], take: [...st.take] }); }
+    else if (b.id === 'trGo') { $('#sheet').onclick = null; closeModal(); dispatch({ k: 'trade', target: st.t, give: [...st.give] }); }
   };
 }
 
@@ -2361,7 +2410,7 @@ async function execAct(p, a) {
     case 'undead': return addMonster(p, c, null);
     case 'wander': return addMonster(p, p.hand.find(x => x.uid === a.mon), c);
     case 'redirect': return redirectCombat(p, c, G.players[a.target]);
-    case 'trade': return doTrade(p, G.players[a.target], (a.give || []).map(u => findTradeItem(p, u)).filter(Boolean), (a.take || []).map(u => G.players[a.target].gear.find(x => x.uid === u)).filter(Boolean));
+    case 'trade': return doTrade(p, G.players[a.target], (a.give || []).map(u => findTradeItem(p, u)).filter(Boolean));
   }
 }
 
@@ -2743,7 +2792,7 @@ function hostOnData(conn, d) {
     return;
   }
   if (d.t === 'act' && conn._pidx != null && G.players[conn._pidx] && G.players[conn._pidx].type === 'remote') { runAct(conn._pidx, d.act); return; }
-  if (d.t === 'answer') { const done = NET.asks.get(d.id); if (done && done.who === conn._pidx) done(d.ok); }
+  if (d.t === 'answer') { const done = NET.asks.get(d.id); if (done && done.who === conn._pidx) done(d.ok, d.pick); }
 }
 function hostOnClose(conn) {
   if (conn._closed) return; conn._closed = true;
@@ -2832,6 +2881,7 @@ function clientOnData(d) {
     case 'fx': onNetFx(d); break;
     case 'toast': toast(d.text, d.ms); break;
     case 'ask': NET.curAsk = d.id; confirmModal(d.title, d.text, d.yes, d.no).then(ok => { NET.curAsk = 0; netSendHost({ t: 'answer', id: d.id, ok }); }); break;
+    case 'tradeAsk': { const me = viewerP(); if (!me) { netSendHost({ t: 'answer', id: d.id, ok: false }); break; } NET.curAsk = d.id; playSfx('alert'); tradePickModal(me, d.from, d.give || []).then(pick => { if (NET.curAsk !== d.id) return; NET.curAsk = 0; netSendHost({ t: 'answer', id: d.id, ok: !!pick, pick: pick || [] }); }); break; }
     case 'askEnd': if (NET.curAsk === d.id) { NET.curAsk = 0; closeModal(); } break;
   }
 }
