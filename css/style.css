@@ -206,6 +206,7 @@ button.slot:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
 .seg button:disabled{opacity:.5;cursor:default}
 .netcode{display:flex;align-items:baseline;gap:12px;padding:10px 14px;border:1px dashed var(--brass);border-radius:12px;background:rgba(224,169,59,.06)}
 .netcode span{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.net-relay{margin-top:4px}.net-relay.on{color:#7fc97f}
 .netcode b{font-family:var(--f-display);font-weight:400;font-size:36px;letter-spacing:.12em;color:var(--brass)}
 .lbl2{display:block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
 .inp.code{font-family:var(--f-display);font-size:26px;letter-spacing:.2em;text-transform:uppercase;max-width:220px}

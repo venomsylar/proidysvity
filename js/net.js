@@ -7,6 +7,23 @@ function loadPeer() {
   if (window.Peer) return Promise.resolve();
   return new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'; sc.onload = () => res(); sc.onerror = () => rej(new Error('load')); document.head.appendChild(sc); });
 }
+/* Сервер-посередник (TURN від Cloudflare): коли пристрої в різних мережах не бачать один одного напряму,
+   дані йдуть через нього. Тимчасові паролі видає наш Worker; якщо він недоступний — працюємо як раніше. */
+const TURN_URL = 'https://proidysvity-turn.sylar11111.workers.dev';
+let ICE_CACHE = null;
+async function getIce() {
+  if (ICE_CACHE && Date.now() - ICE_CACHE.t < 6 * 3600e3) return ICE_CACHE.list;
+  try {
+    const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 4000);
+    const r = await fetch(TURN_URL, { signal: ctl.signal, cache: 'no-store' }); clearTimeout(tm);
+    if (!r.ok) throw new Error('turn ' + r.status);
+    const j = await r.json();
+    const list = (j.iceServers || []).filter(s => s && s.urls && [].concat(s.urls).length);
+    if (!list.some(s => [].concat(s.urls).some(u => /^turns?:/.test(u)))) throw new Error('no turn');
+    ICE_CACHE = { t: Date.now(), list }; NET.relay = true; return list;
+  } catch (e) { NET.relay = false; return null; }
+}
+const peerOpts = ice => ice ? { debug: 0, config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, ...ice] } } : { debug: 0 };
 const makeCode = () => Array.from({ length: 5 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[rnd(32)]).join('');
 function sendConn(c, msg) { try { if (c && c.open) c.send(msg); } catch (e) { /* зʼєднання могло закритися */ } }
 function netSendTo(idx, msg) { if (NET.role === 'host') sendConn(NET.conns.get(idx), msg); }
@@ -51,9 +68,10 @@ function sendLobby() {
 async function hostRoom() {
   NET.err = ''; NET.busy = true; rerenderSetup && rerenderSetup();
   try { await loadPeer(); } catch (e) { NET.busy = false; NET.err = 'Не вдалося завантажити модуль мережі. Перевір інтернет.'; rerenderSetup && rerenderSetup(); return; }
+  const ice = await getIce();
   const tryOpen = (attempt) => {
     const code = makeCode();
-    const peer = new window.Peer(PEER_PREFIX + code, { debug: 0 });
+    const peer = new window.Peer(PEER_PREFIX + code, peerOpts(ice));
     peer.on('open', () => { NET.role = 'host'; NET.peer = peer; NET.code = code; NET.busy = false; rerenderSetup && rerenderSetup(); });
     peer.on('error', e => {
       if (e.type === 'unavailable-id' && attempt < 3) { peer.destroy(); tryOpen(attempt + 1); return; }
@@ -133,7 +151,8 @@ function openJoin() {
 async function joinRoom(code, name, sex, onErr) {
   try { await loadPeer(); } catch (e) { onErr('Не вдалося завантажити модуль мережі. Перевір інтернет.'); return; }
   if (NET.peer) try { NET.peer.destroy(); } catch (e) { }
-  const peer = new window.Peer({ debug: 0 }); NET.peer = peer;
+  const ice = await getIce();
+  const peer = new window.Peer(peerOpts(ice)); NET.peer = peer;
   let opened = false;
   const fail = setTimeout(() => { if (!opened) { onErr('Не вдалося підключитися. Перевір код і чи відкрита кімната.'); try { peer.destroy(); } catch (e) { } } }, 15000);
   peer.on('error', e => { clearTimeout(fail); if (!opened) onErr(e.type === 'peer-unavailable' ? 'Кімнату з таким кодом не знайдено.' : 'Помилка мережі: ' + (e.type || 'невідома') + '.'); });
@@ -150,6 +169,7 @@ function showLobby(l) {
   if (G.players.length && NET.gid >= 0 && !G.over) return;
   showModal(`<h2>Кімната ${esc(l.code)}</h2><p>Ти в кімнаті. Чекаємо, поки господар почне гру.</p>
     <div class="list">${l.rows.map((r, i) => `<div class="tag" style="font-size:13px;padding:6px 10px"><span class="dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${COLORS[i]};margin-right:6px"></span>${esc(r.name)} · ${r.type === 'bot' ? 'бот' : r.type === 'remote' ? 'по мережі' : 'господар'}${i === l.you ? ' · це ти' : ''}</div>`).join('') || '<p class="hint">Отримуємо список гравців…</p>'}</div>
+    <p class="hint net-relay ${NET.relay ? 'on' : ''}">${NET.relay ? '● Сервер-посередник увімкнено.' : '○ Сервер-посередник недоступний — зʼєднання напряму.'}</p>
     <div class="row end"><button class="btn ghost" type="button" id="leaveB">Вийти</button></div>`);
   $('#leaveB').onclick = () => { leaveRoom(); openMainMenu(); };
 }

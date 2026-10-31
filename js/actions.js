@@ -336,8 +336,9 @@ function openSetup() {
   const netBlock = () => NET.role === 'host'
     ? `<h3>Гра по мережі</h3><div class="netcode"><span>Код кімнати</span><b>${esc(NET.code)}</b></div>
        <p class="hint">Друзі відкривають цей самий файл, тиснуть «Приєднатися» й вводять код. Підключено: ${s.rows.filter(r => r.type === 'remote').length}.</p>
+       <p class="hint net-relay ${NET.relay ? 'on' : ''}">${NET.relay ? '● Сервер-посередник увімкнено: можна грати з різних мереж і мобільного інтернету.' : '○ Сервер-посередник недоступний: надійно працює в одній мережі Wi-Fi, з різних мереж — як пощастить.'}</p>
        <div class="row" style="margin-top:6px"><button class="btn small ghost" type="button" id="netStop">Закрити кімнату</button></div>`
-    : `<h3>Гра по мережі</h3><p class="hint">Грайте з різних пристроїв: один створює кімнату, інші приєднуються за кодом. Для зʼєднання потрібен інтернет; в одній мережі дані йдуть напряму між пристроями.</p>
+    : `<h3>Гра по мережі</h3><p class="hint">Грайте з різних пристроїв: один створює кімнату, інші приєднуються за кодом. Можна грати й з різних мереж: якщо пристрої не бачать один одного напряму, дані підуть через сервер-посередник.</p>
        <div class="row" style="margin-top:6px"><button class="btn small" type="button" id="netHost" ${NET.busy ? 'disabled' : ''}>${NET.busy ? 'Створюємо…' : 'Створити кімнату'}</button><button class="btn small" type="button" id="netJoin">Приєднатися до кімнати</button></div>
        ${NET.err ? `<p class="hint" style="color:var(--bad)">${esc(NET.err)}</p>` : ''}`;
   const row = (r, i) => {
