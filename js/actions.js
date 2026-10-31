@@ -15,6 +15,7 @@ function actAllowed(p, act) {
   if (act.uid) { const f = findOwnCard(p, act.uid); return !!f && flatActs(cardActions(f.c, f.where, p)).some(a => !a.dis && sameAct(a.act, act)); }
   return dockActs(p).some(a => a.act && !a.dis && sameAct(a.act, act));
 }
+const SIDE_ACTS = new Set(['equip', 'unequip', 'rc', 'dual', 'rc2hand', 'droprc']);
 function dispatch(act, asIdx = G.viewer) {
   closeMenu();
   if (NET.role === 'client') { netSendHost({ t: 'act', act }); return; }
@@ -24,6 +25,11 @@ async function runAct(pi, act) {
   const p = G.players[pi]; if (!p || G.over) return;
   if (!actAllowed(p, act)) { tell(p, 'Зараз так не можна.', 1600); if (p.type === 'human') playSfx('deny'); else netSendTo(p.idx, { t: 'fx', type: 'sfx', a: { n: 'deny' } }); renderUI(); return; }
   if (act.k === 'pass') { passWindow(p); return; }
+  if (SIDE_ACTS.has(act.k) && (G.busy || cur() !== p)) {
+    p._acting = true; renderUI();
+    try { await execAct(p, act); } finally { p._acting = false; renderUI(); }
+    return;
+  }
   if (G.window && G.window.humans.includes(p)) { const w = G.window; G.window = null; closeModal(); renderUI(); await execAct(p, act); w.resolve('played'); return; }
   if (G.busy) return;
   G.busy = true; renderUI();
@@ -67,28 +73,29 @@ function cardActions(c, where, v = viewerP()) {
   const myTurn = v === p, free = !G.busy && !G.over, win = !!G.window && G.window.humans.includes(v);
   const isFighter = inCombat && v === fighter(), isHelper = inCombat && cb.helper === v.idx;
   const combatOk = inCombat && (free || win);
+  const sideOk = !G.over && !inCombat && G.phase !== 'setup' && !v._acting; // спорядження, раса, клас — коли завгодно поза боєм, навіть не на своєму ході
   const acts = [];
   const A = (label, act, extra = {}) => acts.push({ label, act, ...extra });
   const sell = () => { if (free && myTurn && !inCombat && c.value) A(`Продати за ${sellPrice(v, c)} зол.`, { k: 'sell', uid: c.uid }); };
   if (where === 'gear') {
-    if (c.kind === 'race' || c.kind === 'class' || c.kind === 'dual') { if (free && !inCombat) { A('Зняти в руку', { k: 'rc2hand', uid: c.uid }); A('Скинути в скид', { k: 'droprc', uid: c.uid }); } return acts; }
-    if (free && !inCombat) A('Зняти в руку', { k: 'unequip', uid: c.uid });
+    if (c.kind === 'race' || c.kind === 'class' || c.kind === 'dual') { if (sideOk) { A('Зняти в руку', { k: 'rc2hand', uid: c.uid }); A('Скинути в скид', { k: 'droprc', uid: c.uid }); } return acts; }
+    if (sideOk) A('Зняти в руку', { k: 'unequip', uid: c.uid });
     sell(); return acts;
   }
   if (where !== 'hand') return acts;
   const undeadIn = inCombat && cb.mons.some(x => x.c.undead);
   const fp = fighter();
   switch (c.kind) {
-    case 'gear': if (free && !inCombat) A('Спорядити', { k: 'equip', uid: c.uid }, { dis: canEquip(v, c) }); sell(); break;
+    case 'gear': if (sideOk) A('Спорядити', { k: 'equip', uid: c.uid }, { dis: canEquip(v, c) }); sell(); break;
     case 'race': case 'class': {
-      if (!(free && !inCombat)) break;
+      if (!sideOk) break;
       const isR = c.kind === 'race', first = isR ? v.raceCard : v.clsCard, second = isR ? v.raceCard2 : v.clsCard2, dual = isR ? v.dualRace : v.dualCls;
       const same = isR ? hasRace(v, c.race) : hasCls(v, c.cls);
       if (first && dual && !second && !same) A(`${isR ? 'Друга раса' : 'Другий клас'}: ${c.name}`, { k: 'rc', uid: c.uid, side: 'second' });
       A(first ? `Замінити на: ${c.name}` : `Стати: ${c.name}`, { k: 'rc', uid: c.uid }, { why: first ? 'Поточна карта повернеться в руку.' : '' });
       break;
     }
-    case 'dual': if (free && !inCombat) A(c.dual === 'race' ? 'Зіграти: дві раси' : 'Зіграти: два класи', { k: 'dual', uid: c.uid }, { dis: (c.dual === 'race' ? v.dualRace : v.dualCls) ? 'У тебе вже є така карта.' : null }); break;
+    case 'dual': if (sideOk) A(c.dual === 'race' ? 'Зіграти: дві раси' : 'Зіграти: два класи', { k: 'dual', uid: c.uid }, { dis: (c.dual === 'race' ? v.dualRace : v.dualCls) ? 'У тебе вже є така карта.' : null }); break;
     case 'uncurse': {
       const cursed = G.players.filter(q => (q.curses || []).length);
       if (free && !inCombat) A('Зняти прокляття…', null, { dis: cursed.length ? null : 'Ні на кому немає тривалих проклять.', sub: cursed.flatMap(q => q.curses.map(k => ({ label: `${q === v ? 'З себе' : q.name}: «${k.name}»`, act: { k: 'uncurse', uid: c.uid, target: q.idx, mon: k.uid } }))) });
@@ -399,7 +406,7 @@ async function newGame() {
   NET.conns.forEach((c, i) => sendConn(c, { t: 'start', you: i }));
   renderUI();
   log(`Нова гра до ${G.goal}-го рівня. Монстри: ${monTypesText(G.types || setupState.types)}. Кожен отримує 4 карти дверей і 4 карти скарбів.`, 'turn');
-  const jobs = []; let k = 0;
+  const jobs = []; let k = 0; const gidAtDeal = G.gid;
   const soloHuman = G.players.filter(q => q.type === 'human').length === 1;
   for (let r = 0; r < 4; r++) for (const deck of ['door', 'treasure']) for (const p of G.players) {
     const c = draw(deck); const delay = k++ * 55;
@@ -411,6 +418,10 @@ async function newGame() {
     }));
   }
   await Promise.all(jobs);
+  // як і в настільній грі: одразу після роздачі всі можуть зіграти расу, клас і вдягнути речі
+  G.phase = 'prep'; renderUI();
+  for (const b of G.players.filter(q => q.type === 'bot')) { if (G.over || G.gid !== gidAtDeal) return; await botManage(b, true); }
+  if (G.gid !== gidAtDeal) return;
   G.cur = rnd(G.players.length);
   log(`Першим ходить ${nameTag(cur())}.`);
   G.phase = 'next';

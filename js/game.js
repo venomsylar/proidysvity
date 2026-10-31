@@ -846,7 +846,7 @@ async function doPlayDual(p, c) {
 }
 
 /* --- боти --- */
-async function botManage(p) {
+async function botManage(p, setupOnly = false) {
   for (const c of p.hand.filter(x => x.kind === 'dual')) if (!(c.dual === 'race' ? p.dualRace : p.dualCls)) { await botDelay(300); await doPlayDual(p, c); }
   for (const kind of ['race', 'class']) {
     const key = kind === 'race' ? 'raceCard' : 'clsCard';
@@ -867,6 +867,7 @@ async function botManage(p) {
     if (!best || best.s <= before + .01) break;
     await botDelay(250); await doEquip(p, best.c);
   }
+  if (setupOnly) return;
   for (const c of p.hand.filter(x => x.kind === 'levelup')) if (p.level < G.goal - 1) { await botDelay(250); await doLevelUp(p, c); }
   if (cur() === p && G.phase !== 'combat' && p.level < G.goal - 1) {
     const spare = p.hand.filter(c => c.kind === 'gear' && (canEquip(p, c) || gearScore(p, gearAfter(p, c)) <= gearScore(p, p.gear)));
