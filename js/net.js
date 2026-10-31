@@ -27,7 +27,7 @@ function queueSnap() {
 function snapFor(i) {
   const cb = G.combat;
   return {
-    gid: G.gid, goal: G.goal, cur: G.cur, phase: G.phase, busy: G.busy, over: G.over, log: G.log.slice(-60),
+    gid: G.gid, goal: G.goal, cur: G.cur, phase: G.phase, busy: G.busy, over: G.over, log: G.log.slice(-60), prepWait: G.prepWait || [],
     dN: G.doorDeck.length, tN: G.treasureDeck.length, dTop: G.doorDiscard[G.doorDiscard.length - 1] || null, tTop: G.treasureDiscard[G.treasureDiscard.length - 1] || null,
     players: G.players.map(p => ({ idx: p.idx, name: p.name, type: p.type, color: p.color, sex: p.sex, diff: p.diff, level: p.level, gold: p.gold, gear: p.gear, raceCard: p.raceCard, clsCard: p.clsCard, raceCard2: p.raceCard2, clsCard2: p.clsCard2, dualRace: p.dualRace, dualCls: p.dualCls, curses: p.curses || [], died: p.died, mem: p.type === 'bot' ? p.mem : null, hand: p.idx === i ? p.hand : p.hand.length })),
     cb: cb ? { fighter: cb.fighter, mons: cb.mons.map(x => x.c), mods: cb.mods, pShots: cb.pShots, mShots: cb.mShots, helper: cb.helper, wiz: cb.wiz, asked: [...cb.asked], passed: [...cb.passed], offer: cb.offer } : null,
@@ -100,6 +100,7 @@ function hostOnClose(conn) {
     log(`${nameTag(p)} відключився. Далі за нього грає бот.`); say(`${p.name} відключився — його замінює бот`);
     NET.asks.forEach(done => { if (done.who === pi) done(false); });
     if (G.window && G.window.humans.includes(p)) passWindow(p, false);
+    if (G.phase === 'prep' && (G.prepWait || []).includes(pi)) prepReady(p);
     boardFor = null; renderUI();
     if (!G.over && G.cur === pi && !G.busy) { G.busy = true; renderUI(); botTurn(p); }
   }
@@ -193,7 +194,7 @@ function applySnap(s) {
     NET.gid = s.gid; closeModal();
     G.players.forEach(destroySeat); NET.mirror.forEach(disposeMesh); NET.mirror.clear(); G.players = []; boardFor = null;
   }
-  Object.assign(G, { goal: s.goal, cur: s.cur, phase: s.phase, busy: s.busy, over: s.over, log: s.log });
+  Object.assign(G, { goal: s.goal, cur: s.cur, phase: s.phase, busy: s.busy, over: s.over, log: s.log, prepWait: s.prepWait || [] });
   G.doorDeck = new Array(s.dN).fill(0); G.treasureDeck = new Array(s.tN).fill(0);
   G.doorDiscard = s.dTop ? [s.dTop] : []; G.treasureDiscard = s.tTop ? [s.tTop] : [];
   const me = G.players[NET.me]; const prev = new Set(me ? me.hand.map(c => c.uid) : []);

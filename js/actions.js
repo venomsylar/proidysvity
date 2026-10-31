@@ -10,10 +10,18 @@ const flatActs = list => list.flatMap(a => a.sub ? a.sub : [a]);
 function actAllowed(p, act) {
   if (!act || G.over) return false;
   if (act.k === 'pass') return waitingOn().includes(p);
+  if (act.k === 'ready') return G.phase === 'prep' && (G.prepWait || []).includes(p.idx);
   if (act.k === 'trade') return canTrade(p) && !!G.players[act.target] && act.target !== p.idx;
   if (act.k === 'help') { const cb = G.combat; return !G.busy && G.phase === 'combat' && !!cb && p === fighter() && !curseN(p, 'lonely') && cb.helper == null && !!G.players[act.target] && act.target !== p.idx && !cb.asked.has(act.target); }
   if (act.uid) { const f = findOwnCard(p, act.uid); return !!f && flatActs(cardActions(f.c, f.where, p)).some(a => !a.dis && sameAct(a.act, act)); }
   return dockActs(p).some(a => a.act && !a.dis && sameAct(a.act, act));
+}
+function prepReady(p) {
+  if (G.phase !== 'prep' || !G.prepWait || !G.prepWait.includes(p.idx)) return;
+  G.prepWait = G.prepWait.filter(i => i !== p.idx);
+  log(`${nameTag(p)} спорядився і готовий.`);
+  if (!G.prepWait.length && G.prepDone) { const d = G.prepDone; G.prepDone = null; d(); }
+  renderUI();
 }
 const SIDE_ACTS = new Set(['equip', 'unequip', 'rc', 'dual', 'rc2hand', 'droprc']);
 function dispatch(act, asIdx = G.viewer) {
@@ -25,6 +33,7 @@ async function runAct(pi, act) {
   const p = G.players[pi]; if (!p || G.over) return;
   if (!actAllowed(p, act)) { tell(p, 'Зараз так не можна.', 1600); if (p.type === 'human') playSfx('deny'); else netSendTo(p.idx, { t: 'fx', type: 'sfx', a: { n: 'deny' } }); renderUI(); return; }
   if (act.k === 'pass') { passWindow(p); return; }
+  if (act.k === 'ready') { prepReady(p); return; }
   if (SIDE_ACTS.has(act.k) && (G.busy || cur() !== p)) {
     p._acting = true; renderUI();
     try { await execAct(p, act); } finally { p._acting = false; renderUI(); }
@@ -142,6 +151,13 @@ function dockActs(v) {
     const many = locals.length > 1 || (locals.length === 1 && locals[0] !== v);
     locals.forEach(h => acts.push({ label: many ? `${h.name}: не втручаюсь` : 'Не втручаюсь', act: { k: 'pass' }, as: h.idx, cls: 'primary' }));
     if (privacy() && locals.length) acts.push({ label: 'Втрутитися…', fn: openInterfere });
+    return acts;
+  }
+  if (G.phase === 'prep') {
+    const wait = (G.prepWait || []).map(i => G.players[i]).filter(Boolean);
+    if (NET.role === 'client') { if (wait.includes(v)) acts.push({ label: 'Я спорядився', act: { k: 'ready' }, cls: 'primary pulse' }); return acts; }
+    const locals = wait.filter(h => h.type === 'human');
+    locals.forEach(h => acts.push({ label: locals.length > 1 || h !== v ? `${h.name}: я спорядився` : 'Я спорядився', act: { k: 'ready' }, as: h.idx, cls: 'primary pulse' }));
     return acts;
   }
   if (G.busy) return acts;
@@ -421,6 +437,13 @@ async function newGame() {
   // як і в настільній грі: одразу після роздачі всі можуть зіграти расу, клас і вдягнути речі
   G.phase = 'prep'; renderUI();
   for (const b of G.players.filter(q => q.type === 'bot')) { if (G.over || G.gid !== gidAtDeal) return; await botManage(b, true); }
+  if (G.gid !== gidAtDeal) return;
+  G.prepWait = G.players.filter(q => q.type === 'human' || q.type === 'remote').map(q => q.idx);
+  if (G.prepWait.length) {
+    say('Спорядіться — і натисніть «Я спорядився»', 2600);
+    await new Promise(res => { G.prepDone = res; renderUI(); });
+  }
+  G.prepWait = []; G.prepDone = null;
   if (G.gid !== gidAtDeal) return;
   G.cur = rnd(G.players.length);
   log(`Першим ходить ${nameTag(cur())}.`);
