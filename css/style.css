@@ -275,7 +275,11 @@ button.slot:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
   .cside .big{font-size:36px}
 }
 
-@media (prefers-reduced-motion:reduce){ *{animation-duration:.01ms!important;transition-duration:.01ms!important} }
+/* «менше анімації» в системі (на Windows — коли вимкнено «Показувати анімацію»): анімації не крутяться безкінечно, а просто зупиняються */
+html.less-motion *,html.less-motion *::before,html.less-motion *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;animation-delay:0s!important;transition-duration:.01ms!important}
+html.less-motion .mm-bg{display:none}
+html.less-motion .mm-title span{animation:none!important}
+html.less-motion #loader .spin{animation:lspin 1.6s linear infinite!important}
 .brand .ver{pointer-events:auto;cursor:pointer;margin-left:8px;text-shadow:none;font:700 10px/1 var(--f-ui);letter-spacing:.06em;text-transform:none;color:var(--muted);background:rgba(255,255,255,.06);border:1px solid var(--line);border-radius:99px;padding:3px 8px;vertical-align:6px;position:relative}
 .brand .ver:hover{color:var(--text);border-color:var(--brass)}
 .brand .ver.new{color:#1b1512;background:var(--brass);border-color:var(--brass)}

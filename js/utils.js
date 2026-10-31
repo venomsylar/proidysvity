@@ -8,10 +8,13 @@ const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = rnd(i 
 const sum = (a, f) => a.reduce((s, x) => s + f(x), 0);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const wait = ms => new Promise(r => setTimeout(r, ms));
-const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+/* «менше руху» — лише якщо гравець сам увімкнув це в грі (системне налаштування не чіпаємо, щоб на Windows було так само, як на Mac) */
+let reduceMotion = (() => { try { return localStorage.getItem('pdsv-motion') === 'less'; } catch (e) { return false; } })();
+document.documentElement.classList.toggle('less-motion', reduceMotion);
 let botSpeed = 1, ANIM = 1.5;
 async function botDelay(ms) { await wait(ms * botSpeed); while (typeof menuPaused === 'function' && menuPaused()) await wait(250); }
-const AF = reduceMotion ? 0.35 : 1; // множник тривалості анімацій
+let AF = reduceMotion ? 0.35 : 1; // множник тривалості анімацій
+function setLessMotion(on) { reduceMotion = !!on; AF = on ? .35 : 1; document.documentElement.classList.toggle('less-motion', reduceMotion); try { localStorage.setItem('pdsv-motion', on ? 'less' : 'full'); } catch (e) { } }
 function plural(n, a, b, c) { const m10 = n % 10, m100 = n % 100; if (m10 === 1 && m100 !== 11) return a; if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return b; return c; }
 const EMOJI_FONT = '"Apple Color Emoji","Noto Color Emoji","Segoe UI Emoji",sans-serif';
 /* маленькі векторні значки — однаково видно на всіх пристроях */

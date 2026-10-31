@@ -168,7 +168,11 @@ function openSkins(back) {
     <h3>Якість графіки</h3>
     <div class="seg" role="group" aria-label="Якість графіки">${Object.entries(QUALITY).map(([id, q]) => `<button type="button" data-q="${id}" aria-pressed="${id === QUAL}">${q.name}</button>`).join('')}</div>
     <p class="hint" id="qDesc" style="margin-top:8px">${QUALITY[QUAL].desc}</p>
+    <h3>Рух в інтерфейсі</h3>
+    <div class="seg" role="group" aria-label="Рух в інтерфейсі"><button type="button" data-mo="full" aria-pressed="${!reduceMotion}">Повний</button><button type="button" data-mo="less" aria-pressed="${reduceMotion}">Менше руху</button></div>
+    <p class="hint" style="margin-top:8px">«Менше руху» прибирає літаючі карти на заставці, хитання лампи й пульсування кнопок — для тих, кому від руху некомфортно.</p>
     <div class="row end"><button class="btn primary" type="button" id="skDone">Готово</button></div>`);
+  $('#sheet').querySelectorAll('[data-mo]').forEach(b => b.onclick = () => { setLessMotion(b.dataset.mo === 'less'); $('#sheet').querySelectorAll('[data-mo]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
   $('#sheet').querySelectorAll('[data-q]').forEach(b => b.onclick = () => { applyQuality(b.dataset.q); $('#sheet').querySelectorAll('[data-q]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); $('#qDesc').textContent = QUALITY[QUAL].desc; });
   $('#sheet').querySelectorAll('[data-skin]').forEach(b => b.onclick = () => { applySkin(b.dataset.skin); $('#sheet').querySelectorAll('[data-skin]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
   $('#skDone').onclick = () => { closeModal(); if (back) back(); };
