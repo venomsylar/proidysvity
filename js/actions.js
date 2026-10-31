@@ -414,13 +414,14 @@ async function newGame() {
   faceCache.forEach(t => t.dispose()); faceCache.clear();
   syncDeck('door'); syncDeck('treasure'); syncDiscardTop('door'); syncDiscardTop('treasure');
   NET.conns.clear();
+  s.rows = s.rows.filter(r => r.type !== 'remote' || (r.conn && r.conn.open !== false && !r.conn._closed));
   G.players = s.rows.map((r, i) => ({ idx: i, name: r.name, type: r.type, sex: r.sex || 'm', diff: r.diff || 2, color: COLORS[i], level: 1, gold: 0, hand: [], gear: [], raceCard: null, raceCard2: null, clsCard2: null, dualRace: null, dualCls: null, curses: [], clsCard: null, died: false, mem: {} }));
-  s.rows.forEach((r, i) => { if (r.type === 'remote' && r.conn) { r.conn._pidx = i; NET.conns.set(i, r.conn); } });
+  s.rows.forEach((r, i) => { if (r.type === 'remote' && r.conn) { r.conn._pidx = i; NET.conns.set(i, r.conn); G.players[i].tok = makeTok(); G.players[i]._row = r; } });
   G.players.forEach(buildSeat);
   const firstHuman = G.players.find(p => p.type === 'human');
   G.viewer = firstHuman ? firstHuman.idx : -1;
   cam.az = firstHuman ? seatAngle(firstHuman.idx) : 0; cam.userAz = 0; cam.userEl = 0;
-  NET.conns.forEach((c, i) => sendConn(c, { t: 'start', you: i }));
+  NET.conns.forEach((c, i) => sendConn(c, { t: 'start', you: i, tok: G.players[i].tok }));
   renderUI();
   log(`Нова гра до ${G.goal}-го рівня. Монстри: ${monTypesText(G.types || setupState.types)}. Кожен отримує 4 карти дверей і 4 карти скарбів.`, 'turn');
   const jobs = []; let k = 0; const gidAtDeal = G.gid;

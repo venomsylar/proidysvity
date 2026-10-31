@@ -101,7 +101,7 @@ function renderPlayers() {
     const isCur = p.idx === G.cur && !G.over;
     row.classList.toggle('cur', isCur);
     row.querySelector('.bt').hidden = !isCur;
-    row.querySelector('.btype').textContent = p.type === 'bot' ? `бот ${'★'.repeat(p.diff || 2)}` : p.type === 'remote' ? 'мережа' : (NET.role === 'client' && p.idx === NET.me ? 'ти' : '');
+    row.querySelector('.btype').textContent = p.type === 'bot' ? (p.wasRemote ? 'бот замість' : `бот ${'★'.repeat(p.diff || 2)}`) : p.type === 'remote' ? (offLeft(p) ? `без звʼязку ${offLeft(p)}с` : 'мережа') : (NET.role === 'client' && p.idx === NET.me ? 'ти' : '');
     row.querySelector('.blvl').textContent = p.level;
     row.querySelector('.bs').innerHTML = `${ICO.sword} ${baseStr(p)}`;
     const rc = (rcNames(p) || 'без раси й класу') + ((p.curses || []).length ? ` · ⛓${p.curses.length}` : '');
@@ -121,6 +121,7 @@ function statusText() {
   if (G.over) return NET.role === 'client' ? 'Гру завершено. Нову партію запускає господар.' : 'Гру завершено. Почни нову, коли будеш готовий.';
   const you = v && v === p;
   const nm = `<b>${esc(p.name)}</b>`;
+  if (offLeft(p) && G.phase !== 'prep') return `Чекаємо на ${nm}: звʼязок перервався. Ще до ${offLeft(p)} с — потім за нього походить бот.`;
   if (G.window && G.combat) {
     const mine = v && G.window.humans.includes(v) && !G.combat.passed.has(v.idx);
     const names = waitingOn().map(h => esc(h.name)).join(', ');
@@ -131,7 +132,7 @@ function statusText() {
     case 'prep': {
       const wait = (G.prepWait || []).map(i => G.players[i]).filter(Boolean);
       if (v && wait.includes(v)) return 'Перед першим ходом: зіграй расу, клас і вдягни речі (клацни карту в руці). Коли готовий — натисни <b>«Я спорядився»</b>.';
-      return wait.length ? `Чекаємо, поки спорядяться: ${wait.map(nameTag).join(', ')}.` : 'Усі спорядилися. Починаємо!';
+      return wait.length ? `Чекаємо, поки спорядяться: ${wait.map(q => nameTag(q) + (offLeft(q) ? ` (без звʼязку, ще ${offLeft(q)} с)` : '')).join(', ')}.` : 'Усі спорядилися. Починаємо!';
     }
     case 'start': return you ? 'Твій хід. Зіграй расу, клас і речі з руки, потім <b>вибий двері</b> — кнопкою або клацнувши колоду на столі.' : `Хід: ${nm}${p.type === 'remote' ? ' (на іншому пристрої)' : ''}.`;
     case 'afterKick': return you ? 'Бою не було. <b>Обшукай кімнату</b> або зіграй монстра з руки, щоб шукати пригод.' : `${nm} вирішує, що робити далі.`;

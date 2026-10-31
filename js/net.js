@@ -3,6 +3,15 @@
 /* ============================== ГРА ПО МЕРЕЖІ ============================== */
 const NET = { role: 'local', peer: null, code: '', conns: new Map(), conn: null, me: -1, gid: -1, asks: new Map(), askSeq: 0, flying: new Set(), mirror: new Map(), snapT: 0, busy: false, err: '', setupOpen: false };
 const PEER_PREFIX = 'proidysvity-v1-';
+const NET_GRACE = 60000;      // скільки господар чекає на гравця, що втратив звʼязок, перш ніж віддати хід боту
+const NET_REJOIN = 120000;    // скільки гість сам пробує відновити звʼязок
+const REJOIN_KEY = 'pdsv-rejoin';
+NET.allConns = new Set(); NET.lastRx = 0; NET.tok = null; NET.rejoining = null;
+const makeTok = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+function rejoinRec() { try { const r = JSON.parse(localStorage.getItem(REJOIN_KEY) || 'null'); return r && r.code && r.tok && Date.now() - r.t < 6 * 3600e3 ? r : null; } catch (e) { return null; } }
+function saveRejoin(r) { try { if (r) localStorage.setItem(REJOIN_KEY, JSON.stringify(r)); else localStorage.removeItem(REJOIN_KEY); } catch (e) { } }
+// скільки секунд лишилось чекати на гравця без звʼязку (0 — звʼязок є)
+const offLeft = p => !p || !p.offline ? 0 : NET.role === 'client' ? p.offline : Math.max(1, Math.ceil((p.offline + NET_GRACE - Date.now()) / 1000));
 function loadPeer() {
   if (window.Peer) return Promise.resolve();
   return new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js'; sc.onload = () => res(); sc.onerror = () => rej(new Error('load')); document.head.appendChild(sc); });
@@ -46,7 +55,7 @@ function snapFor(i) {
   return {
     gid: G.gid, goal: G.goal, cur: G.cur, phase: G.phase, busy: G.busy, over: G.over, log: G.log.slice(-60), prepWait: G.prepWait || [],
     dN: G.doorDeck.length, tN: G.treasureDeck.length, dTop: G.doorDiscard[G.doorDiscard.length - 1] || null, tTop: G.treasureDiscard[G.treasureDiscard.length - 1] || null,
-    players: G.players.map(p => ({ idx: p.idx, name: p.name, type: p.type, color: p.color, sex: p.sex, diff: p.diff, level: p.level, gold: p.gold, gear: p.gear, raceCard: p.raceCard, clsCard: p.clsCard, raceCard2: p.raceCard2, clsCard2: p.clsCard2, dualRace: p.dualRace, dualCls: p.dualCls, curses: p.curses || [], died: p.died, mem: p.type === 'bot' ? p.mem : null, hand: p.idx === i ? p.hand : p.hand.length })),
+    players: G.players.map(p => ({ idx: p.idx, name: p.name, type: p.type, off: offLeft(p), sub: !!p.wasRemote, color: p.color, sex: p.sex, diff: p.diff, level: p.level, gold: p.gold, gear: p.gear, raceCard: p.raceCard, clsCard: p.clsCard, raceCard2: p.raceCard2, clsCard2: p.clsCard2, dualRace: p.dualRace, dualCls: p.dualCls, curses: p.curses || [], died: p.died, mem: p.type === 'bot' ? p.mem : null, hand: p.idx === i ? p.hand : p.hand.length })),
     cb: cb ? { fighter: cb.fighter, mons: cb.mons.map(x => x.c), mods: cb.mods, pShots: cb.pShots, mShots: cb.mShots, helper: cb.helper, wiz: cb.wiz, asked: [...cb.asked], passed: [...cb.passed], offer: cb.offer } : null,
     win: G.window ? G.window.humans.map(h => h.idx) : null
   };
@@ -56,6 +65,7 @@ function askRemote(p, title, text, yes, no, timeout = 40000) {
     const id = ++NET.askSeq; let t;
     const done = ok => { if (!NET.asks.has(id)) return; NET.asks.delete(id); clearTimeout(t); netSendTo(p.idx, { t: 'askEnd', id }); res(!!ok); };
     done.who = p.idx; NET.asks.set(id, done);
+    if (p.offline) { done(false); return; }
     t = setTimeout(() => done(false), timeout);
     netSendTo(p.idx, { t: 'ask', id, title, text, yes, no });
   });
@@ -79,14 +89,16 @@ async function hostRoom() {
       else toast('Мережа: ' + (e.type || 'помилка'));
     });
     peer.on('connection', conn => {
-      conn.on('data', d => hostOnData(conn, d));
-      conn.on('close', () => hostOnClose(conn));
-      conn.on('error', () => hostOnClose(conn));
+      conn._rx = Date.now(); NET.allConns.add(conn);
+      conn.on('data', d => { conn._rx = Date.now(); hostOnData(conn, d); });
+      conn.on('close', () => { NET.allConns.delete(conn); hostOnClose(conn); });
+      conn.on('error', () => { NET.allConns.delete(conn); hostOnClose(conn); });
     });
   };
   tryOpen(0);
 }
 function stopHosting() {
+  NET.allConns.forEach(c => sendConn(c, { t: 'bye' })); NET.allConns.clear();
   setupState.rows = setupState.rows.filter(r => { if (r.type === 'remote') { try { r.conn.close(); } catch (e) { } return false; } return true; });
   if (NET.peer) try { NET.peer.destroy(); } catch (e) { }
   Object.assign(NET, { role: 'local', peer: null, code: '' }); NET.conns.clear();
@@ -106,25 +118,86 @@ function hostOnData(conn, d) {
     rerenderSetup && rerenderSetup(); sendLobby();
     return;
   }
+  if (d.t === 'ping') return;
+  if (d.t === 'rejoin') { hostRejoin(conn, d); return; }
   if (d.t === 'act' && conn._pidx != null && G.players[conn._pidx] && G.players[conn._pidx].type === 'remote') { runAct(conn._pidx, d.act); return; }
   if (d.t === 'answer') { const done = NET.asks.get(d.id); if (done && done.who === conn._pidx) done(d.ok, d.pick); }
 }
 function hostOnClose(conn) {
   if (conn._closed) return; conn._closed = true;
   const pi = conn._pidx, p = pi != null ? G.players[pi] : null;
-  if (p && p.type === 'remote' && NET.conns.get(pi) === conn) {
+  const inGame = p && NET.conns.get(pi) === conn;
+  if (inGame) {
     NET.conns.delete(pi);
-    p.type = 'bot'; p.diff = 2; p.mem = p.mem || {};
-    log(`${nameTag(p)} відключився. Далі за нього грає бот.`); say(`${p.name} відключився — його замінює бот`);
     NET.asks.forEach(done => { if (done.who === pi) done(false); });
-    if (G.window && G.window.humans.includes(p)) passWindow(p, false);
-    if (G.phase === 'prep' && (G.prepWait || []).includes(pi)) prepReady(p);
-    boardFor = null; renderUI();
-    if (!G.over && G.cur === pi && !G.busy) { G.busy = true; renderUI(); botTurn(p); }
+    if (p.type === 'bot') { p._reclaim = false; }
+    else if (p.type === 'remote' && !G.over) {
+      p.offline = Date.now();
+      log(`${nameTag(p)} втратив звʼязок. Чекаємо до ${NET_GRACE / 1000} с, поки повернеться.`); say(`${p.name} втратив звʼязок — чекаємо`, 2600);
+      if (G.window && G.window.humans.includes(p)) passWindow(p, false);
+      const gid = G.gid; clearTimeout(p._dropT);
+      p._dropT = setTimeout(() => { if (G.gid === gid) dropToBot(p); }, NET_GRACE);
+      boardFor = null; renderUI(); queueSnap();
+    }
+    if (p.type === 'remote' && p.offline) return; // місце в кімнаті тримаємо, поки чекаємо
   }
   const row = conn._row;
-  if (row) { const k = setupState.rows.indexOf(row); if (k >= 0) setupState.rows.splice(k, 1); if (row.type === 'remote' && !(p && p.type === 'bot')) { rerenderSetup && rerenderSetup(); sendLobby(); } }
+  if (row) { const k = setupState.rows.indexOf(row); if (k >= 0) { setupState.rows.splice(k, 1); rerenderSetup && rerenderSetup(); sendLobby(); } }
 }
+// гравець так і не повернувся: далі за нього грає бот (поки він не підключиться знову)
+function dropToBot(p) {
+  p._dropT = 0;
+  if (!p.offline || p.type !== 'remote' || G.over) return;
+  p.offline = 0; p.type = 'bot'; p.diff = 2; p.mem = p.mem || {}; p.wasRemote = true;
+  log(`${nameTag(p)} не повернувся — поки за нього грає бот. Підключиться знову — гратиме сам.`); say(`${p.name} не повернувся — його замінює бот`);
+  if (p._row) { const k = setupState.rows.indexOf(p._row); if (k >= 0) setupState.rows.splice(k, 1); }
+  if (G.window && G.window.humans.includes(p)) passWindow(p, false);
+  if (G.phase === 'prep' && (G.prepWait || []).includes(p.idx)) prepReady(p);
+  boardFor = null; renderUI(); queueSnap();
+  if (!G.over && G.cur === p.idx && !G.busy && G.phase !== 'prep' && G.phase !== 'deal') { G.busy = true; renderUI(); botTurn(p); }
+}
+function hostRejoin(conn, d) {
+  if (conn._pidx != null) return;
+  if (d.ver !== APP_VERSION) { sendConn(conn, { t: 'full', reason: `Різні версії гри: у тебе ${d.ver ? 'v' + d.ver : 'стара'}, у господаря v${APP_VERSION}. Оновіть сторінку.` }); return; }
+  const playing = G.players.length && !G.over && G.phase !== 'setup';
+  const p = playing && d.tok ? G.players.find(q => q.tok === d.tok && (q.type === 'remote' || q.wasRemote)) : null;
+  if (!p) { sendConn(conn, { t: 'full', stale: true, reason: 'Цієї партії вже немає: вона закінчилась або господар почав нову.' }); return; }
+  const old = NET.conns.get(p.idx); if (old && old !== conn) { old._closed = true; try { old.close(); } catch (e) { } }
+  clearTimeout(p._dropT); p._dropT = 0; p.offline = 0;
+  conn._pidx = p.idx; NET.conns.set(p.idx, conn);
+  const row = p._row; if (row) { row.conn = conn; conn._row = row; if (!setupState.rows.includes(row) && setupState.rows.length < 6) setupState.rows.push(row); }
+  let wait = false;
+  if (p.type === 'bot') {
+    if (G.cur === p.idx && !['prep', 'deal', 'next'].includes(G.phase)) { p._reclaim = true; wait = true; }
+    else { p.type = 'remote'; p.wasRemote = false; }
+  }
+  sendConn(conn, { t: 'start', you: p.idx, tok: p.tok });
+  log(`${nameTag(p)} повернувся в гру.`); say(`${p.name} знову з нами!`);
+  boardFor = null; renderUI(); queueSnap();
+  if (wait) tell(p, 'Бот дограє цей хід, з наступного граєш ти.', 3200);
+  else if (G.cur === p.idx && !G.busy) tell(p, 'Твій хід!', 1800);
+}
+// повертаємо гравців, за яких бот дограв хід
+function applyReclaims() { G.players.forEach(q => { if (q._reclaim) { q._reclaim = false; if (q.type === 'bot' && NET.conns.has(q.idx)) { q.type = 'remote'; q.wasRemote = false; } } }); }
+
+/* серцебиття: обидві сторони раз на 4 с шлють «ping»; хто довго мовчить — той відпав */
+function netBeat() {
+  const now = Date.now();
+  if (NET.role === 'host') {
+    if (NET.peer && NET.peer.disconnected && !NET.peer.destroyed) try { NET.peer.reconnect(); } catch (e) { }
+    NET.allConns.forEach(c => {
+      if (c._closed) { NET.allConns.delete(c); return; }
+      sendConn(c, { t: 'ping' });
+      if (now - (c._rx || now) > 25000) { NET.allConns.delete(c); try { c.close(); } catch (e) { } hostOnClose(c); }
+    });
+    if (G.players.some(q => q.offline)) { renderUI(); queueSnap(); }
+  } else if (NET.role === 'client' && NET.conn && !NET.rejoining) {
+    sendConn(NET.conn, { t: 'ping' });
+    if (now - NET.lastRx > 20000) clientDropped();
+  }
+}
+setInterval(netBeat, 4000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) netBeat(); });
 
 /* --- клієнт --- */
 function openJoin() {
@@ -148,22 +221,70 @@ function openJoin() {
   };
   show();
 }
-async function joinRoom(code, name, sex, onErr) {
-  try { await loadPeer(); } catch (e) { onErr('Не вдалося завантажити модуль мережі. Перевір інтернет.'); return; }
+// одне зʼєднання з господарем; onFail(причина): 'nohost' | 'timeout' | тип помилки PeerJS
+function clientConnect(code, onOpen, onFail, timeout = 15000) {
   if (NET.peer) try { NET.peer.destroy(); } catch (e) { }
-  const ice = await getIce();
-  const peer = new window.Peer(peerOpts(ice)); NET.peer = peer;
-  let opened = false;
-  const fail = setTimeout(() => { if (!opened) { onErr('Не вдалося підключитися. Перевір код і чи відкрита кімната.'); try { peer.destroy(); } catch (e) { } } }, 15000);
-  peer.on('error', e => { clearTimeout(fail); if (!opened) onErr(e.type === 'peer-unavailable' ? 'Кімнату з таким кодом не знайдено.' : 'Помилка мережі: ' + (e.type || 'невідома') + '.'); });
+  const peer = new window.Peer(peerOpts(ICE_CACHE && NET.relay ? ICE_CACHE.list : null)); NET.peer = peer;
+  let opened = false, failed = false;
+  const fail = why => { if (opened || failed) return; failed = true; clearTimeout(tm); try { peer.destroy(); } catch (e) { } onFail(why); };
+  const tm = setTimeout(() => fail('timeout'), timeout);
+  peer.on('error', e => fail(e.type === 'peer-unavailable' ? 'nohost' : (e.type || 'net')));
   peer.on('open', () => {
     const conn = peer.connect(PEER_PREFIX + code, { reliable: true, serialization: 'json' });
-    NET.conn = conn;
-    conn.on('open', () => { opened = true; clearTimeout(fail); NET.role = 'client'; NET.code = code; sendConn(conn, { t: 'hello', name, sex, v: 1, ver: APP_VERSION }); showLobby({ code, rows: [], you: -1 }); });
-    conn.on('data', clientOnData);
-    conn.on('close', () => { if (NET.role === 'client') lostHost(); });
+    const lost = () => { if (conn === NET.conn && NET.role === 'client') clientDropped(); };
+    conn.on('open', () => { if (failed) { try { conn.close(); } catch (e) { } return; } opened = true; clearTimeout(tm); NET.conn = conn; NET.role = 'client'; NET.code = code; NET.lastRx = Date.now(); onOpen(conn); });
+    conn.on('data', d => { if (conn !== NET.conn) return; NET.lastRx = Date.now(); clientOnData(d); });
+    conn.on('close', lost); conn.on('error', lost);
   });
 }
+async function joinRoom(code, name, sex, onErr) {
+  try { await loadPeer(); } catch (e) { onErr('Не вдалося завантажити модуль мережі. Перевір інтернет.'); return; }
+  await getIce();
+  NET.rejoining = null; NET.tok = null;
+  clientConnect(code, conn => { sendConn(conn, { t: 'hello', name, sex, v: 1, ver: APP_VERSION }); showLobby({ code, rows: [], you: -1 }); },
+    why => onErr(why === 'nohost' ? 'Кімнату з таким кодом не знайдено.' : why === 'timeout' ? 'Не вдалося підключитися. Перевір код і чи відкрита кімната.' : 'Помилка мережі: ' + why + '.'));
+}
+/* --- відновлення звʼязку --- */
+function clientDropped() {
+  if (NET.role !== 'client' || NET.rejoining) return;
+  const old = NET.conn; NET.conn = null; try { old && old.close(); } catch (e) { }
+  if (!NET.tok || !G.players.length || G.over) { lostHost(); return; }
+  startRejoin({ code: NET.code, tok: NET.tok }, false);
+}
+function startRejoin(rec, manual) {
+  NET.rejoining = { code: rec.code, tok: rec.tok, t0: Date.now(), n: 0, manual, limit: manual ? 25000 : NET_REJOIN };
+  rejoinTry();
+}
+function drawRejoin(R) {
+  const left = Math.max(0, Math.ceil((R.limit - (Date.now() - R.t0)) / 1000));
+  showModal(`<h2>${R.manual ? 'Повертаємося в гру' : 'Звʼязок перервався'}</h2>
+    <p>${R.manual ? `Підключаємося до кімнати <b>${esc(R.code)}</b>…` : 'Пробуємо відновити зʼєднання з господарем. Поки тебе немає, гра чекає, а за хвилину за тебе походить бот — щойно звʼязок повернеться, гратимеш далі сам.'}</p>
+    <p class="hint"><span class="spin-dot"></span> Спроба ${R.n} · ще до ${left} с</p>
+    <div class="row end"><button class="btn ghost" type="button" id="rjQuit">${R.manual ? 'Скасувати' : 'Вийти в меню'}</button></div>`);
+  $('#rjQuit').onclick = () => { NET.rejoining = null; leaveRoom(); openMainMenu(); };
+}
+async function rejoinTry() {
+  const R = NET.rejoining; if (!R) return;
+  if (Date.now() - R.t0 > R.limit) { NET.rejoining = null; rejoinFailed(R); return; }
+  R.n++; drawRejoin(R);
+  try { await loadPeer(); } catch (e) { }
+  if (!window.Peer) { setTimeout(rejoinTry, 3000); return; }
+  await getIce(); if (NET.rejoining !== R) return;
+  clientConnect(R.code, conn => {
+    sendConn(conn, { t: 'rejoin', tok: R.tok, ver: APP_VERSION });
+    // господар має відповісти «start»; якщо мовчить — пробуємо ще
+    R.waitT = setTimeout(() => { if (NET.rejoining === R && NET.conn === conn) { NET.conn = null; try { conn.close(); } catch (e) { } rejoinTry(); } }, 8000);
+  }, () => { if (NET.rejoining === R) setTimeout(rejoinTry, 2500); }, 9000);
+}
+function rejoinFailed(R) {
+  const rec = { code: R.code, tok: R.tok };
+  leaveRoom();
+  showModal(`<h2>Не вдалося повернутися</h2><p>Господар кімнати <b>${esc(R.code)}</b> не відповідає. Можливо, в нього пропав інтернет або він закрив гру. Поки партія триває, за тебе грає бот — повернутися можна будь-коли.</p>
+    <div class="row end"><button class="btn ghost" type="button" id="rfMenu">До меню</button><button class="btn primary" type="button" id="rfAgain">Спробувати ще</button></div>`);
+  $('#rfMenu').onclick = () => openMainMenu();
+  $('#rfAgain').onclick = () => startRejoin(rec, true);
+}
+function manualRejoin() { const r = rejoinRec(); if (!r) { toast('Немає гри, до якої можна повернутися'); return; } hideMainMenu(); startRejoin(r, true); }
 function showLobby(l) {
   NET.lobby = l;
   if (G.players.length && NET.gid >= 0 && !G.over) return;
@@ -171,12 +292,13 @@ function showLobby(l) {
     <div class="list">${l.rows.map((r, i) => `<div class="tag" style="font-size:13px;padding:6px 10px"><span class="dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${COLORS[i]};margin-right:6px"></span>${esc(r.name)} · ${r.type === 'bot' ? 'бот' : r.type === 'remote' ? 'по мережі' : 'господар'}${i === l.you ? ' · це ти' : ''}</div>`).join('') || '<p class="hint">Отримуємо список гравців…</p>'}</div>
     <p class="hint net-relay ${NET.relay ? 'on' : ''}">${NET.relay ? '● Сервер-посередник увімкнено.' : '○ Сервер-посередник недоступний — зʼєднання напряму.'}</p>
     <div class="row end"><button class="btn ghost" type="button" id="leaveB">Вийти</button></div>`);
-  $('#leaveB').onclick = () => { leaveRoom(); openMainMenu(); };
+  $('#leaveB').onclick = () => { saveRejoin(null); leaveRoom(); openMainMenu(); };
 }
 function leaveRoom() {
   try { NET.conn && NET.conn.close(); } catch (e) { }
   try { NET.peer && NET.peer.destroy(); } catch (e) { }
-  Object.assign(NET, { role: 'local', conn: null, peer: null, me: -1, gid: -1 });
+  if (NET.rejoining && NET.rejoining.waitT) clearTimeout(NET.rejoining.waitT);
+  Object.assign(NET, { role: 'local', conn: null, peer: null, me: -1, gid: -1, tok: null, rejoining: null });
   NET.mirror.forEach(disposeMesh); NET.mirror.clear();
   G.players.forEach(destroySeat); G.players = []; G.combat = null; G.window = null; G.log = []; G.over = false; G.phase = 'setup'; G.viewer = -1;
   G.doorDeck = []; G.treasureDeck = []; G.doorDiscard = []; G.treasureDiscard = [];
@@ -185,15 +307,21 @@ function leaveRoom() {
 }
 function lostHost() {
   leaveRoom();
-  showModal(`<h2>Звʼязок утрачено</h2><p>Господар кімнати відключився або закрив гру.</p><div class="row end"><button class="btn primary" type="button" id="lhB">До меню</button></div>`);
+  showModal(`<h2>Звʼязок утрачено</h2><p>Господар кімнати закрив гру або відключився.</p><div class="row end"><button class="btn primary" type="button" id="lhB">До меню</button></div>`);
   $('#lhB').onclick = () => openMainMenu();
 }
 function clientOnData(d) {
   if (!d || typeof d !== 'object') return;
   switch (d.t) {
     case 'lobby': showLobby(d); break;
-    case 'full': { const r = d.reason; leaveRoom(); showModal(`<h2>Не вийшло</h2><p>${esc(r || 'Кімната недоступна.')}</p><div class="row end"><button class="btn primary" type="button" id="fB">До меню</button></div>`); $('#fB').onclick = () => openMainMenu(); break; }
-    case 'start': NET.me = d.you; closeModal(); hideMainMenu(); break;
+    case 'bye': NET.rejoining = null; lostHost(); break;
+    case 'full': { const r = d.reason; if (d.stale) saveRejoin(null); leaveRoom(); showModal(`<h2>Не вийшло</h2><p>${esc(r || 'Кімната недоступна.')}</p><div class="row end"><button class="btn primary" type="button" id="fB">До меню</button></div>`); $('#fB').onclick = () => openMainMenu(); break; }
+    case 'start': {
+      NET.me = d.you; NET.curAsk = 0;
+      if (d.tok) { NET.tok = d.tok; saveRejoin({ code: NET.code, tok: d.tok, t: Date.now() }); }
+      if (NET.rejoining) { clearTimeout(NET.rejoining.waitT); NET.rejoining = null; toast('Звʼязок відновлено!', 1800); }
+      closeModal(); hideMainMenu(); break;
+    }
     case 'snap': applySnap(d.s); break;
     case 'fly': onNetFly(d); break;
     case 'fx': onNetFx(d); break;
@@ -206,7 +334,7 @@ function clientOnData(d) {
   }
 }
 function fillPlayer(p, sp) {
-  Object.assign(p, { name: sp.name, type: sp.type, color: sp.color, sex: sp.sex, diff: sp.diff, level: sp.level, gold: sp.gold, gear: sp.gear, raceCard: sp.raceCard, clsCard: sp.clsCard, raceCard2: sp.raceCard2 || null, clsCard2: sp.clsCard2 || null, dualRace: sp.dualRace || null, dualCls: sp.dualCls || null, curses: sp.curses || [], mem: sp.mem || {}, died: sp.died });
+  Object.assign(p, { offline: sp.off || 0, wasRemote: !!sp.sub, name: sp.name, type: sp.type, color: sp.color, sex: sp.sex, diff: sp.diff, level: sp.level, gold: sp.gold, gear: sp.gear, raceCard: sp.raceCard, clsCard: sp.clsCard, raceCard2: sp.raceCard2 || null, clsCard2: sp.clsCard2 || null, dualRace: sp.dualRace || null, dualCls: sp.dualCls || null, curses: sp.curses || [], mem: sp.mem || {}, died: sp.died });
   p.hand = Array.isArray(sp.hand) ? sp.hand : Array.from({ length: sp.hand }, (_, k) => ({ hidden: true, kind: 'hidden', uid: -1 - k, deck: 'door', name: '?' }));
 }
 function applySnap(s) {
@@ -214,6 +342,7 @@ function applySnap(s) {
     NET.gid = s.gid; closeModal();
     G.players.forEach(destroySeat); NET.mirror.forEach(disposeMesh); NET.mirror.clear(); G.players = []; boardFor = null;
   }
+  if (s.over) saveRejoin(null);
   Object.assign(G, { goal: s.goal, cur: s.cur, phase: s.phase, busy: s.busy, over: s.over, log: s.log, prepWait: s.prepWait || [] });
   G.doorDeck = new Array(s.dN).fill(0); G.treasureDeck = new Array(s.tN).fill(0);
   G.doorDiscard = s.dTop ? [s.dTop] : []; G.treasureDiscard = s.tTop ? [s.tTop] : [];

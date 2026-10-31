@@ -20,6 +20,7 @@ function confirmFor(p, title, text, yes, no) { return p.type === 'remote' ? askR
 async function startTurn() {
   if (G.over || NET.role === 'client' || G.phase !== 'next') return;
   if (G.pendingSetup) { G.pendingSetup = false; openSetup(); return; }
+  applyReclaims();
   const p = cur(); G.phase = 'start'; G.combat = null; forgetTick(p);
   G.players.forEach(plateDraw);
   log(`Хід: ${nameTag(p)} · рівень ${p.level}`, 'turn');
@@ -204,7 +205,7 @@ async function botsInterfere() {
 function canMeddleCards(h) { const und = G.combat && G.combat.mons.some(x => x.c.undead); return h.hand.some(c => ['mod', 'oneshot', 'wander', 'redirect'].includes(c.kind) || (c.kind === 'monster' && c.undead && und)); }
 async function interferenceWindow() {
   const cb = G.combat, p = fighter();
-  const humans = G.players.filter(h => isPerson(h) && h !== p && h.idx !== cb.helper && !cb.passed.has(h.idx) && canMeddleCards(h));
+  const humans = G.players.filter(h => isPerson(h) && !h.offline && h !== p && h.idx !== cb.helper && !cb.passed.has(h.idx) && canMeddleCards(h));
   if (!humans.length) return false;
   humans.filter(h => h.type === 'remote').forEach(h => tell(h, `${p.name} ось-ось переможе! Зіграй карту або натисни «Не втручаюсь».`, 2800));
   sfx('alert');
@@ -290,6 +291,7 @@ function helpAskFor(h, tr, T, title, text, cards = []) {
     const id = ++NET.askSeq; let tm;
     const done = (ok, pick) => { if (!NET.asks.has(id)) return; NET.asks.delete(id); clearTimeout(tm); netSendTo(h.idx, { t: 'askEnd', id }); res({ ok: !!ok, counter: Number.isFinite(pick) ? pick : null }); };
     done.who = h.idx; NET.asks.set(id, done);
+    if (h.offline) { done(false); return; }
     tm = setTimeout(() => done(false), 45000);
     netSendTo(h.idx, { t: 'helpAsk', id, title, text, tr, T, cards });
   });
@@ -622,6 +624,7 @@ function cardsConfirmFor(p, title, text, groups, yes, no) {
     const id = ++NET.askSeq; let tm;
     const done = ok => { if (!NET.asks.has(id)) return; NET.asks.delete(id); clearTimeout(tm); netSendTo(p.idx, { t: 'askEnd', id }); res(!!ok); };
     done.who = p.idx; NET.asks.set(id, done);
+    if (p.offline) { done(false); return; }
     tm = setTimeout(() => done(false), 60000);
     netSendTo(p.idx, { t: 'cardsAsk', id, title, text, groups, yes, no });
   });
@@ -650,6 +653,7 @@ function askRemoteTrade(t, fromName, giveInfo, timeout = 90000) {
     const id = ++NET.askSeq; let tm;
     const done = (ok, pick) => { if (!NET.asks.has(id)) return; NET.asks.delete(id); clearTimeout(tm); netSendTo(t.idx, { t: 'askEnd', id }); res(ok && Array.isArray(pick) ? pick : null); };
     done.who = t.idx; NET.asks.set(id, done);
+    if (t.offline) { done(false); return; }
     tm = setTimeout(() => done(false), timeout);
     netSendTo(t.idx, { t: 'tradeAsk', id, from: fromName, give: giveInfo });
   });

@@ -38,6 +38,7 @@ function buildMainMenu() {
         <nav class="mm-nav" aria-label="Головне меню">
           <button type="button" class="mm-btn primary" data-mm="continue" hidden>Продовжити гру</button>
           <button type="button" class="mm-btn primary" data-mm="new">Нова гра</button>
+          <button type="button" class="mm-btn primary" data-mm="rejoin" hidden>Повернутися в гру</button>
           <button type="button" class="mm-btn" data-mm="join">Приєднатися до гри</button>
           <button type="button" class="mm-btn" data-mm="rules">Правила</button>
           <div class="mm-row">
@@ -94,6 +95,8 @@ function openMainMenu() {
   el.querySelector('[data-mm="continue"]').hidden = !gameRunning();
   el.querySelector('[data-mm="new"]').classList.toggle('primary', !gameRunning());
   el.querySelector('[data-mm="join"]').hidden = NET.role === 'client' && gameRunning();
+  const rj = rejoinRec(), rb = el.querySelector('[data-mm="rejoin"]');
+  rb.hidden = !rj || NET.role !== 'local' || gameRunning(); if (rj) rb.textContent = `Повернутися в гру · ${rj.code}`;
   const vb = el.querySelector('[data-mm="ver"]'); vb.textContent = 'v' + APP_VERSION; vb.classList.toggle('new', seenVersion() < APP_VERSION);
   el.hidden = false; MENU.open = true; document.body.classList.add('in-menu');
   clearTimeout(MENU.timer); MENU.timer = setTimeout(() => peekCycle(false), 1200);
@@ -112,6 +115,7 @@ function menuAction(a) {
       if (gameRunning() && G.busy) { G.pendingSetup = true; hideMainMenu(); toast('Нова гра почнеться після цього ходу'); return; }
       openSetup(); break;
     case 'join': openJoin(); break;
+    case 'rejoin': manualRejoin(); break;
     case 'rules': openRules(); break;
     case 'table': openSkins(); break;
     case 'sound': openSound(); break;

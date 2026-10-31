@@ -206,6 +206,7 @@ button.slot:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
 .seg button:disabled{opacity:.5;cursor:default}
 .netcode{display:flex;align-items:baseline;gap:12px;padding:10px 14px;border:1px dashed var(--brass);border-radius:12px;background:rgba(224,169,59,.06)}
 .netcode span{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.spin-dot{display:inline-block;width:10px;height:10px;margin-right:6px;border-radius:50%;border:2px solid var(--brass);border-right-color:transparent;vertical-align:-1px;animation:spin .8s linear infinite}
 .net-relay{margin-top:4px}.net-relay.on{color:#7fc97f}
 .netcode b{font-family:var(--f-display);font-weight:400;font-size:36px;letter-spacing:.12em;color:var(--brass)}
 .lbl2{display:block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px}
@@ -423,3 +424,5 @@ body.in-menu #ui{visibility:hidden}
 .dualb img{width:calc(var(--s)*.4);height:calc(var(--s)*.4)}
 .dualb .sn{font-size:9.5px;line-height:1.1;text-align:center}
 .kv.off-curse b{color:#d9a6ff;font-weight:500;text-align:right;max-width:60%}
+
+@keyframes spin{to{transform:rotate(360deg)}}
