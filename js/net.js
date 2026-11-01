@@ -53,9 +53,9 @@ function queueSnap() {
 function snapFor(i) {
   const cb = G.combat;
   return {
-    gid: G.gid, goal: G.goal, cur: G.cur, phase: G.phase, busy: G.busy, over: G.over, log: G.log.slice(-60), prepWait: G.prepWait || [],
+    gid: G.gid, goal: G.goal, teams: !!G.teams, cur: G.cur, phase: G.phase, busy: G.busy, over: G.over, log: G.log.slice(-60), prepWait: G.prepWait || [],
     dN: G.doorDeck.length, tN: G.treasureDeck.length, dTop: G.doorDiscard[G.doorDiscard.length - 1] || null, tTop: G.treasureDiscard[G.treasureDiscard.length - 1] || null,
-    players: G.players.map(p => ({ idx: p.idx, name: p.name, type: p.type, off: offLeft(p), sub: !!p.wasRemote, color: p.color, sex: p.sex, diff: p.diff, level: p.level, gold: p.gold, gear: p.gear, raceCard: p.raceCard, clsCard: p.clsCard, raceCard2: p.raceCard2, clsCard2: p.clsCard2, dualRace: p.dualRace, dualCls: p.dualCls, curses: p.curses || [], died: p.died, mem: p.type === 'bot' ? p.mem : null, hand: p.idx === i ? p.hand : p.hand.length })),
+    players: G.players.map(p => ({ idx: p.idx, team: p.team, name: p.name, type: p.type, off: offLeft(p), sub: !!p.wasRemote, color: p.color, sex: p.sex, diff: p.diff, level: p.level, gold: p.gold, gear: p.gear, raceCard: p.raceCard, clsCard: p.clsCard, raceCard2: p.raceCard2, clsCard2: p.clsCard2, dualRace: p.dualRace, dualCls: p.dualCls, curses: p.curses || [], died: p.died, mem: p.type === 'bot' ? p.mem : null, hand: p.idx === i ? p.hand : p.hand.length })),
     cb: cb ? { fighter: cb.fighter, mons: cb.mons.map(x => x.c), mods: cb.mods, pShots: cb.pShots, mShots: cb.mShots, helper: cb.helper, wiz: cb.wiz, asked: [...cb.asked], passed: [...cb.passed], offer: cb.offer } : null,
     win: G.window ? G.window.humans.map(h => h.idx) : null
   };
@@ -72,7 +72,7 @@ function askRemote(p, title, text, yes, no, timeout = 40000) {
 }
 function sendLobby() {
   if (NET.role !== 'host') return;
-  const rows = setupState.rows.map(r => ({ name: r.name, type: r.type, sex: r.sex }));
+  const rows = setupState.rows.map(r => ({ name: r.name, type: r.type, sex: r.sex, team: setupState.teams ? r.team | 0 : null }));
   setupState.rows.forEach((r, i) => { if (r.conn) sendConn(r.conn, { t: 'lobby', code: NET.code, rows, you: i }); });
 }
 async function hostRoom() {
@@ -82,7 +82,7 @@ async function hostRoom() {
   const tryOpen = (attempt) => {
     const code = makeCode();
     const peer = new window.Peer(PEER_PREFIX + code, peerOpts(ice));
-    peer.on('open', () => { NET.role = 'host'; NET.peer = peer; NET.code = code; NET.busy = false; rerenderSetup && rerenderSetup(); });
+    peer.on('open', () => { NET.role = 'host'; NET.peer = peer; NET.code = code; NET.busy = false; rerenderSetup && rerenderSetup(); chatSync(); });
     peer.on('error', e => {
       if (e.type === 'unavailable-id' && attempt < 3) { peer.destroy(); tryOpen(attempt + 1); return; }
       if (NET.role !== 'host') { NET.busy = false; NET.err = 'Не вдалося створити кімнату: ' + (e.type || 'помилка мережі') + '.'; rerenderSetup && rerenderSetup(); }
@@ -101,7 +101,7 @@ function stopHosting() {
   NET.allConns.forEach(c => sendConn(c, { t: 'bye' })); NET.allConns.clear();
   setupState.rows = setupState.rows.filter(r => { if (r.type === 'remote') { try { r.conn.close(); } catch (e) { } return false; } return true; });
   if (NET.peer) try { NET.peer.destroy(); } catch (e) { }
-  Object.assign(NET, { role: 'local', peer: null, code: '' }); NET.conns.clear();
+  Object.assign(NET, { role: 'local', peer: null, code: '' }); NET.conns.clear(); chatSync();
 }
 function hostOnData(conn, d) {
   if (!d || typeof d !== 'object') return;
@@ -112,13 +112,15 @@ function hostOnData(conn, d) {
     if (playing) { sendConn(conn, { t: 'full', reason: 'Гра вже йде. Попроси господаря почати нову партію.' }); return; }
     if (setupState.rows.length >= 6) { sendConn(conn, { t: 'full', reason: 'У кімнаті вже 6 гравців.' }); return; }
     const name = String(d.name || 'Гість').trim().slice(0, 16) || 'Гість';
-    const row = { name, type: 'remote', sex: d.sex === 'f' ? 'f' : 'm', diff: 2, conn };
+    const row = { name, type: 'remote', sex: d.sex === 'f' ? 'f' : 'm', diff: 2, conn, team: setupState.rows.length % 2 };
     conn._row = row; setupState.rows.push(row);
     toast(`${name} приєднується до кімнати`);
     rerenderSetup && rerenderSetup(); sendLobby();
+    chatSendHistory(conn); chatSys(`${name} заходить у кімнату`); chatSync();
     return;
   }
   if (d.t === 'ping') return;
+  if (d.t === 'chat') { chatFromGuest(conn, d); return; }
   if (d.t === 'rejoin') { hostRejoin(conn, d); return; }
   if (d.t === 'act' && conn._pidx != null && G.players[conn._pidx] && G.players[conn._pidx].type === 'remote') { runAct(conn._pidx, d.act); return; }
   if (d.t === 'answer') { const done = NET.asks.get(d.id); if (done && done.who === conn._pidx) done(d.ok, d.pick); }
@@ -142,7 +144,7 @@ function hostOnClose(conn) {
     if (p.type === 'remote' && p.offline) return; // місце в кімнаті тримаємо, поки чекаємо
   }
   const row = conn._row;
-  if (row) { const k = setupState.rows.indexOf(row); if (k >= 0) { setupState.rows.splice(k, 1); rerenderSetup && rerenderSetup(); sendLobby(); } }
+  if (row) { const k = setupState.rows.indexOf(row); if (k >= 0) { setupState.rows.splice(k, 1); rerenderSetup && rerenderSetup(); sendLobby(); chatSys(`${row.name} виходить з кімнати`); } }
 }
 // гравець так і не повернувся: далі за нього грає бот (поки він не підключиться знову)
 function dropToBot(p) {
@@ -171,7 +173,7 @@ function hostRejoin(conn, d) {
     if (G.cur === p.idx && !['prep', 'deal', 'next'].includes(G.phase)) { p._reclaim = true; wait = true; }
     else { p.type = 'remote'; p.wasRemote = false; }
   }
-  sendConn(conn, { t: 'start', you: p.idx, tok: p.tok });
+  sendConn(conn, { t: 'start', you: p.idx, tok: p.tok }); chatSendHistory(conn);
   log(`${nameTag(p)} повернувся в гру.`); say(`${p.name} знову з нами!`);
   boardFor = null; renderUI(); queueSnap();
   if (wait) tell(p, 'Бот дограє цей хід, з наступного граєш ти.', 3200);
@@ -232,7 +234,7 @@ function clientConnect(code, onOpen, onFail, timeout = 15000) {
   peer.on('open', () => {
     const conn = peer.connect(PEER_PREFIX + code, { reliable: true, serialization: 'json' });
     const lost = () => { if (conn === NET.conn && NET.role === 'client') clientDropped(); };
-    conn.on('open', () => { if (failed) { try { conn.close(); } catch (e) { } return; } opened = true; clearTimeout(tm); NET.conn = conn; NET.role = 'client'; NET.code = code; NET.lastRx = Date.now(); onOpen(conn); });
+    conn.on('open', () => { if (failed) { try { conn.close(); } catch (e) { } return; } opened = true; clearTimeout(tm); NET.conn = conn; NET.role = 'client'; NET.code = code; NET.lastRx = Date.now(); chatSync(); onOpen(conn); });
     conn.on('data', d => { if (conn !== NET.conn) return; NET.lastRx = Date.now(); clientOnData(d); });
     conn.on('close', lost); conn.on('error', lost);
   });
@@ -289,9 +291,10 @@ function showLobby(l) {
   NET.lobby = l;
   if (G.players.length && NET.gid >= 0 && !G.over) return;
   showModal(`<h2>Кімната ${esc(l.code)}</h2><p>Ти в кімнаті. Чекаємо, поки господар почне гру.</p>
-    <div class="list">${l.rows.map((r, i) => `<div class="tag" style="font-size:13px;padding:6px 10px"><span class="dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${COLORS[i]};margin-right:6px"></span>${esc(r.name)} · ${r.type === 'bot' ? 'бот' : r.type === 'remote' ? 'по мережі' : 'господар'}${i === l.you ? ' · це ти' : ''}</div>`).join('') || '<p class="hint">Отримуємо список гравців…</p>'}</div>
+    <div class="list">${l.rows.map((r, i) => `<div class="tag" style="font-size:13px;padding:6px 10px"><span class="dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${COLORS[i]};margin-right:6px"></span>${esc(r.name)} · ${r.type === 'bot' ? 'бот' : r.type === 'remote' ? 'по мережі' : 'господар'}${r.team != null ? ' · ' + teamTag(r.team) : ''}${i === l.you ? ' · це ти' : ''}</div>`).join('') || '<p class="hint">Отримуємо список гравців…</p>'}</div>
     <p class="hint net-relay ${NET.relay ? 'on' : ''}">${NET.relay ? '● Сервер-посередник увімкнено.' : '○ Сервер-посередник недоступний — зʼєднання напряму.'}</p>
-    <div class="row end"><button class="btn ghost" type="button" id="leaveB">Вийти</button></div>`);
+    <div class="row end"><button class="btn" type="button" data-chat-open>Чат</button><button class="btn ghost" type="button" id="leaveB">Вийти</button></div>`);
+  chatBadge();
   $('#leaveB').onclick = () => { saveRejoin(null); leaveRoom(); openMainMenu(); };
 }
 function leaveRoom() {
@@ -303,7 +306,7 @@ function leaveRoom() {
   G.players.forEach(destroySeat); G.players = []; G.combat = null; G.window = null; G.log = []; G.over = false; G.phase = 'setup'; G.viewer = -1;
   G.doorDeck = []; G.treasureDeck = []; G.doorDiscard = []; G.treasureDiscard = [];
   syncDeck('door'); syncDeck('treasure'); syncDiscardTop('door'); syncDiscardTop('treasure'); T.die.visible = false;
-  boardFor = null; renderUI(); renderLog();
+  boardFor = null; renderUI(); renderLog(); chatSync();
 }
 function lostHost() {
   leaveRoom();
@@ -315,6 +318,7 @@ function clientOnData(d) {
   switch (d.t) {
     case 'lobby': showLobby(d); break;
     case 'bye': NET.rejoining = null; lostHost(); break;
+    case 'chat': case 'chatHist': chatOnClient(d); break;
     case 'full': { const r = d.reason; if (d.stale) saveRejoin(null); leaveRoom(); showModal(`<h2>Не вийшло</h2><p>${esc(r || 'Кімната недоступна.')}</p><div class="row end"><button class="btn primary" type="button" id="fB">До меню</button></div>`); $('#fB').onclick = () => openMainMenu(); break; }
     case 'start': {
       NET.me = d.you; NET.curAsk = 0;
@@ -334,7 +338,7 @@ function clientOnData(d) {
   }
 }
 function fillPlayer(p, sp) {
-  Object.assign(p, { offline: sp.off || 0, wasRemote: !!sp.sub, name: sp.name, type: sp.type, color: sp.color, sex: sp.sex, diff: sp.diff, level: sp.level, gold: sp.gold, gear: sp.gear, raceCard: sp.raceCard, clsCard: sp.clsCard, raceCard2: sp.raceCard2 || null, clsCard2: sp.clsCard2 || null, dualRace: sp.dualRace || null, dualCls: sp.dualCls || null, curses: sp.curses || [], mem: sp.mem || {}, died: sp.died });
+  Object.assign(p, { team: sp.team, offline: sp.off || 0, wasRemote: !!sp.sub, name: sp.name, type: sp.type, color: sp.color, sex: sp.sex, diff: sp.diff, level: sp.level, gold: sp.gold, gear: sp.gear, raceCard: sp.raceCard, clsCard: sp.clsCard, raceCard2: sp.raceCard2 || null, clsCard2: sp.clsCard2 || null, dualRace: sp.dualRace || null, dualCls: sp.dualCls || null, curses: sp.curses || [], mem: sp.mem || {}, died: sp.died });
   p.hand = Array.isArray(sp.hand) ? sp.hand : Array.from({ length: sp.hand }, (_, k) => ({ hidden: true, kind: 'hidden', uid: -1 - k, deck: 'door', name: '?' }));
 }
 function applySnap(s) {
@@ -343,7 +347,7 @@ function applySnap(s) {
     G.players.forEach(destroySeat); NET.mirror.forEach(disposeMesh); NET.mirror.clear(); G.players = []; boardFor = null;
   }
   if (s.over) saveRejoin(null);
-  Object.assign(G, { goal: s.goal, cur: s.cur, phase: s.phase, busy: s.busy, over: s.over, log: s.log, prepWait: s.prepWait || [] });
+  Object.assign(G, { goal: s.goal, teams: !!s.teams, cur: s.cur, phase: s.phase, busy: s.busy, over: s.over, log: s.log, prepWait: s.prepWait || [] });
   G.doorDeck = new Array(s.dN).fill(0); G.treasureDeck = new Array(s.tN).fill(0);
   G.doorDiscard = s.dTop ? [s.dTop] : []; G.treasureDiscard = s.tTop ? [s.tTop] : [];
   const me = G.players[NET.me]; const prev = new Set(me ? me.hand.map(c => c.uid) : []);

@@ -483,14 +483,14 @@ function levelFx(p, up) {
 }
 async function changeLevel(p, delta, allowWin = false) {
   const before = p.level;
-  const cap = allowWin ? G.goal : Math.max(before, G.goal - 1);
+  const cap = G.teams ? (allowWin ? 999 : Math.max(before, before + levelsToWin(p) - 1)) : allowWin ? G.goal : Math.max(before, G.goal - 1);
   p.level = clamp(before + delta, 1, cap);
   if (p.level !== before) {
     log(`${nameTag(p)} ${p.level > before ? 'піднімається' : 'падає'} на ${p.level}-й рівень.`);
     levelFx(p, p.level > before); renderUI(); await wait(550);
-  } else if (delta > 0 && !allowWin && before >= G.goal - 1) log(`${nameTag(p)} не може отримати ${G.goal}-й рівень так — лише перемогою над монстром.`);
+  } else if (delta > 0 && !allowWin && (G.teams ? levelsToWin(p) <= 1 : before >= G.goal - 1)) log(G.teams ? `${nameTag(p)} не може так здобути переможний рівень команди — лише перемогою над монстром.` : `${nameTag(p)} не може отримати ${G.goal}-й рівень так — лише перемогою над монстром.`);
   plateDraw(p);
-  if (p.level >= G.goal) await gameOver(p);
+  if (G.teams ? levelsToWin(p) <= 0 : p.level >= G.goal) await gameOver(p);
   else if (G.goal > 10 && before < EPIC_AT && p.level >= EPIC_AT) { say(`${p.name} в епічній зоні: монстри для нього тепер ×2!`, 2800); log(`${nameTag(p)} входить в епічну зону: рівні монстрів для нього подвоюються.`); }
 }
 

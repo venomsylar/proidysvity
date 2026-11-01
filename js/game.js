@@ -124,6 +124,16 @@ async function playIntoCombat(p, c, side) {
   if (toMon) flashAt(monCenter().setY(2.4), 2, 450);
   else ringFx(f.seat.anchor, 0x7fd081, 700);
   renderUI();
+  if (!self && !sameTeam(p, f)) await helperReact();
+}
+// суперник посилив монстра чи ослабив героя — бот-помічник відповідає своїми картами
+async function helperReact() {
+  const cb = G.combat; if (!cb || cb.reacting || sides().win) return;
+  // спершу помічник, далі — боти-напарники героя (командна гра)
+  const list = [cb.helper != null ? G.players[cb.helper] : null, ...teamMates(fighter()).filter(q => q.idx !== cb.helper)].filter(q => q && q.type === 'bot');
+  if (!list.length) return;
+  cb.reacting = true;
+  try { for (const h of list) { if (!G.combat || sides().win) break; await helperBoost(h); } } finally { if (G.combat === cb) cb.reacting = false; }
 }
 async function addMonster(p, mc, via) {
   const cb = G.combat; if (!cb || !mc) return;
@@ -140,6 +150,7 @@ async function addMonster(p, mc, via) {
     ...cb.mons.slice(0, -1).map((x, i) => x.m ? fly(x.m, poseOf(x.m), centerPose(i, n), 420, .25) : null)]);
   layoutCombat();
   await roar(m); renderUI();
+  if (p !== f && p.idx !== cb.helper && !sameTeam(p, f)) await helperReact();
 }
 async function wizardDiscard(p, c) {
   const cb = G.combat; removeFromHand(p, c); cb.wiz++;
@@ -175,15 +186,15 @@ async function botsInterfere() {
   const p = fighter(); if (!G.combat) return false; let any = false;
   const leader = Math.max(...G.players.filter(q => q !== p).map(q => q.level));
   /* що вищий рівень героя, то охочіше йому шкодять: плавно, до +0.2 біля фінішу */
-  const progress = clamp((p.level - 1) / Math.max(1, G.goal - 1), 0, 1);
+  const progress = winProgress(p);
   const levelHeat = .2 * Math.pow(progress, 1.5);
   for (const b of shuffle([...G.players])) {
     if (!G.combat || G.over) return any;
     const cb = G.combat;
-    if (b === p || b.idx === cb.helper || b.type !== 'bot' || cb.interfered.has(b.idx)) continue;
+    if (b === p || b.idx === cb.helper || b.type !== 'bot' || cb.interfered.has(b.idx) || sameTeam(b, p) || sameTeam(b, G.players[cb.helper])) continue;
     const s = sides(); if (!s.win) continue;
     const D = DIFF[b.diff || 2]; const an = affN(b, p);
-    const winning = p.level + levelsGain() >= G.goal;
+    const winning = levelsGain() >= levelsToWin(p);
     /* хтось уже нашкодив у цьому бою — решта менш охоче доливає (щоб не накидалися всі разом) */
     const piled = cb.interfered.size;
     const chance = winning ? D.block : (D.meddle + (p.level >= leader ? D.lead : 0) + levelHeat - an * D.grudge * 6) * Math.pow(.5, piled);
@@ -205,7 +216,7 @@ async function botsInterfere() {
 function canMeddleCards(h) { const und = G.combat && G.combat.mons.some(x => x.c.undead); return h.hand.some(c => ['mod', 'oneshot', 'wander', 'redirect'].includes(c.kind) || (c.kind === 'monster' && c.undead && und)); }
 async function interferenceWindow() {
   const cb = G.combat, p = fighter();
-  const humans = G.players.filter(h => isPerson(h) && !h.offline && h !== p && h.idx !== cb.helper && !cb.passed.has(h.idx) && canMeddleCards(h));
+  const humans = G.players.filter(h => isPerson(h) && !h.offline && h !== p && !sameTeam(h, p) && h.idx !== cb.helper && !cb.passed.has(h.idx) && canMeddleCards(h));
   if (!humans.length) return false;
   humans.filter(h => h.type === 'remote').forEach(h => tell(h, `${p.name} ось-ось переможе! Зіграй карту або натисни «Не втручаюсь».`, 2800));
   sfx('alert');
@@ -245,8 +256,10 @@ function helpGap(h, p) {
 }
 function botHelpDecision(h, p, offer) {
   const D = DIFF[h.diff || 2], T = treasureCount(), aff = affinity(h, p), an = affN(h, p);
-  if (p.level + levelsGain() >= G.goal) return { ok: h.diff === 1 && Math.random() < .25, why: 'Ще чого! Ти ж тоді переможеш.' };
   const gap = helpGap(h, p);
+  if (sameTeam(h, p)) return gap <= 0 ? { ok: true } : { ok: false, why: 'Разом не дотягнемо — краще тікай, я прикрию наступного разу.' };
+  if (levelsGain() >= levelsToWin(p)) return { ok: h.diff === 1 && Math.random() < .25 && !G.teams, why: G.teams ? 'Допомогти вашій команді виграти? Ні вже.' : 'Ще чого! Ти ж тоді переможеш.' };
+  if (G.teams && levelsToWin(p) - levelsGain() <= 3) return { ok: false, why: 'Ваша команда й так майже виграла. Без мене.' };
   if (gap > 0 && !(h.diff === 1 && Math.random() < .15)) return { ok: false, why: gap <= 3 ? 'Разом не дотягнемо — бракує ще ' + gap + '. Тікай сам.' : 'Та він же нас обох зʼїсть! Ні.' };
   const value = offer.tr + sum(offer.cards, cardWorth);
   const demand = Math.max(h.diff === 3 ? 1 : 0, Math.round(T * D.demand) - Math.round(an * 1.5));
@@ -261,7 +274,7 @@ function botHelpDecision(h, p, offer) {
 function botAcceptCounter(p, h, counter) {
   const T = treasureCount(), f = togetherWith(h.idx);
   if (!f.win) return false;
-  if (p.level + levelsGain() >= G.goal) return true;
+  if (levelsGain() >= levelsToWin(p)) return true;
   if ((p.diff || 2) === 3 && counter >= T && T > 1) return Math.random() < .4;
   return Math.random() < [0, .95, .85, .75][p.diff || 2];
 }
@@ -298,9 +311,10 @@ function helpAskFor(h, tr, T, title, text, cards = []) {
 }
 /* бот-помічник докидає свої разові карти, якщо без них не перемогти */
 async function helperBoost(h) {
-  const cb = G.combat; if (!cb || cb.helper !== h.idx) return;
+  const cb = G.combat; if (!cb || (cb.helper !== h.idx && !sameTeam(h, fighter()))) return;
   const ty = combatTypes(cb), sv = c => Math.abs(shotVal(c, ty, c.bonus > 0));
   const shots = h.hand.filter(c => c.kind === 'oneshot' && sv(c) > 0).sort((x, y) => sv(x) - sv(y));
+  { const s = sides(); if (sum(shots, sv) < s.mon - s.hero + (s.tie ? 0 : 1)) return; } // не марнуємо карти, якщо все одно не вистачить
   for (let guard = 0; guard < 6 && G.combat && !sides().win; guard++) {
     const s = sides(), need = s.mon - s.hero + (s.tie ? 0 : 1);
     const pick = shots.find(c => sv(c) >= need) || shots[shots.length - 1];
@@ -358,7 +372,7 @@ async function askHelp(i, offer) {
 }
 function pickRedirectTarget(p) {
   const s = sides();
-  const others = G.players.filter(q => q !== p);
+  const others = G.players.filter(q => q !== p && !sameTeam(p, q));
   if (!others.length) return null;
   if (p.diff === 1) return others[rnd(others.length)];
   const top = Math.max(...G.players.map(q => q.level));
@@ -393,10 +407,10 @@ async function botDrive() {
       }
       if (cb.helper == null && !curseN(p, 'lonely')) {
         const like = q => affN(p, q) * 5;
-        const cand = G.players.filter(q => q !== p && !cb.asked.has(q.idx) && helpGap(q, p) === 0).sort((x, y) => (baseStr(y) + like(y) * .7) - (baseStr(x) + like(x) * .7));
+        const cand = G.players.filter(q => q !== p && !cb.asked.has(q.idx) && helpGap(q, p) === 0).sort((x, y) => (sameTeam(p, y) - sameTeam(p, x)) * 100 + (baseStr(y) + like(y) * .7) - (baseStr(x) + like(x) * .7));
         if (cand.length) {
           const T = treasureCount(), frac = [0, .6, .5, .35][p.diff || 2];
-          await askHelp(cand[0].idx, { tr: Math.min(T, Math.max(T ? 1 : 0, Math.round(T * frac) + (like(cand[0]) < -1 ? 1 : 0))), cards: [] });
+          await askHelp(cand[0].idx, { tr: sameTeam(p, cand[0]) ? 0 : Math.min(T, Math.max(T ? 1 : 0, Math.round(T * frac) + (like(cand[0]) < -1 ? 1 : 0))), cards: [] });
           continue;
         }
       }
@@ -541,6 +555,7 @@ async function applyBad(q, bad) {
 }
 
 function charityTargets(p) {
+  if (G.teams) { const m = teamMates(p).filter(q => q.hand.length < handLimit(q)); return m.length ? m : []; }
   const others = G.players.filter(q => q !== p); const minL = Math.min(...others.map(q => q.level));
   return p.level <= minL ? [] : others.filter(q => q.level === minL);
 }
@@ -556,7 +571,7 @@ async function charity(p, chosen = []) {
     const m = cardMesh(c); scene.add(m);
     if (recips.length) {
       const r = recips[k % recips.length];
-      log(`Благодійність: ${nameTag(p)} віддає карту гравцеві ${nameTag(r)} (у нього найнижчий рівень).`);
+      log(G.teams ? `${nameTag(p)} віддає зайву карту напарнику ${nameTag(r)}.` : `Благодійність: ${nameTag(p)} віддає карту гравцеві ${nameTag(r)} (у нього найнижчий рівень).`);
       await fly(m, fromHandOf(p), toHandOf(r), 600, 1.8, { owner: r.idx });
       giveCard(r, c); memo(r, p, .5);
       tell(p, `«${c.name}» → ${r.name}`, 1800); tell(r, `${p.name} віддає тобі «${c.name}»`, 2400);
@@ -699,14 +714,14 @@ async function doTrade(p, t, give) {
   syncSeat(p); syncSeat(t);
   memo(p, t, 1); memo(t, p, 1);
   sfx('coins'); log(`Обмін відбувся: ${nameTag(p)} ⇄ ${nameTag(t)}.`); say(`${p.name} і ${t.name} помінялися речами`, 2000);
-  if (t.type === 'bot') { for (let g = 0; g < 6; g++) { const before = gearScore(t, t.gear); const best = t.hand.filter(c => c.kind === 'gear' && !canEquip(t, c)).map(c => ({ c, s: gearScore(t, gearAfter(t, c)) })).sort((a, b) => b.s - a.s)[0]; if (!best || best.s <= before + .01) break; await doEquip(t, best.c); } }
+  if (t.type === 'bot') await botEquipBest(t);
   renderUI();
 }
 function openCharityPick(v, act) {
   const lim = handLimit(v), excess = v.hand.length - lim; if (excess <= 0) { dispatch(act); return; }
   const recips = charityTargets(v);
   const sel = new Set();
-  const dest = recips.length ? `Вони підуть гравцеві з найнижчим рівнем: <b>${recips.map(r => `<span style="color:${r.color}">${esc(r.name)}</span>`).join(', ')}</b>${recips.length > 1 ? ' (по черзі)' : ''}.` : 'Ти сам на найнижчому рівні, тож вони підуть у скид.';
+  const dest = G.teams ? (recips.length ? `Вони підуть напарнику: <b>${recips.map(r => `<span style="color:${r.color}">${esc(r.name)}</span>`).join(', ')}</b>.` : 'У напарників теж повні руки — зайві карти підуть у скид.') : recips.length ? `Вони підуть гравцеві з найнижчим рівнем: <b>${recips.map(r => `<span style="color:${r.color}">${esc(r.name)}</span>`).join(', ')}</b>${recips.length > 1 ? ' (по черзі)' : ''}.` : 'Ти сам на найнижчому рівні, тож вони підуть у скид.';
   const draw = () => `<h2>Забагато карт</h2><p>У руці ${v.hand.length} карт при ліміті ${lim}. Вибери <b>${excess}</b> ${plural(excess, 'карту', 'карти', 'карт')}, яких позбудешся. ${dest}</p>
     <p class="hint">Порада: замість цього можна спорядити речі чи продати їх — закрий це вікно.</p>
     <div class="ochips" style="margin-top:10px">${v.hand.map(c => `<button type="button" class="ochip" data-ch="${c.uid}" aria-pressed="${sel.has(c.uid)}">${artIcon(c)} ${esc(c.name)} · ${esc(cardInfo(c).type.toLowerCase())}</button>`).join('')}</div>
@@ -754,13 +769,44 @@ async function doEquip(p, c) {
   log(`${nameTag(p)} споряджається: «${esc(c.name)}»${rem.length ? ` (знімає ${esc(rem.map(r => r.name).join(', '))})` : ''}.`);
   syncSeat(p); renderUI();
 }
+async function botEquipBest(t) { for (let g = 0; g < 6; g++) { const before = gearScore(t, t.gear); const best = t.hand.filter(c => c.kind === 'gear' && !canEquip(t, c)).map(c => ({ c, s: gearScore(t, gearAfter(t, c)) })).sort((a, b) => b.s - a.s)[0]; if (!best || best.s <= before + .01) break; await doEquip(t, best.c); } }
+/* командна гра: віддати карту (з руки чи з себе) напарнику — без торгу й підтвердження */
+async function doGift(p, c, t) {
+  if (!c || !t || !sameTeam(p, t)) return;
+  if (p.gear.includes(c)) await unequip(p, c);
+  if (!p.hand.includes(c)) return;
+  removeFromHand(p, c);
+  const m = cardMesh(c); scene.add(m); renderUI();
+  log(`${nameTag(p)} передає напарнику ${nameTag(t)} «${esc(c.name)}».`);
+  await fly(m, fromHandOf(p), toHandOf(t), 600, 1.6, { owner: t.idx });
+  disposeMesh(m); giveCard(t, c); sfx('coins');
+  tell(t, `${p.name} передає тобі «${c.name}»`, 2400); renderUI();
+  if (t.type === 'bot' && !G.combat) await botEquipBest(t);
+}
+/* бот віддає напарникам речі, які йому самому не знадобляться, а їм додадуть сили */
+async function botGiftMates(p) {
+  if (!G.teams || G.combat || G.over) return;
+  for (let n = 0; n < 3; n++) {
+    let best = null;
+    for (const c of p.hand.filter(x => x.kind === 'gear')) {
+      const mine = canEquip(p, c) ? 0 : gearScore(p, gearAfter(p, c)) - gearScore(p, p.gear);
+      for (const t of teamMates(p)) {
+        if (canEquip(t, c) || t.hand.length >= handLimit(t) + 1) continue;
+        const gain = gearScore(t, gearAfter(t, c)) - gearScore(t, t.gear);
+        if (gain >= 1 && gain > mine + .5 && (!best || gain - mine > best.d)) best = { c, t, d: gain - mine };
+      }
+    }
+    if (!best) return;
+    await botDelay(300); await doGift(p, best.c, best.t);
+  }
+}
 async function unequip(p, c) { p.gear.splice(p.gear.indexOf(c), 1); giveCard(p, c); syncSeat(p); renderUI(); }
 async function doSell(p, c) {
   if (p.gear.includes(c)) p.gear.splice(p.gear.indexOf(c), 1); else removeFromHand(p, c);
   const price = sellPrice(p, c);
   discard(c); p.gold += price; sfx('coins');
   log(`${nameTag(p)} продає «${esc(c.name)}» за ${price} зол.${price < c.value ? ' (інфляція!)' : ''}`);
-  let gained = 0; while (p.gold >= 1000 && p.level + gained < G.goal - 1) { p.gold -= 1000; gained++; }
+  let gained = 0; while (p.gold >= 1000 && gained < levelsToWin(p) - 1) { p.gold -= 1000; gained++; }
   syncSeat(p); renderUI();
   burst(p.seat.anchor.clone().setY(1), ['#ffd36b', '#f5c04a'], 40, 2.5, .9);
   if (gained) { say(`${p.name}: +${gained} ${plural(gained, 'рівень', 'рівні', 'рівнів')} за золото`); await changeLevel(p, gained); }
@@ -792,7 +838,7 @@ async function doDiscard(p, c) {
   disposeMesh(m); discard(c); renderUI();
 }
 async function doLevelUp(p, c) {
-  if (p.level >= G.goal - 1) { tell(p, `${G.goal}-й рівень — лише за перемогу над монстром!`); return; }
+  if (levelsToWin(p) <= 1) { tell(p, G.teams ? 'Переможний рівень команди — лише за перемогу над монстром!' : `${G.goal}-й рівень — лише за перемогу над монстром!`); return; }
   removeFromHand(p, c); discard(c);
   log(`${nameTag(p)} грає «${esc(c.name)}».`);
   await changeLevel(p, 1);
@@ -871,17 +917,18 @@ async function botManage(p, setupOnly = false) {
     if (!best || best.s <= before + .01) break;
     await botDelay(250); await doEquip(p, best.c);
   }
+  await botGiftMates(p); if (G.over) return;
   if (setupOnly) return;
-  for (const c of p.hand.filter(x => x.kind === 'levelup')) if (p.level < G.goal - 1) { await botDelay(250); await doLevelUp(p, c); }
-  if (cur() === p && G.phase !== 'combat' && p.level < G.goal - 1) {
+  for (const c of p.hand.filter(x => x.kind === 'levelup')) if (levelsToWin(p) > 1) { await botDelay(250); await doLevelUp(p, c); }
+  if (cur() === p && G.phase !== 'combat' && levelsToWin(p) > 1) {
     const spare = p.hand.filter(c => c.kind === 'gear' && (canEquip(p, c) || gearScore(p, gearAfter(p, c)) <= gearScore(p, p.gear)));
-    if (p.gold + sum(spare, c => sellPrice(p, c)) >= 1000) for (const c of spare) { if (p.level >= G.goal - 1) break; await botDelay(200); await doSell(p, c); }
+    if (p.gold + sum(spare, c => sellPrice(p, c)) >= 1000) for (const c of spare) { if (levelsToWin(p) <= 1) break; await botDelay(200); await doSell(p, c); }
   }
   const curse = p.hand.find(c => c.kind === 'curse');
   const D = DIFF[p.diff || 2];
   if (curse && Math.random() < D.curse) {
     const grudge = q => grudgeOf(p, q);
-    const targets = G.players.filter(q => q !== p && badHits(q, curse.bad));
+    const targets = G.players.filter(q => q !== p && !sameTeam(p, q) && badHits(q, curse.bad));
     let t = null;
     if (p.diff === 1) t = targets[rnd(targets.length)] || null;
     else {
@@ -917,14 +964,15 @@ async function botTurn(p) {
 async function gameOver(p) {
   if (G.over) return;
   G.over = true; G.phase = 'over'; G.busy = false; G.window = null;
-  log(`${nameTag(p)} досягає ${G.goal}-го рівня і перемагає!`, 'turn');
-  confetti(p.color); renderUI(); sfx('win');
+  log(G.teams ? `${nameTag(p)} здобуває переможний рівень — команда ${teamTag(p.team)} перемагає (${teamScore(p.team)} з ${teamTarget(p.team)})!` : `${nameTag(p)} досягає ${G.goal}-го рівня і перемагає!`, 'turn');
+  confetti(G.teams ? TEAMS[p.team].color : p.color); renderUI(); sfx('win');
   emitFx('win', { idx: p.idx });
   await wait(900);
   showWin(p, true);
 }
 function showWin(p, isHost) {
-  showModal(`<div class="curtain"><h2>Перемога!</h2><div class="who" style="color:${p.color}">${esc(p.name)}</div><p>досягає ${G.goal}-го рівня і стає найславетнішим пройдисвітом підземелля.</p></div>
+  const tw = G.teams ? `<div class="who" style="color:${TEAMS[p.team].color}">${teamName(p.team)}</div><p>${teamMembers(p.team).map(q => `<b style="color:${q.color}">${esc(q.name)}</b> · ${q.level}`).join(', ')} — разом ${teamScore(p.team)} з ${teamTarget(p.team)} рівнів. Переможний удар — за ${esc(p.name)}.</p><p class="hint">${teamIds().filter(t => t !== p.team).map(t => `${teamName(t)}: ${teamScore(t)} / ${teamTarget(t)}`).join(' · ')}</p>` : '';
+  showModal(`<div class="curtain"><h2>Перемога${G.teams ? ' команди' : ''}!</h2>${tw || `<div class="who" style="color:${p.color}">${esc(p.name)}</div><p>досягає ${G.goal}-го рівня і стає найславетнішим пройдисвітом підземелля.</p>`}</div>
     <div class="row end"><button class="btn ghost" data-close type="button">Роздивитися стіл</button>${isHost ? '<button class="btn primary" id="again" type="button">Нова гра</button>' : ''}</div>
     ${isHost ? '' : '<p class="hint" style="text-align:center">Нову партію запускає господар кімнати.</p>'}`);
   const a = $('#again'); if (a) a.onclick = () => { closeModal(); openSetup(); };

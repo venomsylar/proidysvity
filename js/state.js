@@ -3,7 +3,7 @@
 /* ============================== СТАН ГРИ ============================== */
 const COLORS = ['#e8b04a', '#e2685a', '#5aa9e2', '#86cf6e', '#b98be6', '#e889b8'];
 const BOT_NAMES = ['Мотря', 'Опанас', 'Одарка', 'Панько', 'Ганна', 'Тарас', 'Соломія', 'Грицько'];
-const G = { reveal: -1, gid: 0, goal: 10, players: [], doorDeck: [], treasureDeck: [], doorDiscard: [], treasureDiscard: [], cur: 0, viewer: -1, phase: 'setup', combat: null, busy: false, over: false, window: null, log: [], fresh: new Set(), pendingSetup: false };
+const G = { reveal: -1, gid: 0, goal: 10, teams: false, players: [], doorDeck: [], treasureDeck: [], doorDiscard: [], treasureDiscard: [], cur: 0, viewer: -1, phase: 'setup', combat: null, busy: false, over: false, window: null, log: [], fresh: new Set(), pendingSetup: false };
 const cur = () => G.players[G.cur];
 const fighter = () => G.combat && G.combat.fighter != null ? G.players[G.combat.fighter] : cur();
 const viewerP = () => G.players[G.viewer] || null;
@@ -37,14 +37,31 @@ const DIFF = {
   2: { name: 'Середній', help: .6, demand: .45, meddle: .16, lead: .35, block: .9, curse: .8, grudge: .07 },
   3: { name: 'Важкий', help: .42, demand: .7, meddle: .3, lead: .55, block: 1, curse: 1, grudge: .1 }
 };
+/* ---- командна гра ---- */
+const TEAMS = [{ name: 'Червоні', color: '#e5574a' }, { name: 'Сині', color: '#4c8fe6' }, { name: 'Зелені', color: '#57b96a' }];
+const TEAM_SHADES = [['#e5574a', '#f39a5b', '#c94a7a'], ['#4c8fe6', '#53c3d8', '#8a7be8'], ['#57b96a', '#b6cf4a', '#3fae9a']];
+const sameTeam = (a, b) => !!G.teams && !!a && !!b && a !== b && a.team === b.team;
+const teamMates = p => G.teams && p ? G.players.filter(q => q !== p && q.team === p.team) : [];
+const teamMembers = t => G.players.filter(q => q.team === t);
+const teamIds = () => [...new Set(G.players.map(q => q.team))].sort((a, b) => a - b);
+const TEAM_PER = () => G.goal > 10 ? 16 : 8;
+// мета команди: 8 (в епіку 16) рівнів на гравця; менша команда отримує фору −1 за кожного, кого їй бракує
+function teamTarget(t) { const n = teamMembers(t).length, mx = Math.max(...teamIds().map(k => teamMembers(k).length)); return Math.max(2, TEAM_PER() * n - (mx - n)); }
+const teamScore = t => sum(teamMembers(t), q => q.level);
+// скільки рівнів лишилось до перемоги (гравцеві або його команді)
+const levelsToWin = p => G.teams ? teamTarget(p.team) - teamScore(p.team) : G.goal - p.level;
+const winProgress = p => G.teams ? clamp(teamScore(p.team) / teamTarget(p.team), 0, 1) : clamp((p.level - 1) / Math.max(1, G.goal - 1), 0, 1);
+const teamName = t => (TEAMS[t] || TEAMS[0]).name;
+const teamTag = t => `<b style="color:${(TEAMS[t] || TEAMS[0]).color}">${teamName(t)}</b>`;
+
 /* приязність бота: сирі бали памʼяті → 0…100 % (50 — нейтрально); бали поступово забуваються */
 const memOf = (b, q) => (b && q && b.mem && b.mem[q.idx]) || 0;
-const affinity = (b, q) => Math.round(50 + 50 * Math.tanh(memOf(b, q) / 6));
+const affinity = (b, q) => sameTeam(b, q) ? 100 : Math.round(50 + 50 * Math.tanh(memOf(b, q) / 6));
 const affN = (b, q) => (affinity(b, q) - 50) / 50;
 const grudgeOf = (b, q) => -affN(b, q) * 5;
 const MOODS = [[90, 'найкращі друзі'], [75, 'дружнє'], [60, 'приязне'], [41, 'нейтральне'], [26, 'насторожене'], [11, 'вороже'], [0, 'лютує']];
 const moodName = a => MOODS.find(([t]) => a >= t)[1];
-function attitude(b, toward) { const a = affinity(b, toward); return `${moodName(a)} · ${a}%`; }
+function attitude(b, toward) { if (sameTeam(b, toward)) return 'напарник'; const a = affinity(b, toward); return `${moodName(a)} · ${a}%`; }
 /* пів-життя образ і вдячності — приблизно половина середньої партії (класика ≈ 9 кіл, епік ≈ 16); важкі боти памʼятають довше */
 function forgetTick(p) {
   if (!p.mem) return;
@@ -120,7 +137,7 @@ function sides() {
 
 function keepScore(p, c) {
   switch (c.kind) {
-    case 'levelup': return p.level < G.goal - 1 ? 900 : 60;
+    case 'levelup': return levelsToWin(p) > 1 ? 900 : 60;
     case 'flee': return 500;
     case 'oneshot': return 200 + Math.abs(c.bonus) * 60;
     case 'gear': return (usable(p, c) ? 120 : 20) + c.value * 0.3;

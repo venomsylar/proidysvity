@@ -11,6 +11,7 @@ function actAllowed(p, act) {
   if (!act || G.over) return false;
   if (act.k === 'pass') return waitingOn().includes(p);
   if (act.k === 'ready') return G.phase === 'prep' && (G.prepWait || []).includes(p.idx);
+  if (act.k === 'gift') { const f = findOwnCard(p, act.uid), t = G.players[act.target]; return !!f && !!t && sameTeam(p, t) && !G.over && !G.combat && !['setup', 'deal'].includes(G.phase) && !p._acting; }
   if (act.k === 'trade') return canTrade(p) && !!G.players[act.target] && act.target !== p.idx;
   if (act.k === 'help') { const cb = G.combat; return !G.busy && G.phase === 'combat' && !!cb && p === fighter() && !curseN(p, 'lonely') && cb.helper == null && !!G.players[act.target] && act.target !== p.idx && !cb.asked.has(act.target); }
   if (act.uid) { const f = findOwnCard(p, act.uid); return !!f && flatActs(cardActions(f.c, f.where, p)).some(a => !a.dis && sameAct(a.act, act)); }
@@ -23,7 +24,7 @@ function prepReady(p) {
   if (!G.prepWait.length && G.prepDone) { const d = G.prepDone; G.prepDone = null; d(); }
   renderUI();
 }
-const SIDE_ACTS = new Set(['equip', 'unequip', 'rc', 'dual', 'rc2hand', 'droprc']);
+const SIDE_ACTS = new Set(['equip', 'unequip', 'rc', 'dual', 'rc2hand', 'droprc', 'gift']);
 function dispatch(act, asIdx = G.viewer) {
   closeMenu();
   if (NET.role === 'client') { netSendHost({ t: 'act', act }); return; }
@@ -72,6 +73,7 @@ async function execAct(p, a) {
     case 'undead': return addMonster(p, c, null);
     case 'wander': return addMonster(p, p.hand.find(x => x.uid === a.mon), c);
     case 'redirect': return redirectCombat(p, c, G.players[a.target]);
+    case 'gift': return doGift(p, c, G.players[a.target]);
     case 'trade': return doTrade(p, G.players[a.target], (a.give || []).map(u => findTradeItem(p, u)).filter(Boolean));
   }
 }
@@ -86,14 +88,19 @@ function cardActions(c, where, v = viewerP()) {
   const acts = [];
   const A = (label, act, extra = {}) => acts.push({ label, act, ...extra });
   const sell = () => { if (free && myTurn && !inCombat && c.value) A(`Продати за ${sellPrice(v, c)} зол.`, { k: 'sell', uid: c.uid }); };
+  const mates = teamMates(v);
+  const gift = () => { if (sideOk && mates.length && G.phase !== 'deal') A('Віддати напарнику…', null, { sub: mates.map(t => ({ label: `${t.name} · сила ${baseStr(t)} · карт ${t.hand.length}`, act: { k: 'gift', uid: c.uid, target: t.idx } })) }); };
   if (where === 'gear') {
+    if (c.kind === 'gear') gift();
     if (c.kind === 'race' || c.kind === 'class' || c.kind === 'dual') { if (sideOk) { A('Зняти в руку', { k: 'rc2hand', uid: c.uid }); A('Скинути в скид', { k: 'droprc', uid: c.uid }); } return acts; }
     if (sideOk) A('Зняти в руку', { k: 'unequip', uid: c.uid });
     sell(); return acts;
   }
   if (where !== 'hand') return acts;
+  if (!['race', 'class', 'dual'].includes(c.kind)) gift();
   const undeadIn = inCombat && cb.mons.some(x => x.c.undead);
   const fp = fighter();
+  const friend = inCombat && !isFighter && !isHelper && (sameTeam(v, fp) || sameTeam(v, G.players[cb.helper])); // бій веде напарник — шкодити йому не можна
   switch (c.kind) {
     case 'gear': if (sideOk) A('Спорядити', { k: 'equip', uid: c.uid }, { dis: canEquip(v, c) }); sell(); break;
     case 'race': case 'class': {
@@ -110,32 +117,32 @@ function cardActions(c, where, v = viewerP()) {
       if (free && !inCombat) A('Зняти прокляття…', null, { dis: cursed.length ? null : 'Ні на кому немає тривалих проклять.', sub: cursed.flatMap(q => q.curses.map(k => ({ label: `${q === v ? 'З себе' : q.name}: «${k.name}»`, act: { k: 'uncurse', uid: c.uid, target: q.idx, mon: k.uid } }))) });
       sell(); break;
     }
-    case 'levelup': if (free && !inCombat) A('Підняти рівень', { k: 'levelup', uid: c.uid }, { dis: v.level >= G.goal - 1 ? `${G.goal}-й рівень — лише за перемогу над монстром.` : null }); break;
+    case 'levelup': if (free && !inCombat) A('Підняти рівень', { k: 'levelup', uid: c.uid }, { dis: levelsToWin(v) <= 1 ? G.teams ? 'Переможний рівень команди — лише за перемогу над монстром.' : `${G.goal}-й рівень — лише за перемогу над монстром.` : null }); break;
     case 'oneshot':
       if (combatOk) {
         const pos = c.bonus > 0, ty = combatTypes(cb), hv = shotVal(c, ty, true), note = c.fire && ty.dragon ? ' — дракон не боїться вогню' : '';
         if (pos) {
           if (isFighter || isHelper) A(`У бій за себе (${sgn(hv)})${note}`, { k: 'shot', uid: c.uid, side: 'hero' });
-          else { A(`Підсилити монстра (+${c.bonus})`, { k: 'shot', uid: c.uid, side: 'mon' }); A(`Допомогти герою (${sgn(hv)})${note}`, { k: 'shot', uid: c.uid, side: 'hero' }); }
+          else { if (!friend) A(`Підсилити монстра (+${c.bonus})`, { k: 'shot', uid: c.uid, side: 'mon' }); A(`Допомогти ${friend ? 'напарнику' : 'герою'} (${sgn(hv)})${note}`, { k: 'shot', uid: c.uid, side: 'hero' }); }
         } else {
           if (isFighter || isHelper) A(`Послабити монстра (${c.bonus})`, { k: 'shot', uid: c.uid, side: 'mon' });
-          else { A(`Послабити героя (${c.bonus})`, { k: 'shot', uid: c.uid, side: 'hero' }); A(`Послабити монстра (${c.bonus})`, { k: 'shot', uid: c.uid, side: 'mon' }); }
+          else { if (!friend) A(`Послабити героя (${c.bonus})`, { k: 'shot', uid: c.uid, side: 'hero' }); A(`Послабити монстра (${c.bonus})`, { k: 'shot', uid: c.uid, side: 'mon' }); }
         }
       }
       sell(); break;
     case 'flee': if (inCombat && free && (isFighter || isHelper)) A('Втекти з бою', { k: 'smoke', uid: c.uid }); sell(); break;
-    case 'mod': if (combatOk) A(`Зіграти на монстра (${sgn(c.bonus)})`, { k: 'mod', uid: c.uid }); break;
+    case 'mod': if (combatOk && !(friend && c.bonus > 0)) A(`Зіграти на монстра (${sgn(c.bonus)})`, { k: 'mod', uid: c.uid }); break;
     case 'monster':
       if (free && myTurn && G.phase === 'afterKick') A('Шукати пригод: битися з ним', { k: 'trouble', uid: c.uid });
-      if (combatOk && c.undead && undeadIn) A(`Підкинути мертвяка в бій (+${monLvl(c, fp) + vsBonus(c, fp)})`, { k: 'undead', uid: c.uid });
+      if (combatOk && c.undead && undeadIn && !friend) A(`Підкинути мертвяка в бій (+${monLvl(c, fp) + vsBonus(c, fp)})`, { k: 'undead', uid: c.uid });
       break;
     case 'wander': {
       const mons = v.hand.filter(x => x.kind === 'monster');
-      if (combatOk) A('Привести потвору в бій…', null, { dis: mons.length ? null : 'Потрібен монстр у руці.', sub: mons.map(m => ({ label: `${m.name} · +${monLvl(m, fp) + vsBonus(m, fp)} до монстрів`, act: { k: 'wander', uid: c.uid, mon: m.uid } })) });
+      if (combatOk && !friend) A('Привести потвору в бій…', null, { dis: mons.length ? null : 'Потрібен монстр у руці.', sub: mons.map(m => ({ label: `${m.name} · +${monLvl(m, fp) + vsBonus(m, fp)} до монстрів`, act: { k: 'wander', uid: c.uid, mon: m.uid } })) });
       break;
     }
-    case 'redirect': if (combatOk) A('Перенаправити бій на…', null, { sub: G.players.filter(q => q !== fighter()).map(q => ({ label: `${q.name} · сила ${baseStr(q)}`, act: { k: 'redirect', uid: c.uid, target: q.idx } })) }); sell(); break;
-    case 'curse': if (free && !inCombat) A('Наслати прокляття…', null, { sub: G.players.filter(q => q !== v).map(q => ({ label: `${q.name} · рів. ${q.level}`, act: { k: 'curse', uid: c.uid, target: q.idx } })) }); break;
+    case 'redirect': if (combatOk && !friend) A('Перенаправити бій на…', null, { sub: G.players.filter(q => q !== fighter() && !sameTeam(v, q) && !friend).map(q => ({ label: `${q.name} · сила ${baseStr(q)}`, act: { k: 'redirect', uid: c.uid, target: q.idx } })) }); sell(); break;
+    case 'curse': if (free && !inCombat) A('Наслати прокляття…', null, { sub: G.players.filter(q => q !== v && !sameTeam(v, q)).map(q => ({ label: `${q.name} · рів. ${q.level}`, act: { k: 'curse', uid: c.uid, target: q.idx } })) }); break;
   }
   if (free && !inCombat) A('Скинути в скид', { k: 'discard', uid: c.uid });
   if (isFighter && free && hasCls(v, 'wizard') && cb.wiz < 3 && !['oneshot', 'flee'].includes(c.kind)) A('Спалити заради +2 (Маг)', { k: 'wizard', uid: c.uid });
@@ -233,22 +240,22 @@ function openHelp() {
   const cb = G.combat, p = viewerP(); if (!cb || !p || p !== fighter()) return;
   const T = treasureCount();
   const st = { tr: Math.ceil(T / 2), cards: new Set() };
-  const opts = G.players.filter(q => q !== p && !cb.asked.has(q.idx));
+  const opts = G.players.filter(q => q !== p && !cb.asked.has(q.idx)).sort((x, y) => sameTeam(p, y) - sameTeam(p, x));
   const offerable = p.hand.filter(c => !c.hidden);
   const draw = () => `<h2>Покликати на поміч</h2>
-    <p>Помічник додає свою силу до твоєї. Запропонуй ціну: скарби з цього бою віддаси після перемоги, а карти з руки — одразу, якщо погодиться.</p>
+    <p>Помічник додає свою силу до твоєї. Запропонуй ціну: скарби з цього бою віддаси після перемоги, а карти з руки — одразу, якщо погодиться.${G.teams ? ' <b>Напарник допомагає безплатно</b> — ціна стосується лише суперників.' : ''}</p>
     <h3>Скарби з цього бою (усього ${T})</h3>
     <div class="seg" role="group" aria-label="Скільки скарбів пропонуєш">${Array.from({ length: T + 1 }, (_, k) => `<button type="button" data-tr="${k}" aria-pressed="${st.tr === k}">${k}</button>`).join('')}</div>
     ${offerable.length ? `<h3>Карти з руки на додачу</h3><div class="ochips">${offerable.map(c => `<button type="button" class="ochip" data-oc="${c.uid}" aria-pressed="${st.cards.has(c.uid)}">${artIcon(c)} ${esc(c.name)}</button>`).join('')}</div>` : ''}
     <h3>Кого кличеш</h3>
-    <div class="list">${opts.map(q => `<button class="btn" type="button" data-h="${q.idx}"><b style="color:${q.color}">${esc(q.name)}</b> · сила ${baseStr(q)} · рівень ${q.level} · ${(f => f.win ? `<span style="color:var(--good,#7fd081)">разом ${f.hero} проти ${f.mon} ✅</span>` : `<span style="color:var(--bad,#ef6b5d)">разом ${f.hero} проти ${f.mon} ❌</span>`)(togetherWith(q.idx))}${q.type === 'bot' ? ` · бот (${DIFF[q.diff || 2].name.toLowerCase()}), ставлення: ${attitude(q, p)}` : q.type === 'remote' ? ' · на іншому пристрої' : ''}</button>`).join('') || '<p class="hint">Більше нікого просити.</p>'}</div>
+    <div class="list">${opts.map(q => `<button class="btn" type="button" data-h="${q.idx}"><b style="color:${q.color}">${esc(q.name)}</b>${sameTeam(p, q) ? ' · <b>напарник</b>' : ''} · сила ${baseStr(q)} · рівень ${q.level} · ${(f => f.win ? `<span style="color:var(--good,#7fd081)">разом ${f.hero} проти ${f.mon} ✅</span>` : `<span style="color:var(--bad,#ef6b5d)">разом ${f.hero} проти ${f.mon} ❌</span>`)(togetherWith(q.idx))}${q.type === 'bot' ? ` · бот (${DIFF[q.diff || 2].name.toLowerCase()}), ставлення: ${attitude(q, p)}` : q.type === 'remote' ? ' · на іншому пристрої' : ''}</button>`).join('') || '<p class="hint">Більше нікого просити.</p>'}</div>
     <div class="row end"><button class="btn ghost" type="button" data-close>Скасувати</button></div>`;
   showModal(draw());
   $('#sheet').onclick = e => {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.tr != null) { st.tr = +b.dataset.tr; $('#sheet').innerHTML = draw(); $('#sheet').querySelectorAll('[data-close]').forEach(x => x.onclick = closeModal); }
     else if (b.dataset.oc) { const u = +b.dataset.oc; st.cards.has(u) ? st.cards.delete(u) : st.cards.add(u); $('#sheet').innerHTML = draw(); $('#sheet').querySelectorAll('[data-close]').forEach(x => x.onclick = closeModal); }
-    else if (b.dataset.h != null) { closeModal(); dispatch({ k: 'help', target: +b.dataset.h, tr: st.tr, cards: [...st.cards] }); }
+    else if (b.dataset.h != null) { closeModal(); const mate = sameTeam(p, G.players[+b.dataset.h]); dispatch({ k: 'help', target: +b.dataset.h, tr: mate ? 0 : st.tr, cards: mate ? [] : [...st.cards] }); }
   };
 }
 function revealFor(p) {
@@ -258,10 +265,10 @@ function revealFor(p) {
 }
 function hideHand() { G.reveal = -1; closeMenu(); renderUI(); const c = cur(); if (c && c.type === 'human' && !G.over) revealFor(c); }
 function openInterfere() {
-  const p = fighter(); const hs = localHumans().filter(q => q !== p && (!G.combat || q.idx !== G.combat.helper));
+  const p = fighter(); const hs = localHumans().filter(q => q !== p && q !== viewerP());
   if (hs.length === 1) { revealFor(hs[0]); return; }
-  showModal(`<h2>Хто втручається?</h2><p>Обери себе — гра покаже лише твої карти. Інші гравці за цим пристроєм свої карти не побачать.</p>
-    <div class="list">${hs.map(h => `<button class="btn" type="button" data-w="${h.idx}"><b style="color:${h.color}">${esc(h.name)}</b></button>`).join('')}</div>
+  showModal(`<h2>Хто грає карту?</h2><p>Обери себе — гра покаже лише твої карти. Інші гравці за цим пристроєм свої карти не побачать.</p>
+    <div class="list">${hs.map(h => `<button class="btn" type="button" data-w="${h.idx}"><b style="color:${h.color}">${esc(h.name)}</b>${G.combat && h.idx === G.combat.helper ? ' · помічник' : ''}</button>`).join('')}</div>
     <div class="row end"><button class="btn ghost" type="button" data-close>Скасувати</button></div>`);
   $('#sheet').querySelectorAll('[data-w]').forEach(b => b.onclick = () => revealFor(G.players[+b.dataset.w]));
 }
@@ -277,6 +284,12 @@ function openRules() {
   <ul><li>Твоя сила — рівень плюс бонуси спорядження. Перемагаєш, якщо сила більша за суму всіх монстрів (воїн — і за нічиєї): отримуєш рівні й скарби з усіх.</li>
   <li>Програєш — грай разові карти, клич на поміч або тікай: кидок кубика 5+ <b>окремо від кожного монстра</b>. Не втік — спрацьовує Халепа саме цього монстра.</li>
   <li>Суперники можуть грати на монстрів підсилювачі й разові карти, <b>підкидати мертвяків</b> (нежить з руки — у бій, де вже є нежить) і грати <b>Приблудну потвору</b>, щоб додати будь-якого монстра з руки.</li></ul>
+  <h3>Командна гра</h3>
+  <ul><li>Гравці діляться на команди (2–3). Рівні кожного рахуються окремо, а команда перемагає, коли <b>сума рівнів</b> її гравців досягне мети: 8 рівнів на гравця (в епіку — 16). Менша команда отримує фору: мінус 1 за кожного гравця, якого їй бракує.</li>
+  <li>Переможний рівень команди — лише за перемогу над монстром, як і в звичайній грі.</li>
+  <li>Ходять через одного: гравець однієї команди, потім іншої.</li>
+  <li>Напарник допомагає в бою безплатно. Поза боєм можна будь-коли віддати напарнику карту з руки чи річ із себе — клацни карту й обери «Віддати напарнику».</li>
+  <li>Своїм шкодити не можна: прокляття, посилення монстрів і перенаправлення бою діють лише на суперників. Зайві карти наприкінці ходу йдуть напарнику, якщо в нього є місце.</li></ul>
   <h3>Нежить, дракони й вогонь</h3>
   <ul><li>На старті можна вибрати, які монстри будуть у колоді: звичайні є завжди, <b>нежить</b> і <b>дракони</b> — за бажанням. Тип видно на плашці під малюнком карти.</li>
   <li><b>Вогняні речі</b> (🔥) дають ще <b>+2 проти нежиті</b>, але <b>на драконів не діють</b> зовсім — їхній бонус пропадає в бою з драконом. Так само вогняні разові карти.</li>
@@ -307,14 +320,16 @@ function openRules() {
 }
 
 /* --- налаштування партії --- */
-const setupState = { types: loadMonTypes(), rows: [{ name: 'Мандрівник', type: 'human', sex: 'm', diff: 2 }, { name: 'Мотря', type: 'bot', sex: 'f', diff: 2 }, { name: 'Опанас', type: 'bot', sex: 'm', diff: 2 }, { name: 'Одарка', type: 'bot', sex: 'f', diff: 2 }], speed: 1, goal: 10, anim: 1.5 };
+const setupState = { types: loadMonTypes(), rows: [{ name: 'Мандрівник', type: 'human', sex: 'm', diff: 2 }, { name: 'Мотря', type: 'bot', sex: 'f', diff: 2 }, { name: 'Опанас', type: 'bot', sex: 'm', diff: 2 }, { name: 'Одарка', type: 'bot', sex: 'f', diff: 2 }], speed: 1, goal: 10, anim: 1.5, teams: false };
+setupState.rows.forEach((r, i) => { r.team = i % 2; });
 /* налаштування стартового екрана памʼятаються на пристрої, поки їх не змінять */
 const SETUP_KEY = 'pdsv-setup';
 function loadSetup(s) {
   try {
     const d = JSON.parse(localStorage.getItem(SETUP_KEY) || 'null'); if (!d) return;
     const rows = (Array.isArray(d.rows) ? d.rows : []).filter(r => r && (r.type === 'human' || r.type === 'bot')).slice(0, 6)
-      .map((r, i) => ({ name: String(r.name || '').trim().slice(0, 16) || (r.type === 'bot' ? BOT_NAMES[i] : `Гравець ${i + 1}`), type: r.type, sex: r.sex === 'f' ? 'f' : 'm', diff: [1, 2, 3].includes(r.diff) ? r.diff : 2 }));
+      .map((r, i) => ({ name: String(r.name || '').trim().slice(0, 16) || (r.type === 'bot' ? BOT_NAMES[i] : `Гравець ${i + 1}`), type: r.type, sex: r.sex === 'f' ? 'f' : 'm', diff: [1, 2, 3].includes(r.diff) ? r.diff : 2, team: [0, 1, 2].includes(r.team) ? r.team : i % 2 }));
+    s.teams = !!d.teams;
     if (rows.length >= 2) s.rows = rows;
     if ([10, 20].includes(d.goal)) s.goal = d.goal;
     if ([1.4, 1, .45].includes(d.speed)) s.speed = d.speed;
@@ -322,12 +337,20 @@ function loadSetup(s) {
   } catch (e) { /* без збережених налаштувань */ }
 }
 function storeSetup(s = setupState) {
-  try { localStorage.setItem(SETUP_KEY, JSON.stringify({ rows: s.rows.filter(r => r.type !== 'remote').map(r => ({ name: r.name, type: r.type, sex: r.sex, diff: r.diff || 2 })), goal: s.goal, speed: s.speed, anim: s.anim })); } catch (e) { }
+  try { localStorage.setItem(SETUP_KEY, JSON.stringify({ rows: s.rows.filter(r => r.type !== 'remote').map(r => ({ name: r.name, type: r.type, sex: r.sex, diff: r.diff || 2, team: r.team | 0 })), teams: !!s.teams, goal: s.goal, speed: s.speed, anim: s.anim })); } catch (e) { }
 }
 loadSetup(setupState);
 function loadMonTypes() { try { const t = JSON.parse(localStorage.getItem('pdsv-montypes') || 'null'); if (t) return { undead: t.undead !== false, dragon: t.dragon !== false }; } catch (e) { } return { undead: true, dragon: true }; }
 function saveMonTypes(t) { try { localStorage.setItem('pdsv-montypes', JSON.stringify(t)); } catch (e) { } }
 const monTypesText = t => ['звичайні', t.undead && 'нежить', t.dragon && 'дракони'].filter(Boolean).join(', ');
+// командна гра: чи є щонайменше дві непорожні команди
+function setupTeamsValid(s = setupState) { return new Set(s.rows.map(r => r.team | 0)).size >= 2; }
+function setupTeamsText(s = setupState) {
+  const per = s.goal > 10 ? 16 : 8;
+  const sizes = [0, 1, 2].map(t => s.rows.filter(r => (r.team | 0) === t).length), mx = Math.max(...sizes);
+  if (!setupTeamsValid(s)) return '<span style="color:var(--bad)">Потрібно щонайменше дві команди.</span>';
+  return sizes.map((n, t) => n ? `${teamTag(t)}: ${n} ${plural(n, 'гравець', 'гравці', 'гравців')}, мета ${Math.max(2, per * n - (mx - n))}` : '').filter(Boolean).join(' · ');
+}
 const FEMALE_NAMES = new Set(['Мотря', 'Одарка', 'Ганна', 'Соломія']);
 let rerenderSetup = null;
 function openSetup() {
@@ -337,15 +360,16 @@ function openSetup() {
     ? `<h3>Гра по мережі</h3><div class="netcode"><span>Код кімнати</span><b>${esc(NET.code)}</b></div>
        <p class="hint">Друзі відкривають цей самий файл, тиснуть «Приєднатися» й вводять код. Підключено: ${s.rows.filter(r => r.type === 'remote').length}.</p>
        <p class="hint net-relay ${NET.relay ? 'on' : ''}">${NET.relay ? '● Сервер-посередник увімкнено: можна грати з різних мереж і мобільного інтернету.' : '○ Сервер-посередник недоступний: надійно працює в одній мережі Wi-Fi, з різних мереж — як пощастить.'}</p>
-       <div class="row" style="margin-top:6px"><button class="btn small ghost" type="button" id="netStop">Закрити кімнату</button></div>`
+       <div class="row" style="margin-top:6px"><button class="btn small" type="button" data-chat-open>Чат</button><button class="btn small ghost" type="button" id="netStop">Закрити кімнату</button></div>`
     : `<h3>Гра по мережі</h3><p class="hint">Грайте з різних пристроїв: один створює кімнату, інші приєднуються за кодом. Можна грати й з різних мереж: якщо пристрої не бачать один одного напряму, дані підуть через сервер-посередник.</p>
        <div class="row" style="margin-top:6px"><button class="btn small" type="button" id="netHost" ${NET.busy ? 'disabled' : ''}>${NET.busy ? 'Створюємо…' : 'Створити кімнату'}</button><button class="btn small" type="button" id="netJoin">Приєднатися до кімнати</button></div>
        ${NET.err ? `<p class="hint" style="color:var(--bad)">${esc(NET.err)}</p>` : ''}`;
   const row = (r, i) => {
     const remote = r.type === 'remote';
-    return `<div class="prow"><span class="dot" style="background:${COLORS[i]}"></span>
+    return `<div class="prow"><span class="dot" style="background:${s.teams ? TEAMS[r.team | 0].color : COLORS[i]}"></span>
       <input class="inp" id="pname-${i}" value="${esc(r.name)}" maxlength="16" ${remote ? 'disabled' : ''} aria-label="Імʼя гравця ${i + 1}">
       <div class="pctl">
+        ${s.teams ? `<div class="seg tseg" role="group" aria-label="Команда">${TEAMS.map((t, k) => `<button type="button" data-team="${k}" data-i="${i}" aria-pressed="${(r.team | 0) === k}" title="Команда: ${t.name}" aria-label="Команда ${t.name}" style="--tc:${t.color}">●</button>`).join('')}</div>` : ''}
         ${remote ? '<span class="tag">на іншому пристрої</span>' : `<div class="seg" role="group" aria-label="Тип гравця"><button type="button" data-t="human" data-i="${i}" aria-pressed="${r.type === 'human'}">Людина</button><button type="button" data-t="bot" data-i="${i}" aria-pressed="${r.type === 'bot'}">Бот</button></div>`}
         ${r.type === 'bot' ? `<select class="inp sel" data-diff="${i}" aria-label="Складність бота">${[1, 2, 3].map(d => `<option value="${d}" ${(r.diff || 2) === d ? 'selected' : ''}>${DIFF[d].name}</option>`).join('')}</select>` : ''}
         <div class="seg" role="group" aria-label="Стать"><button type="button" data-sex="m" data-i="${i}" aria-pressed="${r.sex === 'm'}" ${remote ? 'disabled' : ''} title="Чоловік">Ч</button><button type="button" data-sex="f" data-i="${i}" aria-pressed="${r.sex === 'f'}" ${remote ? 'disabled' : ''} title="Жінка">Ж</button></div>
@@ -357,6 +381,9 @@ function openSetup() {
     <h3>Гравці (2–6)</h3>
     <div id="rows">${s.rows.map(row).join('')}</div>
     <div class="row" style="margin-top:4px"><button class="btn small" type="button" id="addP" ${s.rows.length >= 6 ? 'disabled' : ''}>Додати бота</button><button class="btn small" type="button" id="addH" ${s.rows.length >= 6 ? 'disabled' : ''}>Додати людину</button></div>
+    <h3>Режим</h3>
+    <div class="seg" role="group" aria-label="Режим гри"><button type="button" data-teams="0" aria-pressed="${!s.teams}">Кожен сам за себе</button><button type="button" data-teams="1" aria-pressed="${!!s.teams}">Командна гра</button></div>
+    ${s.teams ? `<p class="hint" style="margin-top:8px">Команда перемагає, коли сума рівнів її гравців досягне мети (${s.goal > 10 ? 16 : 8} на гравця; меншій команді — фора). Переможний рівень — лише за монстра. Напарники допомагають безплатно, передають одне одному речі й не можуть шкодити своїм.<br>${setupTeamsText(s)}</p>` : ''}
     <p class="hint" style="margin-top:6px">Складність бота: легкий частіше допомагає й рідко шкодить, важкий торгується, мстить і полює на лідера. Кілька людей за одним пристроєм грають по черзі.</p>
     ${netBlock()}
     <h3>Мета</h3>
@@ -384,9 +411,11 @@ function openSetup() {
       const b = e.target.closest('button'); if (!b) return;
       if (b.dataset.t) { save(); s.rows[+b.dataset.i].type = b.dataset.t; rerender(); }
       else if (b.dataset.sex) { save(); s.rows[+b.dataset.i].sex = b.dataset.sex; rerender(); }
+      else if (b.dataset.team) { save(); s.rows[+b.dataset.i].team = +b.dataset.team; rerender(); sendLobby(); }
+      else if (b.dataset.teams) { save(); s.teams = b.dataset.teams === '1'; rerender(); sendLobby(); }
       else if (b.dataset.del) { save(); const r = s.rows.splice(+b.dataset.del, 1)[0]; if (r && r.conn) { try { r.conn.send({ t: 'full', reason: 'Господар прибрав тебе з кімнати.' }); r.conn.close(); } catch (e) { } } rerender(); sendLobby(); }
-      else if (b.id === 'addP') { save(); const used = new Set(s.rows.map(r => r.name)); const nm = BOT_NAMES.find(n => !used.has(n)) || 'Бот'; s.rows.push({ name: nm, type: 'bot', sex: FEMALE_NAMES.has(nm) ? 'f' : 'm', diff: 2 }); rerender(); sendLobby(); }
-      else if (b.id === 'addH') { save(); s.rows.push({ name: `Гравець ${s.rows.length + 1}`, type: 'human', sex: 'm', diff: 2 }); rerender(); sendLobby(); }
+      else if (b.id === 'addP') { save(); const used = new Set(s.rows.map(r => r.name)); const nm = BOT_NAMES.find(n => !used.has(n)) || 'Бот'; s.rows.push({ name: nm, type: 'bot', sex: FEMALE_NAMES.has(nm) ? 'f' : 'm', diff: 2, team: s.rows.length % 2 }); rerender(); sendLobby(); }
+      else if (b.id === 'addH') { save(); s.rows.push({ name: `Гравець ${s.rows.length + 1}`, type: 'human', sex: 'm', diff: 2, team: s.rows.length % 2 }); rerender(); sendLobby(); }
       else if (b.dataset.sp) { save(); s.speed = +b.dataset.sp; rerender(); }
       else if (b.dataset.goal) { save(); s.goal = +b.dataset.goal; rerender(); }
       else if (b.dataset.an) { save(); s.anim = +b.dataset.an; ANIM = s.anim; rerender(); }
@@ -395,7 +424,7 @@ function openSetup() {
       else if (b.id === 'netJoin') { save(); openJoin(); }
       else if (b.id === 'netStop') { save(); stopHosting(); rerender(); }
       else if (b.id === 'rulesB') { save(); openRules(); const back = $('#sheet').querySelector('[data-close]'); back.textContent = 'Назад'; back.onclick = () => openSetup(); }
-      else if (b.id === 'startB') { save(); storeSetup(); closeModal(); newGame(); }
+      else if (b.id === 'startB') { save(); if (s.teams && !setupTeamsValid(s)) { toast('Для командної гри потрібні щонайменше дві команди'); return; } storeSetup(); closeModal(); newGame(); }
       else if (b.id === 'setupVer') { save(); openChangelog(); }
       else if (b.id === 'setupBack') { save(); storeSetup(); if (NET.role === 'host') stopHosting(); closeModal(); }
     };
@@ -415,15 +444,25 @@ async function newGame() {
   syncDeck('door'); syncDeck('treasure'); syncDiscardTop('door'); syncDiscardTop('treasure');
   NET.conns.clear();
   s.rows = s.rows.filter(r => r.type !== 'remote' || (r.conn && r.conn.open !== false && !r.conn._closed));
-  G.players = s.rows.map((r, i) => ({ idx: i, name: r.name, type: r.type, sex: r.sex || 'm', diff: r.diff || 2, color: COLORS[i], level: 1, gold: 0, hand: [], gear: [], raceCard: null, raceCard2: null, clsCard2: null, dualRace: null, dualCls: null, curses: [], clsCard: null, died: false, mem: {} }));
-  s.rows.forEach((r, i) => { if (r.type === 'remote' && r.conn) { r.conn._pidx = i; NET.conns.set(i, r.conn); G.players[i].tok = makeTok(); G.players[i]._row = r; } });
+  // командна гра: розсаджуємо через одного (А1, Б1, А2, Б2…), щоб команда не ходила двічі поспіль
+  const teamsOn = !!s.teams && setupTeamsValid(s);
+  let rows = s.rows;
+  if (teamsOn) {
+    const groups = [0, 1, 2].map(t => s.rows.filter(r => (r.team | 0) === t)).filter(g => g.length).sort((x, y) => y.length - x.length);
+    rows = []; while (groups.some(g => g.length)) groups.forEach(g => { if (g.length) rows.push(g.shift()); });
+  }
+  G.teams = teamsOn;
+  const shade = {};
+  G.players = rows.map((r, i) => ({ idx: i, team: teamsOn ? r.team | 0 : i, name: r.name, type: r.type, sex: r.sex || 'm', diff: r.diff || 2, color: teamsOn ? TEAM_SHADES[r.team | 0][(shade[r.team | 0] = (shade[r.team | 0] || 0) + 1) - 1] : COLORS[i], level: 1, gold: 0, hand: [], gear: [], raceCard: null, raceCard2: null, clsCard2: null, dualRace: null, dualCls: null, curses: [], clsCard: null, died: false, mem: {} }));
+  rows.forEach((r, i) => { if (r.type === 'remote' && r.conn) { r.conn._pidx = i; NET.conns.set(i, r.conn); G.players[i].tok = makeTok(); G.players[i]._row = r; } });
   G.players.forEach(buildSeat);
   const firstHuman = G.players.find(p => p.type === 'human');
   G.viewer = firstHuman ? firstHuman.idx : -1;
   cam.az = firstHuman ? seatAngle(firstHuman.idx) : 0; cam.userAz = 0; cam.userEl = 0;
   NET.conns.forEach((c, i) => sendConn(c, { t: 'start', you: i, tok: G.players[i].tok }));
   renderUI();
-  log(`Нова гра до ${G.goal}-го рівня. Монстри: ${monTypesText(G.types || setupState.types)}. Кожен отримує 4 карти дверей і 4 карти скарбів.`, 'turn');
+  if (G.teams) log(`Командна гра: ${teamIds().map(t => `${teamTag(t)} (${teamMembers(t).map(q => esc(q.name)).join(', ')}) — мета ${teamTarget(t)}`).join(' · ')}. Рівні в команді сумуються.`, 'turn');
+  log(`Нова гра${G.teams ? (G.goal > 10 ? ' (епік)' : '') : ` до ${G.goal}-го рівня`}. Монстри: ${monTypesText(G.types || setupState.types)}. Кожен отримує 4 карти дверей і 4 карти скарбів.`, 'turn');
   const jobs = []; let k = 0; const gidAtDeal = G.gid;
   const soloHuman = G.players.filter(q => q.type === 'human').length === 1;
   for (let r = 0; r < 4; r++) for (const deck of ['door', 'treasure']) for (const p of G.players) {
