@@ -499,3 +499,22 @@ body.in-menu #ui{visibility:hidden}
 .ccount{display:inline-block;padding:0 6px;border-radius:8px;background:#8a2242;color:#fff;font-size:11px;font-weight:700;margin-left:4px;cursor:help}
 .bcur{flex:0 0 auto;padding:0 5px;border-radius:7px;background:#8a2242;color:#fff;font-size:10.5px;font-weight:700;line-height:16px;cursor:help}
 .bcur[hidden]{display:none}
+
+/* екран «Усі карти» */
+.sheet.gal{width:min(1180px,calc(100vw - 32px))}
+.gal-bar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin:10px 0 14px;position:sticky;top:-1px;z-index:2;background:var(--panel-solid,#1c1410);padding:8px 0}
+.gal-bar .seg small{opacity:.6;font-size:11px;margin-left:2px}
+.gal-q{flex:1 1 220px;min-width:180px}
+.gal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:18px 12px;justify-items:center}
+.gal-it{position:relative}
+.gal-it .card{--k:1.15;cursor:zoom-in}
+.gal-it .card:hover{transform:translateY(-3px)}
+.gal-n{position:absolute;top:-8px;right:-8px;background:var(--brass);color:#23170b;font:700 11px/1 var(--f-ui);padding:4px 6px;border-radius:9px;box-shadow:0 0 0 2px #1c1410}
+.gal-zoom{position:fixed;inset:0;z-index:5;background:rgba(8,5,4,.93);display:flex;align-items:center;justify-content:center;padding:16px;cursor:zoom-out}
+.gal-zoom[hidden]{display:none}
+.gal-zc{display:flex;flex-direction:column;gap:14px;align-items:center;max-width:760px}
+.gal-zc .hint{text-align:center}
+.gal-zc .card.big{--k:2.2}
+.gal-zt{max-width:300px;color:var(--text);font-size:14px;line-height:1.45}
+.gal-zt b{font-family:var(--f-display);font-weight:400;font-size:26px;color:var(--brass)}
+@media (max-width:560px){ .gal-grid{grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:14px 8px} .gal-it .card{--k:.95} .gal-zc .card.big{--k:1.7} }

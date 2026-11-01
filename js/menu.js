@@ -41,6 +41,7 @@ function buildMainMenu() {
           <button type="button" class="mm-btn primary" data-mm="rejoin" hidden>Повернутися в гру</button>
           <button type="button" class="mm-btn" data-mm="join">Приєднатися до гри</button>
           <button type="button" class="mm-btn" data-mm="rules">Правила</button>
+          <button type="button" class="mm-btn" data-mm="cards">Усі карти</button>
           <div class="mm-row">
             <button type="button" class="mm-btn small" data-mm="table">Стіл і графіка</button>
             <button type="button" class="mm-btn small" data-mm="sound">Звук</button>
@@ -117,8 +118,73 @@ function menuAction(a) {
     case 'join': openJoin(); break;
     case 'rejoin': manualRejoin(); break;
     case 'rules': openRules(); break;
+    case 'cards': openGallery(); break;
     case 'table': openSkins(); break;
     case 'sound': openSound(); break;
     case 'ver': openChangelog(); break;
   }
+}
+
+/* ============================== УСІ КАРТИ ==============================
+   Окремий екран із головного меню: усі карти гри з фільтрами й пошуком. Клацни карту — збільшиться. */
+const GAL = { cat: 'all', q: '', list: null };
+const GAL_CATS = [
+  ['all', 'Усі'], ['monster', 'Монстри'], ['curse', 'Прокляття'], ['rc', 'Раси й класи'], ['gear', 'Речі'],
+  ['shot', 'Разові'], ['fight', 'Для бою'], ['coop', 'Похід на Боса']
+];
+function galCat(c) {
+  if (c.boss || c.guard || ['key', 'alarm', 'horn'].includes(c.kind)) return 'coop';
+  if (c.kind === 'monster') return 'monster';
+  if (c.kind === 'curse') return 'curse';
+  if (['race', 'class', 'dual'].includes(c.kind)) return 'rc';
+  if (c.kind === 'gear') return 'gear';
+  if (['mod', 'wander'].includes(c.kind)) return 'fight';
+  return 'shot';
+}
+function galleryCards() {
+  if (GAL.list) return GAL.list;
+  const all = { undead: true, dragon: true };
+  const cards = [...buildDoorDeck(true, all), ...buildTreasureDeck(all), ...coopDoorCards(), ...coopTreasureCards()];
+  GUARDS.forEach(g => cards.push(mk({ deck: 'door', kind: 'monster', guard: true, name: g.name, art: g.art, lvl: '13–17', treasures: 4, levels: 1, vs: null, flavor: g.flavor, bad: { ...g.bad, text: g.bt } })));
+  BOSSES.forEach(b => cards.push(mk({ deck: 'door', kind: 'monster', boss: true, name: b.name, art: b.art, lvl: '★', treasures: 0, levels: 0, dragon: !!b.dragon, undead: !!b.undead, vs: null, flavor: b.flavor, ability: b.ability, bad: { t: 'boss', text: 'Програш: кожен втрачає рівень, Загроза +3.' } })));
+  const seen = new Map();
+  for (const c of cards) { const k = c.kind + '|' + c.name; if (seen.has(k)) seen.get(k).n++; else seen.set(k, { c, n: 1, cat: galCat(c) }); }
+  const order = ['monster', 'curse', 'rc', 'gear', 'shot', 'fight', 'coop'];
+  const lv = c => typeof c.lvl === 'number' ? c.lvl : 99;
+  const sub = c => c.guard ? 0 : c.boss ? 1 : ['key', 'alarm', 'horn', 'race', 'dual', 'class'].indexOf(c.kind) + 2;
+  GAL.list = [...seen.values()].sort((a, b) => order.indexOf(a.cat) - order.indexOf(b.cat) || sub(a.c) - sub(b.c) || lv(a.c) - lv(b.c) || (b.c.bonus || 0) - (a.c.bonus || 0) || a.c.name.localeCompare(b.c.name, 'uk'));
+  return GAL.list;
+}
+function openGallery() {
+  const list = galleryCards();
+  const draw = () => {
+    const q = GAL.q.trim().toLowerCase();
+    const shown = list.filter(x => (GAL.cat === 'all' || x.cat === GAL.cat) && (!q || x.c.name.toLowerCase().includes(q) || cardInfo(x.c).text.toLowerCase().includes(q)));
+    const total = n => n === 'all' ? list.length : list.filter(x => x.cat === n).length;
+    return `<h2>Усі карти</h2>
+      <p class="hint">Кожна карта гри — від монстрів до вартових лігва. Клацни карту, щоб роздивитися ближче. Число в кутику «×2» — скільки таких карт у колоді.</p>
+      <div class="gal-bar"><div class="seg wrap" role="group" aria-label="Тип карт">${GAL_CATS.map(([k, l]) => `<button type="button" data-gc="${k}" aria-pressed="${GAL.cat === k}">${l} <small>${total(k)}</small></button>`).join('')}</div>
+      <input class="inp gal-q" id="galQ" type="search" placeholder="Пошук за назвою чи текстом…" value="${esc(GAL.q)}" aria-label="Пошук карт"></div>
+      <div class="gal-grid" id="galGrid">${shown.map(x => `<div class="gal-it">${cardHTML(x.c)}${x.n > 1 ? `<span class="gal-n">×${x.n}</span>` : ''}</div>`).join('') || '<p class="empty">Нічого не знайдено.</p>'}</div>
+      <div class="gal-zoom" id="galZoom" hidden></div>
+      <div class="row end"><button class="btn primary" type="button" data-close>Назад</button></div>`;
+  };
+  showModal(draw(), 'wide gal');
+  const sheet = $('#sheet');
+  const redraw = () => { const y = sheet.scrollTop; sheet.innerHTML = draw(); sheet.scrollTop = y; bind(); };
+  const bind = () => {
+    sheet.querySelectorAll('[data-close]').forEach(b => b.onclick = closeModal);
+    const qi = $('#galQ'); qi.oninput = () => { GAL.q = qi.value; const pos = qi.selectionStart; redraw(); const n = $('#galQ'); n.focus(); n.setSelectionRange(pos, pos); };
+  };
+  sheet.onclick = e => {
+    const z = $('#galZoom');
+    if (e.target.closest('#galZoom')) { z.hidden = true; return; }
+    const b = e.target.closest('[data-gc]'); if (b) { GAL.cat = b.dataset.gc; redraw(); return; }
+    const card = e.target.closest('.gal-grid .card'); if (!card) return;
+    const x = list.find(it => it.c.uid === +card.dataset.uid); if (!x) return;
+    z.innerHTML = `<div class="gal-zc">${cardHTML(x.c, 'big')}<p class="hint">${x.n > 1 ? `У колоді: ${x.n} шт. · ` : ''}${GAL_CATS.find(([k]) => k === x.cat)[1]} · клацни будь-де, щоб закрити</p></div>`;
+    z.hidden = false;
+  };
+  sheet.onkeydown = e => { if (e.key === 'Escape' && !$('#galZoom').hidden) { e.stopPropagation(); $('#galZoom').hidden = true; } };
+  bind();
 }
