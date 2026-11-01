@@ -21,7 +21,7 @@ async function startTurn() {
   if (G.over || NET.role === 'client' || G.phase !== 'next') return;
   if (G.pendingSetup) { G.pendingSetup = false; openSetup(); return; }
   applyReclaims();
-  const p = cur(); G.phase = 'start'; G.combat = null; forgetTick(p);
+  const p = cur(); G.phase = 'start'; G.combat = null; forgetTick(p); G.turnNo = (G.turnNo || 0) + 1;
   G.players.forEach(plateDraw);
   log(`Хід: ${nameTag(p)} · рівень ${p.level}`, 'turn');
   banner(`Хід: ${p.name}`, p.color); sfx('turn'); netAll({ t: 'fx', type: 'banner', a: { text: `Хід: ${p.name}`, color: p.color } });
@@ -157,6 +157,41 @@ async function addMonster(p, mc, via) {
   await roar(m); renderUI();
   if (p !== f && p.idx !== cb.helper && !sameTeam(p, f)) await helperReact();
 }
+/* Злодюжка: удар у спину — скинута карта дає бійцю −2 (до 3 разів за бій) */
+async function thiefStab(p, c) {
+  const cb = G.combat; if (!cb || !c) return;
+  const f = fighter(); removeFromHand(p, c);
+  cb.stab = cb.stab || {}; cb.stab[p.idx] = (cb.stab[p.idx] || 0) + 1;
+  log(`${nameTag(p)} (Злодюжка) бʼє в спину ${nameTag(f)}, скинувши «${esc(c.name)}»: −2.`);
+  memo(f, p, -2); if (cb.helper != null) memo(G.players[cb.helper], p, -1);
+  sfx('curse'); say(`${p.name} бʼє в спину!`, 1600);
+  const m = cardMesh(c); scene.add(m); renderUI();
+  await fly(m, fromHandOf(p), discardPose(c.deck), 550, 1.4, { owner: p.idx });
+  hitFx(f); disposeMesh(m); discard(c); renderUI();
+  if (!sameTeam(p, f)) await helperReact();
+}
+/* Злодюжка: раз за хід спробувати поцупити невелику річ */
+const stealable = (t, c) => !c.big && c.slot !== 'body';
+async function doSteal(p, t, c) {
+  if (!t || !c || !t.gear.includes(c)) return;
+  p.stoleTurn = G.turnNo;
+  log(`${nameTag(p)} (Злодюжка) намагається поцупити в ${nameTag(t)} «${esc(c.name)}»…`);
+  memo(t, p, -3); renderUI();
+  const r = await rollDie(p);
+  say(`Кубик · ${p.name}: ${r}. Треба 4+ — ${r >= 4 ? 'вийшло!' : 'спіймали!'}`, 2400);
+  await wait(1100);
+  if (r >= 4) {
+    t.gear.splice(t.gear.indexOf(c), 1); syncSeat(t);
+    const m = cardMesh(c); scene.add(m);
+    await fly(m, seatPose(t.idx, true), toHandOf(p), 650, 1.6, { owner: p.idx }); disposeMesh(m);
+    giveCard(p, c); sfx('coins');
+    log(`${nameTag(p)} цупить «${esc(c.name)}»!`); tell(t, `${p.name} поцупив у тебе «${c.name}»`, 2600);
+  } else {
+    log(`${nameTag(p)} спіймали на гарячому!`); hitFx(p);
+    await changeLevel(p, -1);
+  }
+  renderUI();
+}
 async function wizardDiscard(p, c) {
   const cb = G.combat; removeFromHand(p, c); cb.wiz++;
   log(`${nameTag(p)} (Маг) спалює карту «${esc(c.name)}»: +2.`);
@@ -184,6 +219,12 @@ function meddleOptions(b) {
     if (c.kind === 'oneshot') { const toMon = c.bonus > 0, ty = combatTypes(cb), pw = Math.abs(shotVal(c, ty, !toMon)); if (pw) opts.push({ pw, run: () => playIntoCombat(b, c, toMon ? 'mon' : 'hero') }); }
     if (c.kind === 'monster' && c.undead && undeadIn) opts.push({ pw: monLvl(c, p) + vsBonus(c, p), mon: true, run: () => addMonster(b, c, null) });
   });
+  const left = hasCls(b, 'thief') && p !== b ? 3 - ((cb.stab || {})[b.idx] || 0) : 0;
+  const junk = left ? b.hand.filter(c => !['oneshot', 'flee', 'levelup', 'redirect'].includes(c.kind)).length : 0;
+  if (left && junk) {
+    opts.push({ pw: 2, run: () => thiefStab(b, pickJunk(b)) });
+    const k = Math.min(left, junk); if (k > 1) opts.push({ pw: 2 * k, run: async () => { for (let i = 0; i < k && G.combat; i++) { const j = pickJunk(b); if (!j) break; await thiefStab(b, j); } } });
+  }
   const w = b.hand.find(c => c.kind === 'wander');
   if (w) b.hand.filter(c => c.kind === 'monster').forEach(mc => opts.push({ pw: monLvl(mc, p) + vsBonus(mc, p), mon: true, run: () => addMonster(b, mc, w) }));
   return opts;
@@ -220,7 +261,7 @@ async function botsInterfere() {
   }
   return any;
 }
-function canMeddleCards(h) { const und = G.combat && G.combat.mons.some(x => x.c.undead); return h.hand.some(c => ['mod', 'oneshot', 'wander', 'redirect'].includes(c.kind) || (c.kind === 'monster' && c.undead && und)); }
+function canMeddleCards(h) { const und = G.combat && G.combat.mons.some(x => x.c.undead); if (G.combat && hasCls(h, 'thief') && ((G.combat.stab || {})[h.idx] || 0) < 3 && h.hand.some(c => !['oneshot', 'flee'].includes(c.kind))) return true; return h.hand.some(c => ['mod', 'oneshot', 'wander', 'redirect'].includes(c.kind) || (c.kind === 'monster' && c.undead && und)); }
 async function interferenceWindow() {
   const cb = G.combat, p = fighter();
   const humans = G.players.filter(h => isPerson(h) && !h.offline && h !== p && !sameTeam(h, p) && h.idx !== cb.helper && !cb.passed.has(h.idx) && canMeddleCards(h));
@@ -487,7 +528,9 @@ function combatEnded() { if (G.assist && G.assist.resolve) G.assist.resolve('end
 async function waitCombatEnd() { while (G.combat && !G.over) { G.busy = false; renderUI(); await new Promise(r => combatWaiters.push(r)); await wait(80); } G.busy = true; renderUI(); }
 
 async function winCombat() {
-  const cb = G.combat, p = fighter(); const tr = Math.max(0, treasureCount() - curseN(p, 'sack')), gain = levelsGain();
+  const cb = G.combat, p = fighter(); const tr = Math.max(0, treasureCount() - curseN(p, 'sack'));
+  const s0 = sides(), orcBonus = hasRace(p, 'orc') && s0.hero - s0.mon >= 10 ? 1 : 0, gain = levelsGain() + orcBonus;
+  if (orcBonus) log(`${nameTag(p)} (Орк) розносить монстра з перевагою ${s0.hero - s0.mon}: +1 рівень зверху!`);
   if (curseN(p, 'sack') && treasureCount()) log(`Прокляття «Дірявий мішок»: ${nameTag(p)} отримує на ${Math.min(treasureCount(), curseN(p, 'sack'))} скарб менше.`);
   const helper = cb.helper != null ? G.players[cb.helper] : null;
   const names = monNames();
@@ -556,7 +599,7 @@ async function applyBad(q, bad) {
   const lost = [];
   const take = items => items.forEach(g => { q.gear.splice(q.gear.indexOf(g), 1); discard(g); lost.push(g.name); });
   switch (bad.t) {
-    case 'level': { const d = Math.min(bad.n, q.level - 1); if (d > 0) await changeLevel(q, -d); else log(`${nameTag(q)} і так на 1-му рівні.`); break; }
+    case 'level': { let d = Math.min(bad.n, q.level - 1); if (d > 0 && hasRace(q, 'orc')) { d--; log(`${nameTag(q)} (Орк) товстошкірий: втрачає на 1 рівень менше.`); } if (d > 0) await changeLevel(q, -d); else if (q.level <= 1) log(`${nameTag(q)} і так на 1-му рівні.`); break; }
     case 'slot': take(q.gear.filter(g => g.slot === bad.slot)); break;
     case 'gear': take(q.gear.slice()); break;
     case 'best': { const b = q.gear.slice().sort((x, y) => y.value - x.value)[0]; if (b) take([b]); break; }
@@ -834,9 +877,10 @@ async function botGiftMates(p) {
 async function unequip(p, c) { p.gear.splice(p.gear.indexOf(c), 1); giveCard(p, c); syncSeat(p); renderUI(); }
 async function doSell(p, c) {
   if (p.gear.includes(c)) p.gear.splice(p.gear.indexOf(c), 1); else removeFromHand(p, c);
-  const price = sellPrice(p, c);
+  const dbl = halflingDouble(p), price = sellPrice(p, c);
+  if (dbl) p.dblTurn = G.turnNo;
   discard(c); p.gold += price; sfx('coins');
-  log(`${nameTag(p)} продає «${esc(c.name)}» за ${price} зол.${price < c.value ? ' (інфляція!)' : ''}`);
+  log(`${nameTag(p)} продає «${esc(c.name)}» за ${price} зол.${dbl ? ' (напіврослик: удвічі дорожче!)' : ''}${curseN(p, 'inflation') ? ' (інфляція!)' : ''}`);
   let gained = 0; while (p.gold >= 1000 && gained < levelsToWin(p) - 1) { p.gold -= 1000; gained++; }
   syncSeat(p); renderUI();
   burst(p.seat.anchor.clone().setY(1), ['#ffd36b', '#f5c04a'], 40, 2.5, .9);
@@ -951,6 +995,11 @@ async function botManage(p, setupOnly = false) {
   await botGiftMates(p); if (G.over) return;
   await coopBotManage(p); if (G.over) return;
   if (setupOnly) return;
+  if (hasCls(p, 'thief') && cur() === p && !G.combat && p.stoleTurn !== G.turnNo && p.level > 1 && Math.random() < [0, .25, .45, .6][p.diff || 2]) {
+    const opts = G.players.filter(q => q !== p && !sameTeam(p, q)).flatMap(q => q.gear.filter(c => stealable(q, c)).map(c => ({ q, c, s: c.value / 100 + grudgeOf(p, q) + (gearScore(p, gearAfter(p, c)) - gearScore(p, p.gear)) * 2 })));
+    const best = opts.sort((a, b) => b.s - a.s)[0];
+    if (best && best.s >= 4) { await botDelay(400); await doSteal(p, best.q, best.c); if (G.over) return; await botEquipBest(p); }
+  }
   for (const c of p.hand.filter(x => x.kind === 'levelup')) if (levelsToWin(p) > 1) { await botDelay(250); await doLevelUp(p, c); }
   if (cur() === p && G.phase !== 'combat' && levelsToWin(p) > 1) {
     const spare = p.hand.filter(c => c.kind === 'gear' && (canEquip(p, c) || gearScore(p, gearAfter(p, c)) <= gearScore(p, p.gear)));

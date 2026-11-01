@@ -21,7 +21,8 @@ const clsShield = p => !!p.dualCls && !p.clsCard2;
 /* тривалі прокляття */
 const curseN = (p, k) => (p.curses || []).filter(c => c.bad && c.bad.p === k).length;
 const curseStr = p => curseN(p, 'monday') * 2 + curseN(p, 'sneeze');
-const sellPrice = (p, c) => curseN(p, 'inflation') ? Math.floor((c.value || 0) / 2 / 50) * 50 : (c.value || 0);
+const halflingDouble = p => hasRace(p, 'halfling') && p.dblTurn !== G.turnNo;
+const sellPrice = (p, c) => (curseN(p, 'inflation') ? Math.floor((c.value || 0) / 2 / 50) * 50 : (c.value || 0)) * (halflingDouble(p) ? 2 : 1);
 const nameTag = p => `<b style="color:${p.color}">${esc(p.name)}</b>`;
 
 function usable(p, c) { if (!c.req) return true; if (c.req.sex) return p.sex === c.req.sex; if (c.req.race) return hasRace(p, c.req.race); if (c.req.cls) return hasCls(p, c.req.cls); return true; }
@@ -131,6 +132,7 @@ function sides() {
   // бій з Босом: бʼється весь загін
   const allies = cb.boss ? G.players.filter(q => q !== p) : [];
   allies.forEach(q => { hero += baseStr(q) + adjSum(typeAdj(q, ty)) + (hasCls(q, 'cleric') && undead ? 3 : 0); });
+  hero -= 2 * sum(Object.values(cb.stab || {}), n => n); // удари в спину від злодюжок
   hero = Math.max(0, hero);
   let mon = curseN(p, 'magnet') * 2 + sum(cb.mons, x => monLvl(x.c, p) + vsBonus(x.c, p)) + sum(cb.mods, c => c.bonus) + sum(cb.mShots, c => shotVal(c, ty, false));
   if (G.coop) mon += (cb.bossX || 0) + (G.coop.threat >= Math.ceil(G.coop.max * 2 / 3) ? 4 : G.coop.threat >= Math.ceil(G.coop.max / 3) ? 2 : 0);

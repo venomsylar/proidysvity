@@ -10,6 +10,7 @@ const flatActs = list => list.flatMap(a => a.sub ? a.sub : [a]);
 function actAllowed(p, act) {
   if (!act || G.over) return false;
   if (act.k === 'pass') return waitingOn().includes(p);
+  if (act.k === 'steal') { const t = G.players[act.target]; return canSteal(p) && !!t && !sameTeam(p, t) && t !== p && t.gear.some(c => c.uid === act.item && stealable(t, c)); }
   if (act.k === 'assault') return !!G.coop && G.coop.lair && !G.busy && !G.combat && G.phase === 'start' && cur() === p;
   if (act.k === 'bossReady') return !!G.bossWait && G.bossWait.waiting.includes(p.idx);
   if (act.k === 'assistDone') return !!G.assist && G.assist.who === p.idx;
@@ -26,6 +27,15 @@ function prepReady(p) {
   log(`${nameTag(p)} спорядився і готовий.`);
   if (!G.prepWait.length && G.prepDone) { const d = G.prepDone; G.prepDone = null; d(); }
   renderUI();
+}
+const canSteal = p => !!p && hasCls(p, 'thief') && !G.busy && !G.over && !G.combat && p === cur() && ['start', 'afterKick', 'charity'].includes(G.phase) && p.stoleTurn !== G.turnNo && G.players.some(q => q !== p && !sameTeam(p, q) && q.gear.some(c => stealable(q, c)));
+function openSteal() {
+  const v = viewerP(); if (!canSteal(v)) return;
+  const rows = G.players.filter(q => q !== v && !sameTeam(v, q)).map(q => ({ q, items: q.gear.filter(c => stealable(q, c)) })).filter(r => r.items.length);
+  showModal(`<h2>Поцупити річ</h2><p>Раз за хід Злодюжка може спробувати поцупити невелику річ (не броню й не велику). Кидок кубика 4+ — річ твоя, інакше тебе ловлять: −1 рівень.</p>
+    ${rows.map(r => `<h3 style="color:${r.q.color}">${esc(r.q.name)}</h3><div class="ochips">${r.items.map(c => `<button type="button" class="ochip" data-st="${r.q.idx}:${c.uid}">${artIcon(c)} ${esc(c.name)}${c.bonus ? ' +' + c.bonus : ''} · ${c.value} зол.</button>`).join('')}</div>`).join('')}
+    <div class="row end"><button class="btn ghost" type="button" data-close>Передумав</button></div>`);
+  $('#sheet').querySelectorAll('[data-st]').forEach(b => b.onclick = () => { const [t, u] = b.dataset.st.split(':').map(Number); closeModal(); dispatch({ k: 'steal', target: t, item: u }); });
 }
 const SIDE_ACTS = new Set(['equip', 'unequip', 'rc', 'dual', 'rc2hand', 'droprc', 'gift']);
 function dispatch(act, asIdx = G.viewer) {
@@ -77,6 +87,8 @@ async function execAct(p, a) {
     case 'mod': return playIntoCombat(p, c, 'mon');
     case 'smoke': return playSmoke(p, c);
     case 'wizard': return wizardDiscard(p, c);
+    case 'stab': return thiefStab(p, c);
+    case 'steal': { const t = G.players[a.target]; return doSteal(p, t, t && t.gear.find(x => x.uid === a.item)); }
     case 'undead': return addMonster(p, c, null);
     case 'wander': return addMonster(p, p.hand.find(x => x.uid === a.mon), c);
     case 'redirect': return redirectCombat(p, c, G.players[a.target]);
@@ -159,6 +171,7 @@ function cardActions(c, where, v = viewerP()) {
       if (free && !inCombat && G.players.some(q => q !== v && !sameTeam(v, q))) A('Наслати прокляття…', null, { sub: G.players.filter(q => q !== v && !sameTeam(v, q)).map(q => ({ label: `${q.name} · рів. ${q.level}`, act: { k: 'curse', uid: c.uid, target: q.idx } })) }); break;
   }
   if (free && !inCombat) A('Скинути в скид', { k: 'discard', uid: c.uid });
+  if (inCombat && combatOk && !isFighter && !isHelper && !friend && !cb.boss && hasCls(v, 'thief') && ((cb.stab || {})[v.idx] || 0) < 3 && !['oneshot', 'flee'].includes(c.kind) && where === 'hand') A(`Удар у спину: скинути, ${fighter().name} −2 (Злодюжка, ${((cb.stab || {})[v.idx] || 0)}/3)`, { k: 'stab', uid: c.uid });
   if (isFighter && free && hasCls(v, 'wizard') && cb.wiz < 3 && !['oneshot', 'flee'].includes(c.kind)) A('Спалити заради +2 (Маг)', { k: 'wizard', uid: c.uid });
   return acts;
 }
@@ -213,6 +226,7 @@ function dockActs(v) {
   if (G.phase === 'afterKick') acts.push({ label: 'Обшукати кімнату', act: { k: 'loot' }, cls: 'primary' });
   if (G.phase === 'charity') acts.push({ label: v.hand.length > handLimit(v) ? 'Завершити хід…' : 'Завершити хід', act: { k: 'end' }, pick: true, cls: 'primary' });
   if (canTrade(v)) acts.push({ label: 'Обмін…', fn: openTrade });
+  if (canSteal(v)) acts.push({ label: 'Поцупити…', fn: openSteal });
   return acts;
 }
 function hintFor(c) {

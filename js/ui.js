@@ -217,6 +217,7 @@ function renderCombat() {
   const mods = [...cb.mods, ...cb.mShots].map(c => `<span class="tag ${shotVal(c, ty, false) < 0 ? 'h' : 'm'}">${esc(c.name)} ${sgn(shotVal(c, ty, false))}</span>`)
     .concat(cb.pShots.map(c => `<span class="tag ${c.bonus < 0 ? 'm' : 'h'}">${esc(c.name)} ${sgn(shotVal(c, ty, true))}${c.fire && ty.dragon && c.bonus > 0 ? ' (вогонь не діє)' : ''}</span>`))
     .concat(cb.wiz ? [`<span class="tag h">Магія +${cb.wiz * 2}</span>`] : [])
+    .concat(Object.entries(cb.stab || {}).filter(([, n]) => n).map(([i, n]) => `<span class="tag m">🥷 ${esc((G.players[i] || {}).name || '')}: удар у спину −${n * 2}</span>`))
     .concat(h ? [`<span class="tag h">${esc(h.name)} +${baseStr(h)}${cb.offer ? ` · обіцяно ${cb.offer.tr} ${plural(cb.offer.tr, 'скарб', 'скарби', 'скарбів')}` : ''}</span>`] : []);
   if (cb.mons.length > 1) mods.unshift(...cb.mons.map(x => `<span class="tag m">${artIcon(x.c)} ${esc(x.c.name)} ${monLvl(x.c, p)}${x.c.dragon ? ' · 🐉 дракон' : ''}${x.c.undead ? ' · 💀 нежить' : ''}</span>`));
   [p, h].filter(Boolean).forEach(q => {
