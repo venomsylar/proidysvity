@@ -10,6 +10,8 @@ const flatActs = list => list.flatMap(a => a.sub ? a.sub : [a]);
 function actAllowed(p, act) {
   if (!act || G.over) return false;
   if (act.k === 'pass') return waitingOn().includes(p);
+  if (act.k === 'assault') return !!G.coop && G.coop.lair && !G.busy && !G.combat && G.phase === 'start' && cur() === p;
+  if (act.k === 'bossReady') return !!G.bossWait && G.bossWait.waiting.includes(p.idx);
   if (act.k === 'assistDone') return !!G.assist && G.assist.who === p.idx;
   if (act.k === 'ready') return G.phase === 'prep' && (G.prepWait || []).includes(p.idx);
   if (act.k === 'gift') { const f = findOwnCard(p, act.uid), t = G.players[act.target]; return !!f && !!t && sameTeam(p, t) && !G.over && !G.combat && !['setup', 'deal'].includes(G.phase) && !p._acting; }
@@ -36,6 +38,8 @@ async function runAct(pi, act) {
   if (!actAllowed(p, act)) { tell(p, 'Зараз так не можна.', 1600); if (p.type === 'human') playSfx('deny'); else netSendTo(p.idx, { t: 'fx', type: 'sfx', a: { n: 'deny' } }); renderUI(); return; }
   if (act.k === 'pass') { passWindow(p); return; }
   if (act.k === 'ready') { prepReady(p); return; }
+  if (act.k === 'bossReady') { bossReady(p); return; }
+  if (G.bossWait && G.bossWait.waiting.includes(p.idx) && act.uid && !SIDE_ACTS.has(act.k)) { p._acting = true; renderUI(); try { await execAct(p, act); if (['shot', 'curseMon', 'wizard'].includes(act.k)) coopStat(p, 'shots'); } finally { p._acting = false; renderUI(); } return; }
   if (act.k === 'assistDone') { log(`${nameTag(p)} більше нічим не може допомогти.`); G.assist.resolve('pass'); renderUI(); return; }
   if (G.assist && G.assist.who === p.idx && act.uid && !SIDE_ACTS.has(act.k)) { p._acting = true; renderUI(); try { await execAct(p, act); } finally { p._acting = false; renderUI(); } return; }
   if (SIDE_ACTS.has(act.k) && (G.busy || cur() !== p)) {
@@ -76,6 +80,9 @@ async function execAct(p, a) {
     case 'undead': return addMonster(p, c, null);
     case 'wander': return addMonster(p, p.hand.find(x => x.uid === a.mon), c);
     case 'redirect': return redirectCombat(p, c, G.players[a.target]);
+    case 'assault': return assaultLair();
+    case 'horn': return coopHorn(p, c);
+    case 'curseMon': return coopCurseMon(p, c);
     case 'gift': return doGift(p, c, G.players[a.target]);
     case 'trade': return doTrade(p, G.players[a.target], (a.give || []).map(u => findTradeItem(p, u)).filter(Boolean));
   }
@@ -85,9 +92,10 @@ function cardActions(c, where, v = viewerP()) {
   if (!v || !c || c.hidden) return [];
   const p = cur(), cb = G.combat, inCombat = G.phase === 'combat' && !!cb;
   const myTurn = v === p, free = !G.busy && !G.over, win = !!G.window && G.window.humans.includes(v);
-  const isFighter = inCombat && v === fighter(), isHelper = inCombat && cb.helper === v.idx;
+  const isFighter = inCombat && v === fighter(), isHelper = inCombat && (cb.helper === v.idx || !!cb.boss);
   const assist = !!G.assist && G.assist.who === v.idx && !v._acting;
-  const combatOk = inCombat && (free || win || assist);
+  const bossW = !!G.bossWait && G.bossWait.waiting.includes(v.idx) && !v._acting;
+  const combatOk = inCombat && (free || win || assist || bossW);
   const sideOk = !G.over && !inCombat && G.phase !== 'setup' && !v._acting; // спорядження, раса, клас — коли завгодно поза боєм, навіть не на своєму ході
   const acts = [];
   const A = (label, act, extra = {}) => acts.push({ label, act, ...extra });
@@ -134,7 +142,8 @@ function cardActions(c, where, v = viewerP()) {
         }
       }
       sell(); break;
-    case 'flee': if (inCombat && free && (isFighter || isHelper)) A('Втекти з бою', { k: 'smoke', uid: c.uid }); sell(); break;
+    case 'horn': if (G.coop && free && !inCombat) A(`Затрубити: Загроза −2 (зараз ${G.coop.threat})`, { k: 'horn', uid: c.uid }, { dis: G.coop.threat ? null : 'Загрози й так немає.' }); sell(); break;
+    case 'flee': if (inCombat && free && (isFighter || isHelper) && !cb.boss) A('Втекти з бою', { k: 'smoke', uid: c.uid }); sell(); break;
     case 'mod': if (combatOk && !(friend && c.bonus > 0)) A(`Зіграти на монстра (${sgn(c.bonus)})`, { k: 'mod', uid: c.uid }); break;
     case 'monster':
       if (free && myTurn && G.phase === 'afterKick') A('Шукати пригод: битися з ним', { k: 'trouble', uid: c.uid });
@@ -145,8 +154,9 @@ function cardActions(c, where, v = viewerP()) {
       if (combatOk && !friend) A('Привести потвору в бій…', null, { dis: mons.length ? null : 'Потрібен монстр у руці.', sub: mons.map(m => ({ label: `${m.name} · +${monLvl(m, fp) + vsBonus(m, fp)} до монстрів`, act: { k: 'wander', uid: c.uid, mon: m.uid } })) });
       break;
     }
-    case 'redirect': if (combatOk && !friend) A('Перенаправити бій на…', null, { sub: G.players.filter(q => q !== fighter() && !sameTeam(v, q) && !friend).map(q => ({ label: `${q.name} · сила ${baseStr(q)}`, act: { k: 'redirect', uid: c.uid, target: q.idx } })) }); sell(); break;
-    case 'curse': if (free && !inCombat) A('Наслати прокляття…', null, { sub: G.players.filter(q => q !== v && !sameTeam(v, q)).map(q => ({ label: `${q.name} · рів. ${q.level}`, act: { k: 'curse', uid: c.uid, target: q.idx } })) }); break;
+    case 'redirect': if (combatOk && !friend && !cb.boss && G.players.some(q => q !== fighter() && !sameTeam(v, q))) A('Перенаправити бій на…', null, { sub: G.players.filter(q => q !== fighter() && !sameTeam(v, q) && !friend).map(q => ({ label: `${q.name} · сила ${baseStr(q)}`, act: { k: 'redirect', uid: c.uid, target: q.idx } })) }); sell(); break;
+    case 'curse': if (G.coop && combatOk) A('Жбурнути в монстра (−2)', { k: 'curseMon', uid: c.uid });
+      if (free && !inCombat && G.players.some(q => q !== v && !sameTeam(v, q))) A('Наслати прокляття…', null, { sub: G.players.filter(q => q !== v && !sameTeam(v, q)).map(q => ({ label: `${q.name} · рів. ${q.level}`, act: { k: 'curse', uid: c.uid, target: q.idx } })) }); break;
   }
   if (free && !inCombat) A('Скинути в скид', { k: 'discard', uid: c.uid });
   if (isFighter && free && hasCls(v, 'wizard') && cb.wiz < 3 && !['oneshot', 'flee'].includes(c.kind)) A('Спалити заради +2 (Маг)', { k: 'wizard', uid: c.uid });
@@ -164,6 +174,14 @@ function dockActs(v) {
     if (privacy() && locals.length) acts.push({ label: 'Втрутитися…', fn: openInterfere });
     return acts;
   }
+  if (G.bossWait && G.combat) {
+    const wait = G.bossWait.waiting.map(i => G.players[i]).filter(Boolean);
+    if (NET.role === 'client') { if (wait.includes(v)) acts.push({ label: 'Готово до бою', act: { k: 'bossReady' }, cls: 'primary pulse' }); return acts; }
+    const locals = wait.filter(h => h.type === 'human');
+    locals.forEach(h => acts.push({ label: locals.length > 1 || h !== v ? `${h.name}: готово до бою` : 'Готово до бою', act: { k: 'bossReady' }, as: h.idx, cls: 'primary pulse' }));
+    if (privacy() && locals.length) acts.push({ label: 'Хто грає карту…', fn: openInterfere });
+    return acts;
+  }
   if (G.assist && G.combat) {
     const h = G.players[G.assist.who];
     if (h && (NET.role === 'client' ? h === v : h.type === 'human')) acts.push({ label: 'Нічим допомогти', act: { k: 'assistDone' }, as: h.idx, cls: 'primary' });
@@ -177,6 +195,7 @@ function dockActs(v) {
     return acts;
   }
   if (G.busy) return acts;
+  if (G.coop && G.coop.lair && G.phase === 'start' && p === v && !G.combat) { const f = coopFc(); acts.push({ label: `Штурмувати лігво${f ? ` · ${f.hero} проти ${f.mon}` : ''}`, act: { k: 'assault' }, cls: 'danger' }); }
   if (G.phase === 'combat' && G.combat) {
     const fp = fighter(); if (v !== fp) return acts;
     const s = sides(), cb = G.combat;
@@ -299,6 +318,10 @@ function openRules() {
   <li>Ходять через одного: гравець однієї команди, потім іншої.</li>
   <li>Напарник допомагає в бою безплатно. Поза боєм можна будь-коли віддати напарнику карту з руки чи річ із себе — клацни карту й обери «Віддати напарнику».</li>
   <li>Своїм шкодити не можна: прокляття, посилення монстрів і перенаправлення бою діють лише на суперників. Зайві карти наприкінці ходу йдуть напарнику, якщо в нього є місце.</li></ul>
+  <h3>Похід на Боса (кооператив)</h3>
+  <ul><li>Усі гравці — одна команда проти Підземелля. Знайдіть <b>3 ключі</b> в колоді дверей — лігво відчиниться. Тоді на своєму ході замість дверей можна <b>штурмувати лігво</b>: з Босом бʼється весь загін, сила всіх сумується, кожен може докинути разові карти.</li>
+  <li><b>Загроза</b> росте на 1 щокола, на 1 — коли загін відступає з бою, ще на 1 — коли хтось гине, і від карт «Тривога». Програли Босу — кожен −1 рівень і Загроза +3. Заповнилась шкала — похід провалено. Сигнальний ріг і Колискова знижують Загрозу на 2.</li>
+  <li>На третині шкали Підземелля прокидається (монстри +2), на двох третинах — ще сильніше (+4). Воно має свою руку: посилює монстрів, підкидає потвор і насилає прокляття. Прокляття з руки в поході можна жбурнути в монстра (−2).</li></ul>
   <h3>Нежить, дракони й вогонь</h3>
   <ul><li>На старті можна вибрати, які монстри будуть у колоді: звичайні є завжди, <b>нежить</b> і <b>дракони</b> — за бажанням. Тип видно на плашці під малюнком карти.</li>
   <li><b>Вогняні речі</b> (🔥) дають ще <b>+2 проти нежиті</b>, але <b>на драконів не діють</b> зовсім — їхній бонус пропадає в бою з драконом. Так само вогняні разові карти.</li>
@@ -329,7 +352,7 @@ function openRules() {
 }
 
 /* --- налаштування партії --- */
-const setupState = { types: loadMonTypes(), rows: [{ name: 'Мандрівник', type: 'human', sex: 'm', diff: 2 }, { name: 'Мотря', type: 'bot', sex: 'f', diff: 2 }, { name: 'Опанас', type: 'bot', sex: 'm', diff: 2 }, { name: 'Одарка', type: 'bot', sex: 'f', diff: 2 }], speed: 1, goal: 10, anim: 1.5, teams: false };
+const setupState = { types: loadMonTypes(), rows: [{ name: 'Мандрівник', type: 'human', sex: 'm', diff: 2 }, { name: 'Мотря', type: 'bot', sex: 'f', diff: 2 }, { name: 'Опанас', type: 'bot', sex: 'm', diff: 2 }, { name: 'Одарка', type: 'bot', sex: 'f', diff: 2 }], speed: 1, goal: 10, anim: 1.5, teams: false, mode: 'ffa', coopDiff: 'normal' };
 setupState.rows.forEach((r, i) => { r.team = i % 2; });
 /* налаштування стартового екрана памʼятаються на пристрої, поки їх не змінять */
 const SETUP_KEY = 'pdsv-setup';
@@ -338,7 +361,8 @@ function loadSetup(s) {
     const d = JSON.parse(localStorage.getItem(SETUP_KEY) || 'null'); if (!d) return;
     const rows = (Array.isArray(d.rows) ? d.rows : []).filter(r => r && (r.type === 'human' || r.type === 'bot')).slice(0, 6)
       .map((r, i) => ({ name: String(r.name || '').trim().slice(0, 16) || (r.type === 'bot' ? BOT_NAMES[i] : `Гравець ${i + 1}`), type: r.type, sex: r.sex === 'f' ? 'f' : 'm', diff: [1, 2, 3].includes(r.diff) ? r.diff : 2, team: [0, 1, 2].includes(r.team) ? r.team : i % 2 }));
-    s.teams = !!d.teams;
+    s.mode = ['ffa', 'teams', 'coop'].includes(d.mode) ? d.mode : d.teams ? 'teams' : 'ffa'; s.teams = s.mode === 'teams';
+    if (['easy', 'normal', 'hard'].includes(d.coopDiff)) s.coopDiff = d.coopDiff;
     if (rows.length >= 2) s.rows = rows;
     if ([10, 20].includes(d.goal)) s.goal = d.goal;
     if ([1.4, 1, .45].includes(d.speed)) s.speed = d.speed;
@@ -346,7 +370,7 @@ function loadSetup(s) {
   } catch (e) { /* без збережених налаштувань */ }
 }
 function storeSetup(s = setupState) {
-  try { localStorage.setItem(SETUP_KEY, JSON.stringify({ rows: s.rows.filter(r => r.type !== 'remote').map(r => ({ name: r.name, type: r.type, sex: r.sex, diff: r.diff || 2, team: r.team | 0 })), teams: !!s.teams, goal: s.goal, speed: s.speed, anim: s.anim })); } catch (e) { }
+  try { localStorage.setItem(SETUP_KEY, JSON.stringify({ rows: s.rows.filter(r => r.type !== 'remote').map(r => ({ name: r.name, type: r.type, sex: r.sex, diff: r.diff || 2, team: r.team | 0 })), teams: !!s.teams, mode: s.mode, coopDiff: s.coopDiff, goal: s.goal, speed: s.speed, anim: s.anim })); } catch (e) { }
 }
 loadSetup(setupState);
 function loadMonTypes() { try { const t = JSON.parse(localStorage.getItem('pdsv-montypes') || 'null'); if (t) return { undead: t.undead !== false, dragon: t.dragon !== false }; } catch (e) { } return { undead: true, dragon: true }; }
@@ -391,13 +415,15 @@ function openSetup() {
     <div id="rows">${s.rows.map(row).join('')}</div>
     <div class="row" style="margin-top:4px"><button class="btn small" type="button" id="addP" ${s.rows.length >= 6 ? 'disabled' : ''}>Додати бота</button><button class="btn small" type="button" id="addH" ${s.rows.length >= 6 ? 'disabled' : ''}>Додати людину</button></div>
     <h3>Режим</h3>
-    <div class="seg" role="group" aria-label="Режим гри"><button type="button" data-teams="0" aria-pressed="${!s.teams}">Кожен сам за себе</button><button type="button" data-teams="1" aria-pressed="${!!s.teams}">Командна гра</button></div>
+    <div class="seg wrap" role="group" aria-label="Режим гри"><button type="button" data-mode="ffa" aria-pressed="${s.mode === 'ffa'}">Кожен сам за себе</button><button type="button" data-mode="teams" aria-pressed="${s.mode === 'teams'}">Командна гра</button><button type="button" data-mode="coop" aria-pressed="${s.mode === 'coop'}">Похід на Боса</button></div>
+    ${s.mode === 'coop' ? `<p class="hint" style="margin-top:8px">Кооператив: усі разом проти Підземелля. Знайдіть 3 ключі в колоді дверей, відчиніть лігво й перемогти Боса, поки шкала Загрози не заповниться. Підземелля — невидимий суперник: посилює монстрів, підкидає потвор і насилає прокляття. Шкала Загрози: ${COOP_DIFF[s.coopDiff].max + (s.rows.length <= 2 ? 3 : s.rows.length === 3 ? 1 : 0)}.</p>
+    <div class="seg" role="group" aria-label="Складність походу" style="margin-top:8px">${Object.entries(COOP_DIFF).map(([k, d]) => `<button type="button" data-cd="${k}" aria-pressed="${s.coopDiff === k}">${d.name}</button>`).join('')}</div>` : ''}
     ${s.teams ? `<p class="hint" style="margin-top:8px">Команда перемагає, коли сума рівнів її гравців досягне мети (${s.goal > 10 ? 16 : 8} на гравця; меншій команді — фора). Переможний рівень — лише за монстра. Напарники допомагають безплатно, передають одне одному речі й не можуть шкодити своїм.<br>${setupTeamsText(s)}</p>` : ''}
     <p class="hint" style="margin-top:6px">Складність бота: легкий частіше допомагає й рідко шкодить, важкий торгується, мстить і полює на лідера. Кілька людей за одним пристроєм грають по черзі.</p>
     ${netBlock()}
-    <h3>Мета</h3>
+    <div ${s.mode === 'coop' ? 'hidden' : ''}><h3>Мета</h3>
     <div class="seg" role="group" aria-label="Мета гри">${[[10, 'До 10 рівня'], [20, 'До 20 рівня · епік']].map(([v, l]) => `<button type="button" data-goal="${v}" aria-pressed="${s.goal === v}">${l}</button>`).join('')}</div>
-    <p class="hint" style="margin-top:8px">${s.goal === 20 ? 'Епічна гра: з 10-го рівня кожен монстр для тебе має подвійний рівень. У колоді зʼявляються монстри 16–20 рівнів.' : 'Класична партія: перший, хто дійде до 10-го рівня, перемагає.'}</p>
+    <p class="hint" style="margin-top:8px">${s.goal === 20 ? 'Епічна гра: з 10-го рівня кожен монстр для тебе має подвійний рівень. У колоді зʼявляються монстри 16–20 рівнів.' : 'Класична партія: перший, хто дійде до 10-го рівня, перемагає.'}</p></div>
     <h3>Монстри в колоді</h3>
     <div class="checks" role="group" aria-label="Типи монстрів">
       <label class="chk"><input type="checkbox" checked disabled> Звичайні</label>
@@ -421,7 +447,8 @@ function openSetup() {
       if (b.dataset.t) { save(); s.rows[+b.dataset.i].type = b.dataset.t; rerender(); }
       else if (b.dataset.sex) { save(); s.rows[+b.dataset.i].sex = b.dataset.sex; rerender(); }
       else if (b.dataset.team) { save(); s.rows[+b.dataset.i].team = +b.dataset.team; rerender(); sendLobby(); }
-      else if (b.dataset.teams) { save(); s.teams = b.dataset.teams === '1'; rerender(); sendLobby(); }
+      else if (b.dataset.mode) { save(); s.mode = b.dataset.mode; s.teams = s.mode === 'teams'; rerender(); sendLobby(); }
+      else if (b.dataset.cd) { save(); s.coopDiff = b.dataset.cd; rerender(); }
       else if (b.dataset.del) { save(); const r = s.rows.splice(+b.dataset.del, 1)[0]; if (r && r.conn) { try { r.conn.send({ t: 'full', reason: 'Господар прибрав тебе з кімнати.' }); r.conn.close(); } catch (e) { } } rerender(); sendLobby(); }
       else if (b.id === 'addP') { save(); const used = new Set(s.rows.map(r => r.name)); const nm = BOT_NAMES.find(n => !used.has(n)) || 'Бот'; s.rows.push({ name: nm, type: 'bot', sex: FEMALE_NAMES.has(nm) ? 'f' : 'm', diff: 2, team: s.rows.length % 2 }); rerender(); sendLobby(); }
       else if (b.id === 'addH') { save(); s.rows.push({ name: `Гравець ${s.rows.length + 1}`, type: 'human', sex: 'm', diff: 2, team: s.rows.length % 2 }); rerender(); sendLobby(); }
@@ -448,21 +475,24 @@ async function newGame() {
   G.players.forEach(destroySeat);
   if (G.combat) { G.combat.mons.forEach(x => disposeMesh(x.m)); G.combat.meshes.forEach(disposeMesh); }
   T.die.visible = false;
-  Object.assign(G, { reveal: -1, gid: G.gid + 1, players: [], doorDeck: shuffle(buildDoorDeck(s.goal > 10, s.types)), treasureDeck: shuffle(buildTreasureDeck(s.types)), types: { ...s.types }, doorDiscard: [], treasureDiscard: [], cur: 0, viewer: -1, phase: 'deal', combat: null, busy: true, over: false, window: null, log: [], fresh: new Set(), pendingSetup: false });
+  Object.assign(G, { reveal: -1, gid: G.gid + 1, players: [], doorDeck: shuffle(buildDoorDeck(s.goal > 10 && s.mode !== 'coop', s.types)), treasureDeck: shuffle(buildTreasureDeck(s.types)), types: { ...s.types }, doorDiscard: [], treasureDiscard: [], cur: 0, viewer: -1, phase: 'deal', combat: null, busy: true, over: false, window: null, log: [], fresh: new Set(), pendingSetup: false });
   faceCache.forEach(t => t.dispose()); faceCache.clear();
   syncDeck('door'); syncDeck('treasure'); syncDiscardTop('door'); syncDiscardTop('treasure');
   NET.conns.clear();
   s.rows = s.rows.filter(r => r.type !== 'remote' || (r.conn && r.conn.open !== false && !r.conn._closed));
   // командна гра: розсаджуємо через одного (А1, Б1, А2, Б2…), щоб команда не ходила двічі поспіль
-  const teamsOn = !!s.teams && setupTeamsValid(s);
+  const coopOnNow = s.mode === 'coop';
+  const teamsOn = !coopOnNow && !!s.teams && setupTeamsValid(s);
   let rows = s.rows;
   if (teamsOn) {
     const groups = [0, 1, 2].map(t => s.rows.filter(r => (r.team | 0) === t)).filter(g => g.length).sort((x, y) => y.length - x.length);
     rows = []; while (groups.some(g => g.length)) groups.forEach(g => { if (g.length) rows.push(g.shift()); });
   }
-  G.teams = teamsOn; G.assist = null;
+  G.teams = teamsOn || coopOnNow; G.assist = null; G.bossWait = null; G.coop = null;
+  if (coopOnNow) { G.goal = 10; coopBuildDecks(G.doorDeck, G.treasureDeck, s.rows.length); }
   const shade = {};
-  G.players = rows.map((r, i) => ({ idx: i, team: teamsOn ? r.team | 0 : i, name: r.name, type: r.type, sex: r.sex || 'm', diff: r.diff || 2, color: teamsOn ? TEAM_SHADES[r.team | 0][(shade[r.team | 0] = (shade[r.team | 0] || 0) + 1) - 1] : COLORS[i], level: 1, gold: 0, hand: [], gear: [], raceCard: null, raceCard2: null, clsCard2: null, dualRace: null, dualCls: null, curses: [], clsCard: null, died: false, mem: {} }));
+  G.players = rows.map((r, i) => ({ idx: i, team: coopOnNow ? 0 : teamsOn ? r.team | 0 : i, name: r.name, type: r.type, sex: r.sex || 'm', diff: r.diff || 2, color: teamsOn ? TEAM_SHADES[r.team | 0][(shade[r.team | 0] = (shade[r.team | 0] || 0) + 1) - 1] : COLORS[i], level: 1, gold: 0, hand: [], gear: [], raceCard: null, raceCard2: null, clsCard2: null, dualRace: null, dualCls: null, curses: [], clsCard: null, died: false, mem: {} }));
+  if (coopOnNow) coopStart(s.coopDiff);
   rows.forEach((r, i) => { if (r.type === 'remote' && r.conn) { r.conn._pidx = i; NET.conns.set(i, r.conn); G.players[i].tok = makeTok(); G.players[i]._row = r; } });
   G.players.forEach(buildSeat);
   const firstHuman = G.players.find(p => p.type === 'human');
@@ -470,7 +500,8 @@ async function newGame() {
   cam.az = firstHuman ? seatAngle(firstHuman.idx) : 0; cam.userAz = 0; cam.userEl = 0;
   NET.conns.forEach((c, i) => sendConn(c, { t: 'start', you: i, tok: G.players[i].tok }));
   renderUI();
-  if (G.teams) log(`Командна гра: ${teamIds().map(t => `${teamTag(t)} (${teamMembers(t).map(q => esc(q.name)).join(', ')}) — мета ${teamTarget(t)}`).join(' · ')}. Рівні в команді сумуються.`, 'turn');
+  if (G.coop) log(`Похід на Боса (${COOP_DIFF[G.coop.diff].name}): знайдіть ${G.coop.need} ключі в колоді дверей, відчиніть лігво й перемогти Боса, поки Загроза не дійде до ${G.coop.max}. Підземелля грає проти вас.`, 'turn');
+  else if (G.teams) log(`Командна гра: ${teamIds().map(t => `${teamTag(t)} (${teamMembers(t).map(q => esc(q.name)).join(', ')}) — мета ${teamTarget(t)}`).join(' · ')}. Рівні в команді сумуються.`, 'turn');
   log(`Нова гра${G.teams ? (G.goal > 10 ? ' (епік)' : '') : ` до ${G.goal}-го рівня`}. Монстри: ${monTypesText(G.types || setupState.types)}. Кожен отримує 4 карти дверей і 4 карти скарбів.`, 'turn');
   const jobs = []; let k = 0; const gidAtDeal = G.gid;
   const soloHuman = G.players.filter(q => q.type === 'human').length === 1;
@@ -488,6 +519,7 @@ async function newGame() {
   G.phase = 'prep'; renderUI();
   for (const b of G.players.filter(q => q.type === 'bot')) { if (G.over || G.gid !== gidAtDeal) return; await botManage(b, true); }
   if (G.gid !== gidAtDeal) return;
+  if (G.coop) dungeonDraw(3);
   G.prepWait = G.players.filter(q => q.type === 'human' || q.type === 'remote').map(q => q.idx);
   if (G.prepWait.length) {
     say('Спорядіться — і натисніть «Я спорядився»', 2600);

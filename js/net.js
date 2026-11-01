@@ -53,10 +53,11 @@ function queueSnap() {
 function snapFor(i) {
   const cb = G.combat;
   return {
-    gid: G.gid, goal: G.goal, teams: !!G.teams, cur: G.cur, phase: G.phase, busy: G.busy, over: G.over, log: G.log.slice(-60), prepWait: G.prepWait || [],
+    gid: G.gid, goal: G.goal, teams: !!G.teams, bossWait: G.bossWait ? G.bossWait.waiting : null,
+    coop: G.coop ? { threat: G.coop.threat, max: G.coop.max, keys: G.coop.keys, need: G.coop.need, lair: G.coop.lair, round: G.coop.round, diff: G.coop.diff, handN: G.coop.hand.length, boss: G.coop.boss ? { id: G.coop.boss.id, name: G.coop.boss.name, art: G.coop.boss.art, ability: G.coop.boss.ability } : null, fc: G.coop.lair ? bossForecast() : null } : null, cur: G.cur, phase: G.phase, busy: G.busy, over: G.over, log: G.log.slice(-60), prepWait: G.prepWait || [],
     dN: G.doorDeck.length, tN: G.treasureDeck.length, dTop: G.doorDiscard[G.doorDiscard.length - 1] || null, tTop: G.treasureDiscard[G.treasureDiscard.length - 1] || null,
     players: G.players.map(p => ({ idx: p.idx, team: p.team, name: p.name, type: p.type, off: offLeft(p), sub: !!p.wasRemote, color: p.color, sex: p.sex, diff: p.diff, level: p.level, gold: p.gold, gear: p.gear, raceCard: p.raceCard, clsCard: p.clsCard, raceCard2: p.raceCard2, clsCard2: p.clsCard2, dualRace: p.dualRace, dualCls: p.dualCls, curses: p.curses || [], died: p.died, mem: p.type === 'bot' ? p.mem : null, hand: p.idx === i ? p.hand : p.hand.length })),
-    cb: cb ? { fighter: cb.fighter, mons: cb.mons.map(x => x.c), mods: cb.mods, pShots: cb.pShots, mShots: cb.mShots, helper: cb.helper, wiz: cb.wiz, asked: [...cb.asked], passed: [...cb.passed], offer: cb.offer } : null,
+    cb: cb ? { boss: cb.boss || null, bossX: cb.bossX || 0, fighter: cb.fighter, mons: cb.mons.map(x => x.c), mods: cb.mods, pShots: cb.pShots, mShots: cb.mShots, helper: cb.helper, wiz: cb.wiz, asked: [...cb.asked], passed: [...cb.passed], offer: cb.offer } : null,
     win: G.window ? G.window.humans.map(h => h.idx) : null, assist: G.assist ? G.assist.who : null
   };
 }
@@ -304,7 +305,7 @@ function leaveRoom() {
   if (NET.rejoining && NET.rejoining.waitT) clearTimeout(NET.rejoining.waitT);
   Object.assign(NET, { role: 'local', conn: null, peer: null, me: -1, gid: -1, tok: null, rejoining: null });
   NET.mirror.forEach(disposeMesh); NET.mirror.clear();
-  G.players.forEach(destroySeat); G.players = []; G.combat = null; G.window = null; G.log = []; G.over = false; G.phase = 'setup'; G.viewer = -1;
+  G.players.forEach(destroySeat); G.players = []; G.combat = null; G.window = null; G.coop = null; G.bossWait = null; G.assist = null; G.log = []; G.over = false; G.phase = 'setup'; G.viewer = -1;
   G.doorDeck = []; G.treasureDeck = []; G.doorDiscard = []; G.treasureDiscard = [];
   syncDeck('door'); syncDeck('treasure'); syncDiscardTop('door'); syncDiscardTop('treasure'); T.die.visible = false;
   boardFor = null; renderUI(); renderLog(); chatSync();
@@ -348,7 +349,7 @@ function applySnap(s) {
     G.players.forEach(destroySeat); NET.mirror.forEach(disposeMesh); NET.mirror.clear(); G.players = []; boardFor = null;
   }
   if (s.over) saveRejoin(null);
-  Object.assign(G, { goal: s.goal, teams: !!s.teams, cur: s.cur, phase: s.phase, busy: s.busy, over: s.over, log: s.log, prepWait: s.prepWait || [] });
+  Object.assign(G, { coop: s.coop || null, bossWait: s.bossWait ? { waiting: s.bossWait } : null, goal: s.goal, teams: !!s.teams, cur: s.cur, phase: s.phase, busy: s.busy, over: s.over, log: s.log, prepWait: s.prepWait || [] });
   G.doorDeck = new Array(s.dN).fill(0); G.treasureDeck = new Array(s.tN).fill(0);
   G.doorDiscard = s.dTop ? [s.dTop] : []; G.treasureDiscard = s.tTop ? [s.tTop] : [];
   const me = G.players[NET.me]; const prev = new Set(me ? me.hand.map(c => c.uid) : []);
@@ -421,5 +422,6 @@ function onNetFx(d) {
     case 'confetti': for (let i = 0; i < 4; i++) setTimeout(() => burst(new THREE.Vector3((Math.random() - .5) * 8, 9, (Math.random() - .5) * 8), [a.color, '#ffd36b', '#ffffff', '#ef6b5d', '#5aa9e2', '#86cf6e'], 260, 5, 4.5, -2.6, .22, false, 6, true), i * 450); break;
     case 'sfx': playSfx(a.n); break;
     case 'win': { const p = G.players[a.idx]; if (p) setTimeout(() => showWin(p, false), 900); break; }
+    case 'coopEnd': setTimeout(() => showCoopEnd(a, false), 900); break;
   }
 }

@@ -87,11 +87,12 @@ function setHTML(el, html) { if (el._html === html) return false; const sl = el.
 let boardFor = null, boardGoal = 0;
 function buildBoard() {
   const el = $('#players');
-  const len = G.teams ? TEAM_PER() : G.goal;
+  const len = G.coop ? 10 : G.teams ? TEAM_PER() : G.goal;
   const pips = () => Array.from({ length: len }, (_, k) => `${k === 10 ? '<b></b>' : ''}<i class="${k >= 10 && G.goal > 10 ? 'ep' : ''} ${k === len - 1 && !G.teams ? 'fin' : ''}"></i>`).join('');
-  const rowHTML = p => `<div class="brow${G.teams ? ' mate' : ''}" style="--pc:${p.color};--tc:${G.teams ? TEAMS[p.team].color : p.color}" data-p="${p.idx}" role="button" tabindex="0" title="Картка персонажа: ${esc(p.name)}"><div class="blvl"></div><div style="min-width:0"><div class="bname"><span class="bn">${esc(p.name)}</span><em class="btype"></em><span class="bt">хід</span><span class="bs"></span></div><div class="track">${pips()}</div><div class="bmeta"></div></div></div>`;
-  const head = `<div class="bhead"><span>Табло</span><span>${G.teams ? 'команди' : `мета <b>${G.goal}</b>`}</span></div>`;
-  el.innerHTML = !G.players.length ? '' : head + (G.teams
+  const rowHTML = p => `<div class="brow${G.teams && !G.coop ? ' mate' : ''}" style="--pc:${p.color};--tc:${G.teams ? TEAMS[p.team].color : p.color}" data-p="${p.idx}" role="button" tabindex="0" title="Картка персонажа: ${esc(p.name)}"><div class="blvl"></div><div style="min-width:0"><div class="bname"><span class="bn">${esc(p.name)}</span><em class="btype"></em><span class="bt">хід</span><span class="bs"></span></div><div class="track">${pips()}</div><div class="bmeta"></div></div></div>`;
+  const head = `<div class="bhead"><span>Табло</span><span>${G.coop ? 'похід' : G.teams ? 'команди' : `мета <b>${G.goal}</b>`}</span></div>`;
+  const coopHead = G.coop ? `<div class="bcoop"><div class="tl"><span>Загроза</span><b class="thv"></b></div><div class="thr">${Array.from({ length: G.coop.max }, (_, k) => `<i class="${k >= Math.ceil(G.coop.max * 2 / 3) ? 'z2' : k >= Math.ceil(G.coop.max / 3) ? 'z1' : ''}"></i>`).join('')}</div><div class="cinf"></div></div>` : '';
+  el.innerHTML = !G.players.length ? '' : head + coopHead + (G.coop ? G.players.map(rowHTML).join('') : G.teams
     ? teamIds().map(t => `<div class="bteam" data-team="${t}" style="--tc:${TEAMS[t].color}"><span class="tn">${teamName(t)}</span><span class="tsc"></span><div class="tbar"><i></i></div></div>` + teamMembers(t).map(rowHTML).join('')).join('')
     : G.players.map(rowHTML).join(''));
   el.hidden = !G.players.length;
@@ -101,7 +102,15 @@ function buildBoard() {
 function renderPlayers() {
   if (boardFor !== G.players || boardGoal !== G.goal) buildBoard();
   const el = $('#players');
-  if (G.teams) {
+  if (G.coop) {
+    const co = G.coop, b = el.querySelector('.bcoop');
+    if (b) {
+      b.querySelector('.thv').textContent = `${co.threat} / ${co.max}`;
+      b.querySelectorAll('.thr i').forEach((pip, k) => pip.classList.toggle('on', k < co.threat));
+      const f = co.lair ? coopFc() : null;
+      b.querySelector('.cinf').innerHTML = `🗝️ ${co.keys}/${co.need} · ${co.lair ? `<b class="lair">лігво відчинене</b>` : 'лігво зачинене'} · Підземелля: ${NET.role === 'client' ? co.handN | 0 : co.hand.length} карт${co.lair && co.boss ? `<div class="cboss">${esc(co.boss.art || '')} <b>${esc(co.boss.name)}</b>${f ? ` · загін ${f.hero}${f.shots ? '+' + f.shots : ''} проти ${f.mon}` : ''}</div>` : ''}`;
+    }
+  } else if (G.teams) {
     const best = Math.max(...teamIds().map(t => teamScore(t) / teamTarget(t)));
     teamIds().forEach(t => {
       const h = el.querySelector(`.bteam[data-team="${t}"]`); if (!h) return;
@@ -137,6 +146,11 @@ function statusText() {
   const you = v && v === p;
   const nm = `<b>${esc(p.name)}</b>`;
   if (offLeft(p) && G.phase !== 'prep') return `Чекаємо на ${nm}: звʼязок перервався. Ще до ${offLeft(p)} с — потім за нього походить бот.`;
+  if (G.bossWait && G.combat) {
+    const s = sides(), wait = G.bossWait.waiting.map(i => G.players[i]).filter(Boolean);
+    const line = `Бій з Босом: загін <b>${s.hero}</b> проти <b>${s.mon}</b> — ${s.win ? 'ви перемагаєте!' : `бракує ${s.mon - s.hero + (s.tie ? 0 : 1)}.`}`;
+    return v && wait.includes(v) ? `${line} Зіграй разові карти (клацни карту), потім натисни «Готово до бою».` : `${line} Чекаємо: ${wait.map(q => esc(q.name)).join(', ')}.`;
+  }
   if (G.assist && G.combat) {
     const h = G.players[G.assist.who], s = sides(), need = Math.max(0, s.mon - s.hero + (s.tie ? 0 : 1));
     return v && h === v ? `<b>${esc(fighter().name)}</b> разом із тобою ще не перемагає «${esc(monNames())}»: бракує <b>${need}</b>. Зіграй разові карти з руки (клацни карту) або натисни «Нічим допомогти».` : `Чекаємо, чи <b>${esc(h ? h.name : '')}</b> докине карт у бій: бракує ${need}.`;
@@ -153,7 +167,8 @@ function statusText() {
       if (v && wait.includes(v)) return 'Перед першим ходом: зіграй расу, клас і вдягни речі (клацни карту в руці). Коли готовий — натисни <b>«Я спорядився»</b>.';
       return wait.length ? `Чекаємо, поки спорядяться: ${wait.map(q => nameTag(q) + (offLeft(q) ? ` (без звʼязку, ще ${offLeft(q)} с)` : '')).join(', ')}.` : 'Усі спорядилися. Починаємо!';
     }
-    case 'start': return you ? 'Твій хід. Зіграй расу, клас і речі з руки, потім <b>вибий двері</b> — кнопкою або клацнувши колоду на столі.' : `Хід: ${nm}${p.type === 'remote' ? ' (на іншому пристрої)' : ''}.`;
+    case 'start': if (you && G.coop && G.coop.lair) { const f = coopFc(); return `Лігво відчинене! Можеш вести загін на Боса${f ? ` (зараз ${f.hero} проти ${f.mon}${f.shots ? `, у загону ще ${f.shots} у разових картах` : ''})` : ''} — або вибивай двері, щоб прокачатися.`; }
+      return you ? 'Твій хід. Зіграй расу, клас і речі з руки, потім <b>вибий двері</b> — кнопкою або клацнувши колоду на столі.' : `Хід: ${nm}${p.type === 'remote' ? ' (на іншому пристрої)' : ''}.`;
     case 'afterKick': return you ? 'Бою не було. <b>Обшукай кімнату</b> або зіграй монстра з руки, щоб шукати пригод.' : `${nm} вирішує, що робити далі.`;
     case 'combat': { if (!G.combat) return ''; const s = sides(); const fp = fighter(); const fy = v && v === fp; if (fp !== p) return fy ? (s.win ? 'Монстра перенаправили на тебе, але ти сильніший — <b>бий!</b>' : 'Монстра перенаправили на тебе! Додай сили, клич на поміч або тікай.') : `<b>${esc(fp.name)}</b> бʼється з «${esc(monNames())}» (бій перенаправили).`; return you ? (s.win ? 'Ти сильніший — <b>бий!</b> Але суперники ще можуть підсилити монстра.' : 'Монстри сильніші. Зіграй разові карти, поклич на поміч (і запропонуй ціну) або тікай.') : `${nm} бʼється з «${esc(monNames())}». Можеш зіграти карту на монстра або на допомогу.`; }
     case 'charity': return you ? (p.hand.length > handLimit(p) ? `У руці ${p.hand.length} карт при ліміті ${handLimit(p)}: зайві підуть найслабшому гравцю. Можеш спорядитися чи продати речі.` : 'Можеш спорядитися, продати речі чи наслати прокляття. Потім <b>заверши хід</b>.') : `${nm} завершує хід.`;
@@ -202,6 +217,8 @@ function renderCombat() {
     if (a.slayer) mods.push(`<span class="tag h">${who}🛡️ Драконобій +${a.slayer}</span>`);
   });
   if (epicFor(p)) mods.unshift(`<span class="tag m">Епічна зона: рівень монстрів ×2</span>`);
+  if (cb.boss) { G.players.filter(q => q !== p).forEach(q => mods.push(`<span class="tag h">${esc(q.name)} +${baseStr(q)}</span>`)); if (cb.bossX) mods.push(`<span class="tag m">Здібність Боса +${cb.bossX}</span>`); }
+  if (G.coop && G.coop.threat >= Math.ceil(G.coop.max / 3)) mods.push(`<span class="tag m">⚠️ Підземелля прокинулось +${G.coop.threat >= Math.ceil(G.coop.max * 2 / 3) ? 4 : 2}</span>`);
   cb.mons.forEach(x => { const vb = vsBonus(x.c, p); if (vb) mods.push(`<span class="tag m">${esc(x.c.name)}: бонус проти тебе +${vb}</span>`); });
   if (cb.mons.some(x => x.c.undead) && (hasCls(p, 'cleric') || (h && hasCls(h, 'cleric')))) mods.push('<span class="tag h">Жрець проти нежиті +3</span>');
   [p, h].filter(Boolean).forEach(q => (q.curses || []).forEach(k => { const v = { monday: '−2', sneeze: '−1', magnet: 'монстри +2', sack: 'скарбів −1' }[k.bad.p]; if (v) mods.push(`<span class="tag m">⛓ ${q === p ? '' : esc(q.name) + ': '}${esc(k.name)} ${v}</span>`); }));
@@ -212,12 +229,12 @@ function renderCombat() {
   const meddleLbl = others.length === 1 && others[0].idx === cb.helper ? `Карти помічника: ${esc(others[0].name)}` : others.some(q => q.idx === cb.helper) ? 'Помічник чи інші гравці тут: зіграти карту' : 'Втрутитися (інші гравці тут)';
   const pct = Math.round(s.hero / (s.hero + s.mon) * 100);
   const bad = cb.mons.length > 1 ? `${cb.mons.length} монстри — тікати доведеться від кожного окремо` : cb.mons[0].c.bad.text;
-  el.innerHTML = `<div class="cside hero"><div class="cl">${esc(p.name)}${h ? ' + ' + esc(h.name) : ''}</div><div class="big">${s.hero}</div></div>
+  el.innerHTML = `<div class="cside hero"><div class="cl">${cb.boss ? 'Увесь загін' : esc(p.name) + (h ? ' + ' + esc(h.name) : '')}</div><div class="big">${s.hero}</div></div>
     <div class="vs">${s.win ? 'перемагає' : 'програє'}<b>${ICO.sword}</b></div>
     <div class="cside mon"><div class="cl">${esc(monNames())}</div><div class="big">${s.mon}</div></div>
     <div class="cbar" aria-hidden="true"><i style="width:${pct}%"></i></div>
     ${mods.length ? `<div class="cmods">${mods.join('')}</div>` : ''}
-    <div class="cnote">Нагорода: <b>${tr} ${plural(tr, 'скарб', 'скарби', 'скарбів')}, +${gain} ${plural(gain, 'рівень', 'рівні', 'рівнів')}</b> · Халепа: <b>${esc(bad)}</b>${s.tie && s.hero === s.mon ? ' · Нічия на користь воїна' : ''}</div>
+    ${cb.boss ? `<div class="cnote">Перемога — кінець походу. Програш: кожен −1 рівень, Загроза +3.</div>` : `<div class="cnote">Нагорода: <b>${tr} ${plural(tr, 'скарб', 'скарби', 'скарбів')}, +${gain} ${plural(gain, 'рівень', 'рівні', 'рівнів')}</b> · Халепа: <b>${esc(bad)}</b>${s.tie && s.hero === s.mon ? ' · Нічия на користь воїна' : ''}</div>`}
     ${G.window ? `<div class="cnote" style="color:var(--brass)">Чекаємо рішення: <b>${waitingOn().map(h => esc(h.name)).join(', ') || '…'}</b>. Бій не завершиться, доки кожен не зіграє карту або не натисне «Не втручаюсь».</div>` : ''}
     ${canMeddle ? '<div class="crow"><button class="btn small" type="button" id="meddle">${meddleLbl}</button></div>' : ''}`;
   el.hidden = false;

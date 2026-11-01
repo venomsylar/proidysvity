@@ -49,8 +49,8 @@ const TEAM_PER = () => G.goal > 10 ? 16 : 8;
 function teamTarget(t) { const n = teamMembers(t).length, mx = Math.max(...teamIds().map(k => teamMembers(k).length)); return Math.max(2, TEAM_PER() * n - (mx - n)); }
 const teamScore = t => sum(teamMembers(t), q => q.level);
 // скільки рівнів лишилось до перемоги (гравцеві або його команді)
-const levelsToWin = p => G.teams ? teamTarget(p.team) - teamScore(p.team) : G.goal - p.level;
-const winProgress = p => G.teams ? clamp(teamScore(p.team) / teamTarget(p.team), 0, 1) : clamp((p.level - 1) / Math.max(1, G.goal - 1), 0, 1);
+const levelsToWin = p => G.coop ? 99 : G.teams ? teamTarget(p.team) - teamScore(p.team) : G.goal - p.level;
+const winProgress = p => G.coop ? G.coop.threat / G.coop.max : G.teams ? clamp(teamScore(p.team) / teamTarget(p.team), 0, 1) : clamp((p.level - 1) / Math.max(1, G.goal - 1), 0, 1);
 const teamName = t => (TEAMS[t] || TEAMS[0]).name;
 const teamTag = t => `<b style="color:${(TEAMS[t] || TEAMS[0]).color}">${teamName(t)}</b>`;
 
@@ -83,7 +83,7 @@ function draw(deck) {
 }
 function discard(c) { (c.deck === 'door' ? G.doorDiscard : G.treasureDiscard).push(c); syncDiscardTop(c.deck); }
 function removeFromHand(p, c) { const i = p.hand.indexOf(c); if (i >= 0) p.hand.splice(i, 1); }
-function giveCard(p, c) { p.hand.push(c); if (p.idx === G.viewer) G.fresh.add(c.uid); }
+function giveCard(p, c) { if (G.coop && (c.kind === 'key' || c.kind === 'alarm') && NET.role !== 'client') { coopSpecial(p, c); return; } p.hand.push(c); if (p.idx === G.viewer) G.fresh.add(c.uid); }
 
 function equipConflicts(p, c) {
   const out = [];
@@ -128,10 +128,14 @@ function sides() {
   let hero = baseStr(p) + adjSum(typeAdj(p, ty)) + sum(cb.pShots, c => shotVal(c, ty, true)) + cb.wiz * 2;
   if (hasCls(p, 'cleric') && undead) hero += 3;
   if (h) { hero += baseStr(h) + adjSum(typeAdj(h, ty)); if (hasCls(h, 'cleric') && undead) hero += 3; }
+  // бій з Босом: бʼється весь загін
+  const allies = cb.boss ? G.players.filter(q => q !== p) : [];
+  allies.forEach(q => { hero += baseStr(q) + adjSum(typeAdj(q, ty)) + (hasCls(q, 'cleric') && undead ? 3 : 0); });
   hero = Math.max(0, hero);
   let mon = curseN(p, 'magnet') * 2 + sum(cb.mons, x => monLvl(x.c, p) + vsBonus(x.c, p)) + sum(cb.mods, c => c.bonus) + sum(cb.mShots, c => shotVal(c, ty, false));
+  if (G.coop) mon += (cb.bossX || 0) + (G.coop.threat >= Math.ceil(G.coop.max * 2 / 3) ? 4 : G.coop.threat >= Math.ceil(G.coop.max / 3) ? 2 : 0);
   mon = Math.max(1, mon);
-  const tie = hasCls(p, 'warrior') || (h && hasCls(h, 'warrior'));
+  const tie = hasCls(p, 'warrior') || (h && hasCls(h, 'warrior')) || allies.some(q => hasCls(q, 'warrior'));
   return { hero, mon, tie, win: hero > mon || (hero === mon && tie) };
 }
 

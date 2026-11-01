@@ -285,8 +285,12 @@ const sgn = n => n > 0 ? '+' + n : n < 0 ? '−' + Math.abs(n) : String(n);
 
 function cardInfo(c) {
   switch (c.kind) {
+    case 'key': return { type: 'Ключ', corner: '🗝', text: 'Ключ від лігва Боса. Спрацьовує одразу: зберіть три — і лігво відчиниться.', flavor: c.flavor, foot: ['Похід на Боса', ''] };
+    case 'alarm': return { type: 'Тривога', corner: '+' + (c.n || 1), text: `Підземелля чує вас: Загроза +${c.n || 1}. Спрацьовує одразу.`, flavor: c.flavor, foot: ['Похід на Боса', ''] };
+    case 'horn': return { type: 'Разова', corner: '−2', text: 'Поза боєм: Загроза −2.', flavor: c.flavor, foot: [`${c.value} зол.`, 'Похід на Боса'] };
     case 'monster': {
       const t = [];
+      if (c.boss) return { type: 'Бос', corner: c.lvl, text: `${c.ability} Бʼється весь загін.`, flavor: c.flavor, foot: ['Кінець походу', ''] };
       if (c.dragon) t.push('Дракон: вогняні речі й зілля проти нього не діють.');
       if (c.undead) t.push('Нежить: можна підкинути в бій до іншої нежиті.');
       if (c.vs) for (const k in c.vs) t.push(`+${c.vs[k]} проти ${VS_NAMES[k]}.`);
@@ -318,6 +322,9 @@ function cardInfo(c) {
 }
 
 function typeBadge(c) {
+  if (c.boss) return { t: 'Бос', e: '👑', bg: '#4a2a55', bd: '#e6b3ff', fg: '#fbefff' };
+  if (c.kind === 'key') return { t: 'Ключ', e: '🗝️', bg: '#7a5a12', bd: '#ffd36b', fg: '#fff6dc' };
+  if (c.kind === 'alarm') return { t: 'Тривога', e: '⚠️', bg: '#8a2c14', bd: '#ffb26b', fg: '#fff1e2' };
   if (c.kind === 'monster') {
     if (c.dragon && c.undead) return { t: 'Нежить-дракон', e: '💀', bg: '#4a2a55', bd: '#d9a6ff', fg: '#fbefff' };
     if (c.dragon) return { t: 'Дракон', e: '🐉', bg: '#8a2c14', bd: '#ffb26b', fg: '#fff1e2' };

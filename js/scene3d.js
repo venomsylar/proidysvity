@@ -308,8 +308,8 @@ function handPose() {
   return { x: p.x, y: p.y, z: p.z, yaw: cam.az + cam.userAz, tilt: Math.PI / 2 - clamp(cam.el + cam.userEl, .25, 1.35), flip: 0, s: 0.85, tag: { k: 'h', who: G.viewer } };
 }
 const isViewerHuman = p => p.type === 'human' && p.idx === G.viewer;
-const fromHandOf = p => isViewerHuman(p) ? handPose() : seatPose(p.idx, false);
-const toHandOf = p => isViewerHuman(p) ? handPose() : seatPose(p.idx, false);
+const fromHandOf = p => p.idx < 0 ? deckPose('door') : isViewerHuman(p) ? handPose() : seatPose(p.idx, false);
+const toHandOf = p => p.idx < 0 ? deckPose('door') : isViewerHuman(p) ? handPose() : seatPose(p.idx, false);
 function seatAnchor(i) { const w = rotY(0, TABLE_Y, 7.55, seatAngle(i)); return new THREE.Vector3(w.x, w.y, w.z); }
 
 /* --- якість графіки: менше пікселів і кадрів, коли нічого не рухається, — ноутбук не гріється --- */
@@ -483,7 +483,7 @@ function levelFx(p, up) {
 }
 async function changeLevel(p, delta, allowWin = false) {
   const before = p.level;
-  const cap = G.teams ? (allowWin ? 999 : Math.max(before, before + levelsToWin(p) - 1)) : allowWin ? G.goal : Math.max(before, G.goal - 1);
+  const cap = G.coop ? 10 : G.teams ? (allowWin ? 999 : Math.max(before, before + levelsToWin(p) - 1)) : allowWin ? G.goal : Math.max(before, G.goal - 1);
   p.level = clamp(before + delta, 1, cap);
   if (p.level !== before) {
     log(`${nameTag(p)} ${p.level > before ? 'піднімається' : 'падає'} на ${p.level}-й рівень.`);

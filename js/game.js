@@ -54,6 +54,10 @@ async function kickDoor() {
   const m = cardMesh(c); scene.add(m);
   await fly(m, deckPose('door'), centerPose(0, 1), 800, 2.4);
   if (c.kind === 'monster') { await beginCombat(c, m); return; }
+  if (G.coop && (c.kind === 'key' || c.kind === 'alarm')) {
+    if (c.kind === 'alarm') { say(`Тривога! «${c.name}»: Загроза +${c.n || 1}`, 2400); sfx('curse'); }
+    await wait(1000 * ANIM); disposeMesh(m); await coopSpecial(p, c); G.phase = 'afterKick'; return;
+  }
   if (c.kind !== 'curse') say(`${KIND_FIND[c.kind] || 'Знахідка'}: «${c.name}» — карта йде в руку`, 2400);
   await wait(1100 * ANIM);
   if (c.kind === 'curse') {
@@ -168,6 +172,7 @@ async function playSmoke(p, c) {
   say('Пуф! Втеча вдалася.');
   await wait(600);
   await clearCombat(); G.phase = 'charity';
+  if (G.coop) await addThreat(1, 'загін відступив');
 }
 
 /* --- втручання ботів: залежить від складності й памʼяті --- */
@@ -185,6 +190,7 @@ function meddleOptions(b) {
 }
 async function botsInterfere() {
   const p = fighter(); if (!G.combat) return false; let any = false;
+  if (G.coop && !G.combat.boss) { const n = await dungeonMeddle(false); if (n) any = true; if (!G.combat) return any; }
   const leader = Math.max(...G.players.filter(q => q !== p).map(q => q.level));
   /* що вищий рівень героя, то охочіше йому шкодять: плавно, до +0.2 біля фінішу */
   const progress = winProgress(p);
@@ -486,6 +492,7 @@ async function winCombat() {
   say(`Перемога над «${names}»!`);
   for (const x of cb.mons) { if (x.m) { const m = x.m; x.m = null; await defeatAnim(m); } discard(x.c); }
   await clearSideCards();
+  coopStat(p, 'kills'); if (helper) coopStat(helper, 'kills');
   await changeLevel(p, gain, true);
   if (G.over) return;
   const hs = helper ? Math.min(tr, cb.offer ? cb.offer.tr : Math.floor(tr / 2)) : 0;
@@ -519,6 +526,7 @@ async function fleeCombat() {
     }
   }
   await clearCombat(); G.phase = 'charity';
+  if (G.coop) await addThreat(1, 'загін відступив');
 }
 async function clearSideCards() {
   const cb = G.combat; const jobs = [];
@@ -562,6 +570,7 @@ async function applyBad(q, bad) {
     case 'death': {
       take(q.gear.slice()); q.hand.splice(0).forEach(c => { discard(c); lost.push(c.name); });
       q.died = true; log(`${nameTag(q)} гине! Рівень лишається, речі — ні.`);
+      if (G.coop) addThreat(1, `${q.name} гине`);
       burst(q.seat.anchor, ['#ef6b5d', '#5a1f1a', '#ffffff'], 120, 4, 1.4);
       break;
     }
@@ -608,6 +617,7 @@ async function endTurn(chosen = []) {
     for (let i = 0; i < 2; i++) await drawTo(p, 'treasure');
   }
   G.cur = (G.cur + 1) % G.players.length;
+  if (G.coop && G.cur === 0) { await coopRoundEnd(); if (G.over) return; }
   G.reveal = -1;
   G.phase = 'next'; G.busy = true; renderUI();
   setTimeout(startTurn, 50);
@@ -935,6 +945,7 @@ async function botManage(p, setupOnly = false) {
     await botDelay(250); await doEquip(p, best.c);
   }
   await botGiftMates(p); if (G.over) return;
+  await coopBotManage(p); if (G.over) return;
   if (setupOnly) return;
   for (const c of p.hand.filter(x => x.kind === 'levelup')) if (levelsToWin(p) > 1) { await botDelay(250); await doLevelUp(p, c); }
   if (cur() === p && G.phase !== 'combat' && levelsToWin(p) > 1) {
@@ -961,8 +972,8 @@ async function botTurn(p) {
   if (G.phase === 'start') {
     await botDelay(450);
     await botManage(p); if (G.over) return;
-    await botDelay(300);
-    await kickDoor(); if (G.over) return;
+    if (G.coop && coopWantsAssault()) { await assaultLair(); if (G.over) return; }
+    else { await botDelay(300); await kickDoor(); if (G.over) return; }
   }
   if (G.phase === 'combat' && G.combat) { if (fighter().type === 'bot') await botDrive(); if (G.combat && !G.over) await waitCombatEnd(); if (G.over) return; }
   if (G.phase === 'afterKick') {

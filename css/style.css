@@ -469,3 +469,21 @@ body.in-menu #ui{visibility:hidden}
   .chat{left:8px;right:8px;width:auto;top:auto;bottom:max(8px,env(safe-area-inset-bottom,0px));height:min(62vh,480px)}
   .chat-peek{top:auto;bottom:max(12px,env(safe-area-inset-bottom,0px));left:12px;right:12px;max-width:none}
 }
+
+/* кооператив: похід на Боса */
+.bcoop{margin:4px 2px 8px;padding:8px 10px;border-radius:10px;background:rgba(183,123,224,.08);border:1px solid rgba(183,123,224,.35)}
+.bcoop .tl{display:flex;justify-content:space-between;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#d8b4f0}
+.bcoop .tl b{color:var(--text);font-variant-numeric:tabular-nums}
+.bcoop .thr{display:flex;gap:2px;margin:5px 0}
+.bcoop .thr i{flex:1;height:7px;border-radius:2px;background:rgba(255,255,255,.08)}
+.bcoop .thr i.on{background:#e0a93b}.bcoop .thr i.z1.on{background:#ef8a3d}.bcoop .thr i.z2.on{background:#ef4b3d;box-shadow:0 0 6px rgba(239,75,61,.6)}
+.bcoop .thr i.z1{background:rgba(239,138,61,.14)}.bcoop .thr i.z2{background:rgba(239,75,61,.16)}
+.bcoop .cinf{font-size:12px;color:var(--muted);line-height:1.4}
+.bcoop .lair{color:#e6b3ff}
+.bcoop .cboss{margin-top:3px;color:var(--text)}
+.cstats{width:100%;border-collapse:collapse;margin:6px 0 4px;font-size:13px}
+.cstats th{font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em;text-align:left;padding:4px 6px;border-bottom:1px solid var(--line)}
+.cstats td{padding:5px 6px;border-bottom:1px solid rgba(255,255,255,.05)}
+.cstats td:not(:first-child),.cstats th:not(:first-child){text-align:center}
+.seg.wrap{flex-wrap:wrap}
+@media (max-width:760px){ .bcoop{flex:0 0 auto;width:170px;margin:0} }
