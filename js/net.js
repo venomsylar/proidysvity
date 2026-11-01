@@ -57,7 +57,7 @@ function snapFor(i) {
     dN: G.doorDeck.length, tN: G.treasureDeck.length, dTop: G.doorDiscard[G.doorDiscard.length - 1] || null, tTop: G.treasureDiscard[G.treasureDiscard.length - 1] || null,
     players: G.players.map(p => ({ idx: p.idx, team: p.team, name: p.name, type: p.type, off: offLeft(p), sub: !!p.wasRemote, color: p.color, sex: p.sex, diff: p.diff, level: p.level, gold: p.gold, gear: p.gear, raceCard: p.raceCard, clsCard: p.clsCard, raceCard2: p.raceCard2, clsCard2: p.clsCard2, dualRace: p.dualRace, dualCls: p.dualCls, curses: p.curses || [], died: p.died, mem: p.type === 'bot' ? p.mem : null, hand: p.idx === i ? p.hand : p.hand.length })),
     cb: cb ? { fighter: cb.fighter, mons: cb.mons.map(x => x.c), mods: cb.mods, pShots: cb.pShots, mShots: cb.mShots, helper: cb.helper, wiz: cb.wiz, asked: [...cb.asked], passed: [...cb.passed], offer: cb.offer } : null,
-    win: G.window ? G.window.humans.map(h => h.idx) : null
+    win: G.window ? G.window.humans.map(h => h.idx) : null, assist: G.assist ? G.assist.who : null
   };
 }
 function askRemote(p, title, text, yes, no, timeout = 40000) {
@@ -132,6 +132,7 @@ function hostOnClose(conn) {
   if (inGame) {
     NET.conns.delete(pi);
     NET.asks.forEach(done => { if (done.who === pi) done(false); });
+    if (G.assist && G.assist.who === pi) G.assist.resolve('drop');
     if (p.type === 'bot') { p._reclaim = false; }
     else if (p.type === 'remote' && !G.over) {
       p.offline = Date.now();
@@ -363,6 +364,7 @@ function applySnap(s) {
   G.viewer = NET.me;
   G.combat = s.cb ? { ...s.cb, mons: s.cb.mons.map(c => ({ c })), asked: new Set(s.cb.asked), passed: new Set(s.cb.passed), interfered: new Set(), meshes: new Map() } : null;
   G.window = s.win ? { humans: s.win.map(i => G.players[i]).filter(Boolean) } : null;
+  G.assist = s.assist != null ? { who: s.assist } : null;
   G.players.forEach(p => {
     const sig = JSON.stringify([rcCards(p).map(c => c.uid), (p.curses || []).map(c => c.uid), p.gear.map(g => g.uid), p.sex]);
     if (p._sig !== sig) { p._sig = sig; syncSeat(p); }

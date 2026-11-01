@@ -137,6 +137,10 @@ function statusText() {
   const you = v && v === p;
   const nm = `<b>${esc(p.name)}</b>`;
   if (offLeft(p) && G.phase !== 'prep') return `Чекаємо на ${nm}: звʼязок перервався. Ще до ${offLeft(p)} с — потім за нього походить бот.`;
+  if (G.assist && G.combat) {
+    const h = G.players[G.assist.who], s = sides(), need = Math.max(0, s.mon - s.hero + (s.tie ? 0 : 1));
+    return v && h === v ? `<b>${esc(fighter().name)}</b> разом із тобою ще не перемагає «${esc(monNames())}»: бракує <b>${need}</b>. Зіграй разові карти з руки (клацни карту) або натисни «Нічим допомогти».` : `Чекаємо, чи <b>${esc(h ? h.name : '')}</b> докине карт у бій: бракує ${need}.`;
+  }
   if (G.window && G.combat) {
     const mine = v && G.window.humans.includes(v) && !G.combat.passed.has(v.idx);
     const names = waitingOn().map(h => esc(h.name)).join(', ');

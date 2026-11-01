@@ -10,6 +10,7 @@ const flatActs = list => list.flatMap(a => a.sub ? a.sub : [a]);
 function actAllowed(p, act) {
   if (!act || G.over) return false;
   if (act.k === 'pass') return waitingOn().includes(p);
+  if (act.k === 'assistDone') return !!G.assist && G.assist.who === p.idx;
   if (act.k === 'ready') return G.phase === 'prep' && (G.prepWait || []).includes(p.idx);
   if (act.k === 'gift') { const f = findOwnCard(p, act.uid), t = G.players[act.target]; return !!f && !!t && sameTeam(p, t) && !G.over && !G.combat && !['setup', 'deal'].includes(G.phase) && !p._acting; }
   if (act.k === 'trade') return canTrade(p) && !!G.players[act.target] && act.target !== p.idx;
@@ -35,6 +36,8 @@ async function runAct(pi, act) {
   if (!actAllowed(p, act)) { tell(p, 'Зараз так не можна.', 1600); if (p.type === 'human') playSfx('deny'); else netSendTo(p.idx, { t: 'fx', type: 'sfx', a: { n: 'deny' } }); renderUI(); return; }
   if (act.k === 'pass') { passWindow(p); return; }
   if (act.k === 'ready') { prepReady(p); return; }
+  if (act.k === 'assistDone') { log(`${nameTag(p)} більше нічим не може допомогти.`); G.assist.resolve('pass'); renderUI(); return; }
+  if (G.assist && G.assist.who === p.idx && act.uid && !SIDE_ACTS.has(act.k)) { p._acting = true; renderUI(); try { await execAct(p, act); } finally { p._acting = false; renderUI(); } return; }
   if (SIDE_ACTS.has(act.k) && (G.busy || cur() !== p)) {
     p._acting = true; renderUI();
     try { await execAct(p, act); } finally { p._acting = false; renderUI(); }
@@ -83,7 +86,8 @@ function cardActions(c, where, v = viewerP()) {
   const p = cur(), cb = G.combat, inCombat = G.phase === 'combat' && !!cb;
   const myTurn = v === p, free = !G.busy && !G.over, win = !!G.window && G.window.humans.includes(v);
   const isFighter = inCombat && v === fighter(), isHelper = inCombat && cb.helper === v.idx;
-  const combatOk = inCombat && (free || win);
+  const assist = !!G.assist && G.assist.who === v.idx && !v._acting;
+  const combatOk = inCombat && (free || win || assist);
   const sideOk = !G.over && !inCombat && G.phase !== 'setup' && !v._acting; // спорядження, раса, клас — коли завгодно поза боєм, навіть не на своєму ході
   const acts = [];
   const A = (label, act, extra = {}) => acts.push({ label, act, ...extra });
@@ -158,6 +162,11 @@ function dockActs(v) {
     const many = locals.length > 1 || (locals.length === 1 && locals[0] !== v);
     locals.forEach(h => acts.push({ label: many ? `${h.name}: не втручаюсь` : 'Не втручаюсь', act: { k: 'pass' }, as: h.idx, cls: 'primary' }));
     if (privacy() && locals.length) acts.push({ label: 'Втрутитися…', fn: openInterfere });
+    return acts;
+  }
+  if (G.assist && G.combat) {
+    const h = G.players[G.assist.who];
+    if (h && (NET.role === 'client' ? h === v : h.type === 'human')) acts.push({ label: 'Нічим допомогти', act: { k: 'assistDone' }, as: h.idx, cls: 'primary' });
     return acts;
   }
   if (G.phase === 'prep') {
@@ -451,7 +460,7 @@ async function newGame() {
     const groups = [0, 1, 2].map(t => s.rows.filter(r => (r.team | 0) === t)).filter(g => g.length).sort((x, y) => y.length - x.length);
     rows = []; while (groups.some(g => g.length)) groups.forEach(g => { if (g.length) rows.push(g.shift()); });
   }
-  G.teams = teamsOn;
+  G.teams = teamsOn; G.assist = null;
   const shade = {};
   G.players = rows.map((r, i) => ({ idx: i, team: teamsOn ? r.team | 0 : i, name: r.name, type: r.type, sex: r.sex || 'm', diff: r.diff || 2, color: teamsOn ? TEAM_SHADES[r.team | 0][(shade[r.team | 0] = (shade[r.team | 0] || 0) + 1) - 1] : COLORS[i], level: 1, gold: 0, hand: [], gear: [], raceCard: null, raceCard2: null, clsCard2: null, dualRace: null, dualCls: null, curses: [], clsCard: null, died: false, mem: {} }));
   rows.forEach((r, i) => { if (r.type === 'remote' && r.conn) { r.conn._pidx = i; NET.conns.set(i, r.conn); G.players[i].tok = makeTok(); G.players[i]._row = r; } });

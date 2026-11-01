@@ -124,6 +124,7 @@ async function playIntoCombat(p, c, side) {
   if (toMon) flashAt(monCenter().setY(2.4), 2, 450);
   else ringFx(f.seat.anchor, 0x7fd081, 700);
   renderUI();
+  if (G.assist && G.assist.who === p.idx) assistCheck(p);
   if (!self && !sameTeam(p, f)) await helperReact();
 }
 // суперник посилив монстра чи ослабив героя — бот-помічник відповідає своїми картами
@@ -251,7 +252,7 @@ function helpGap(h, p) {
   const ty = combatTypes(G.combat), f = togetherWith(h.idx);
   if (f.win) return 0;
   const need = f.mon - f.hero + (f.tie ? 0 : 1);
-  const pot = (h.type === 'bot' ? shotBoost(h, ty) : 0) + (p.type === 'bot' ? shotBoost(p, ty) + (hasCls(p, 'wizard') ? Math.min(3 - G.combat.wiz, p.hand.filter(c => !['oneshot', 'flee', 'levelup', 'redirect'].includes(c.kind)).length) * 2 : 0) : 0);
+  const pot = (h.type === 'bot' || sameTeam(h, p) ? shotBoost(h, ty) : 0) + (p.type === 'bot' ? shotBoost(p, ty) + (hasCls(p, 'wizard') ? Math.min(3 - G.combat.wiz, p.hand.filter(c => !['oneshot', 'flee', 'levelup', 'redirect'].includes(c.kind)).length) * 2 : 0) : 0);
   return Math.max(0, need - pot);
 }
 function botHelpDecision(h, p, offer) {
@@ -323,6 +324,16 @@ async function helperBoost(h) {
     await botDelay(300); await playIntoCombat(h, pick, pick.bonus > 0 ? 'hero' : 'mon');
   }
 }
+/* бот бʼється, людина погодилась допомогти, але разом ще не вистачає — даємо їй час докинути карт */
+async function assistWindow(h) {
+  const cb = G.combat; if (!cb || !isPerson(h) || cb.helper !== h.idx || sides().win || G.over) return;
+  const s = sides(), need = s.mon - s.hero + (s.tie ? 0 : 1);
+  tell(h, `${fighter().name} чекає на твої карти: бракує ${need}. Зіграй разову карту або натисни «Нічим допомогти».`, 3400);
+  if (h.type === 'human') sfx('alert'); else netSendTo(h.idx, { t: 'fx', type: 'sfx', a: { n: 'alert' } });
+  await new Promise(res => { let tm; const done = r => { clearTimeout(tm); if (G.assist && G.assist.resolve === done) G.assist = null; res(r); }; tm = setTimeout(() => done('timeout'), 60000); G.assist = { who: h.idx, resolve: done }; renderUI(); });
+  renderUI();
+}
+function assistCheck(p) { if (G.assist && (!G.combat || sides().win || (p && p.offline))) G.assist.resolve('done'); }
 function togetherWith(i) { const cb = G.combat, was = cb.helper; cb.helper = i; const s = sides(); cb.helper = was; return s; }
 /* прогноз для того, кого кличуть: чи переможуть разом */
 function helpForecast(i) {
@@ -341,7 +352,7 @@ async function askHelp(i, offer) {
   renderUI();
   let ok, why = '', counter = null, haggled = false;
   if (h.type === 'bot') { await botDelay(600); const d = botHelpDecision(h, p, offer); ok = d.ok; why = d.why; counter = d.counter == null ? null : d.counter; }
-  else { const r = await helpAskFor(h, offer.tr, T, `${h.name}, допоможеш?`, `${p.name} кличе тебе на поміч у бою з «${monNames()}».\n${helpForecast(i)}\nПропонує: ${offerText(offer)}${hasRace(h, 'elf') ? ', а ти як ельф ще й отримаєш рівень' : ''}.`, offer.cards); ok = r.ok; counter = r.counter; }
+  else { const r = await helpAskFor(h, offer.tr, sameTeam(h, p) ? offer.tr : T, `${h.name}, допоможеш?`, `${sameTeam(h, p) ? 'Напарник ' : ''}${p.name} кличе тебе на поміч у бою з «${monNames()}».\n${helpForecast(i)}\nПропонує: ${offerText(offer)}${hasRace(h, 'elf') ? ', а ти як ельф ще й отримаєш рівень' : ''}.`, offer.cards); ok = r.ok; counter = r.counter; }
   if (!G.combat) return false;
   if (!ok && counter != null && counter > offer.tr && counter <= T) {
     haggled = true;
@@ -395,6 +406,11 @@ async function botDrive() {
         continue;
       }
       const need = s.mon - s.hero + (s.tie ? 0 : 1);
+      // командна гра: напарник допомагає безплатно — спершу кличемо його, а свої карти бережемо
+      if (G.teams && cb.helper == null && !curseN(p, 'lonely')) {
+        const mate = teamMates(p).filter(q => !cb.asked.has(q.idx) && !q.offline && helpGap(q, p) === 0).sort((x, y) => togetherWith(y.idx).win - togetherWith(x.idx).win || baseStr(y) - baseStr(x))[0];
+        if (mate) { const ok = await askHelp(mate.idx, { tr: 0, cards: [] }); if (ok) await assistWindow(mate); continue; }
+      }
       const ty = combatTypes(cb), sv = c => Math.abs(shotVal(c, ty, c.bonus > 0));
       const shots = p.hand.filter(c => c.kind === 'oneshot' && sv(c) > 0).sort((x, y) => sv(y) - sv(x));
       const junkN = hasCls(p, 'wizard') ? Math.min(3 - cb.wiz, p.hand.filter(c => !['oneshot', 'flee', 'levelup', 'redirect'].includes(c.kind)).length) : 0;
@@ -410,7 +426,8 @@ async function botDrive() {
         const cand = G.players.filter(q => q !== p && !cb.asked.has(q.idx) && helpGap(q, p) === 0).sort((x, y) => (sameTeam(p, y) - sameTeam(p, x)) * 100 + (baseStr(y) + like(y) * .7) - (baseStr(x) + like(x) * .7));
         if (cand.length) {
           const T = treasureCount(), frac = [0, .6, .5, .35][p.diff || 2];
-          await askHelp(cand[0].idx, { tr: sameTeam(p, cand[0]) ? 0 : Math.min(T, Math.max(T ? 1 : 0, Math.round(T * frac) + (like(cand[0]) < -1 ? 1 : 0))), cards: [] });
+          const ok = await askHelp(cand[0].idx, { tr: sameTeam(p, cand[0]) ? 0 : Math.min(T, Math.max(T ? 1 : 0, Math.round(T * frac) + (like(cand[0]) < -1 ? 1 : 0))), cards: [] });
+          if (ok) await assistWindow(cand[0]);
           continue;
         }
       }
