@@ -93,7 +93,7 @@ function cardActions(c, where, v = viewerP()) {
   const p = cur(), cb = G.combat, inCombat = G.phase === 'combat' && !!cb;
   const myTurn = v === p, free = !G.busy && !G.over, win = !!G.window && G.window.humans.includes(v);
   const isFighter = inCombat && v === fighter(), isHelper = inCombat && (cb.helper === v.idx || !!cb.boss);
-  const assist = !!G.assist && G.assist.who === v.idx && !v._acting;
+  const assist = !!G.assist && G.assist.who === v.idx && !v._acting && inCombat && cb.helper === v.idx;
   const bossW = !!G.bossWait && G.bossWait.waiting.includes(v.idx) && !v._acting;
   const combatOk = inCombat && (free || win || assist || bossW);
   const sideOk = !G.over && !inCombat && G.phase !== 'setup' && !v._acting; // спорядження, раса, клас — коли завгодно поза боєм, навіть не на своєму ході

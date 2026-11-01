@@ -4,7 +4,7 @@
 let renderer, scene, camera;
 const T = { decks: {}, disc: {}, anims: [], fx: [], tiles: [] };
 const cam = { az: 0, el: 0.8, dist: 19.5, userAz: 0, userEl: 0, zoom: 1 };
-const CARD_W = 1.2, CARD_H = 1.68, CARD_T = 0.025, TABLE_Y = 0.3, FELT_R = 8.6;
+const CARD_W = 1.2, CARD_H = 1.68, CARD_T = 0.025, CARD_R = 0.085, TABLE_Y = 0.3, FELT_R = 8.6;
 const DECK_POS = { door: [-2.75, -1.45], treasure: [2.75, -1.45] };
 const DISC_POS = { door: [-2.75, 1.05], treasure: [2.75, 1.05] };
 
@@ -206,6 +206,27 @@ function backTex(kind) {
   });
 }
 const faceCache = new Map();
+/* карта із заокругленими кутами (як на малюнку лицьового боку). Групи матеріалів такі самі,
+   як у BoxGeometry: 0 — боковини, 2 — лице (+y), 3 — сорочка (−y); UV — як у коробки, тож текстури лягають так само */
+function roundedCardGeo(w, t, h, r) {
+  const sh = new THREE.Shape(), x0 = -w / 2, y0 = -h / 2;
+  sh.moveTo(x0 + r, y0); sh.lineTo(x0 + w - r, y0); sh.quadraticCurveTo(x0 + w, y0, x0 + w, y0 + r);
+  sh.lineTo(x0 + w, y0 + h - r); sh.quadraticCurveTo(x0 + w, y0 + h, x0 + w - r, y0 + h);
+  sh.lineTo(x0 + r, y0 + h); sh.quadraticCurveTo(x0, y0 + h, x0, y0 + h - r);
+  sh.lineTo(x0, y0 + r); sh.quadraticCurveTo(x0, y0, x0 + r, y0);
+  const g = new THREE.ExtrudeGeometry(sh, { depth: t, bevelEnabled: false, curveSegments: 6 });
+  g.translate(0, 0, -t / 2); g.rotateX(-Math.PI / 2);
+  const caps = g.groups[0], sides = g.groups[1], half = caps.count / 2;
+  const pos = g.attributes.position, uv = g.attributes.uv;
+  for (let i = caps.start; i < caps.start + caps.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i), front = i >= caps.start + half;
+    uv.setXY(i, (x + w / 2) / w, front ? (h / 2 - z) / h : (z + h / 2) / h);
+  }
+  uv.needsUpdate = true;
+  g.clearGroups();
+  g.addGroup(caps.start, half, 3); g.addGroup(caps.start + half, half, 2); g.addGroup(sides.start, sides.count, 0);
+  return g;
+}
 function faceTex(c) {
   if (faceCache.has(c.uid)) return faceCache.get(c.uid);
   const t = canvasTex(360, 504, (g, W, H) => drawCardFace(g, c, W, H));
@@ -372,7 +393,7 @@ function init3D() {
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(140, 140), T.floorMat);
   floor.rotation.x = -Math.PI / 2; floor.position.y = -7.3; floor.receiveShadow = true; scene.add(floor);
 
-  cardGeo = new THREE.BoxGeometry(CARD_W, CARD_T, CARD_H);
+  cardGeo = roundedCardGeo(CARD_W, CARD_T, CARD_H, CARD_R);
   edgeMat = new THREE.MeshStandardMaterial({ color: 0xe6dccb, roughness: .8 });
   BACKS = { door: backTex('door'), treasure: backTex('treasure') };
 
@@ -380,7 +401,7 @@ function init3D() {
   for (const kind of ['door', 'treasure']) {
     const top = new THREE.MeshStandardMaterial({ map: BACKS[kind], alphaTest: .5, roughness: .6, emissive: 0x000000 });
     const side = new THREE.MeshStandardMaterial({ map: stackEdge, roughness: .8 });
-    const m = new THREE.Mesh(new THREE.BoxGeometry(CARD_W, 1, CARD_H), [side, side, top, side, side, side]);
+    const m = new THREE.Mesh(roundedCardGeo(CARD_W, 1, CARD_H, CARD_R), [side, side, top, side, side, side]);
     m.position.set(DECK_POS[kind][0], TABLE_Y, DECK_POS[kind][1]); m.castShadow = true; m.receiveShadow = true;
     m.userData.deck = kind; m.userData.topMat = top; scene.add(m); T.decks[kind] = m;
     const d = new THREE.Mesh(cardGeo, [edgeMat, edgeMat, new THREE.MeshStandardMaterial({ roughness: .62 }), new THREE.MeshStandardMaterial({ map: BACKS[kind], alphaTest: .5, roughness: .62 }), edgeMat, edgeMat]);

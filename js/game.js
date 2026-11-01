@@ -427,6 +427,9 @@ async function botDrive() {
         while (got < need && hasCls(p, 'wizard') && cb.wiz < 3) { const j = pickJunk(p); if (!j) break; await botDelay(250); await wizardDiscard(p, j); got += 2; }
         continue;
       }
+      // помічник-людина вже в бою: даємо йому докинути карти, щойно ситуація змінилась (монстра підсилили тощо)
+      { const h = cb.helper != null ? G.players[cb.helper] : null, sig = s.hero + ':' + s.mon;
+        if (h && isPerson(h) && !h.offline && cb.assistSig !== sig) { cb.assistSig = sig; await assistWindow(h); continue; } }
       if (cb.helper == null && !curseN(p, 'lonely')) {
         const like = q => affN(p, q) * 5;
         const cand = G.players.filter(q => q !== p && !cb.asked.has(q.idx) && helpGap(q, p) === 0).sort((x, y) => (sameTeam(p, y) - sameTeam(p, x)) * 100 + (baseStr(y) + like(y) * .7) - (baseStr(x) + like(x) * .7));
@@ -480,7 +483,7 @@ async function fightNow() {
   if (G.combat && sides().win) await winCombat();
 }
 const combatWaiters = [];
-function combatEnded() { while (combatWaiters.length) combatWaiters.shift()(); }
+function combatEnded() { if (G.assist && G.assist.resolve) G.assist.resolve('end'); G.assist = null; while (combatWaiters.length) combatWaiters.shift()(); }
 async function waitCombatEnd() { while (G.combat && !G.over) { G.busy = false; renderUI(); await new Promise(r => combatWaiters.push(r)); await wait(80); } G.busy = true; renderUI(); }
 
 async function winCombat() {
