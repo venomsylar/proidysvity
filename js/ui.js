@@ -31,6 +31,13 @@ function dollHTML(p, big) {
     <div class="slot power" style="grid-area:pow" title="Сила в бою"><span class="pv">${baseStr(p)}</span><span class="sl">сила</span></div>
     ${big ? slotHTML(p, p.raceCard2, p.dualRace ? 'Раса 2' : 'Раса 2 · потрібна карта «Родовід»', 'race2', big) + dualSlotHTML(p) + slotHTML(p, p.clsCard2, p.dualCls ? 'Клас 2' : 'Клас 2 · потрібна карта «Сумісництво»', 'cls2', big) : ''}</div>`;
 }
+const CURSE_SHORT = { monday: '−2 у бою', lead: '−1 до втечі', pocket: '−1 карта в руці', inflation: 'продаж за пів ціни', lonely: 'без помічників', magnet: 'монстри +2', sack: '−1 скарб', sneeze: '−1 у бою й утечі' };
+const curseTitle = p => (p.curses || []).map(k => `${k.name}: ${k.bad.text}`).join('\n');
+// жетони тривалих проклять біля персонажа — видно без відкривання картки
+function curseChips(p) {
+  const cs = p.curses || []; if (!cs.length) return '';
+  return `<div class="cchips" role="list" aria-label="Тривалі прокляття">${cs.map(k => `<button type="button" class="cchip" role="listitem" data-sheet title="${esc(k.name)}: ${esc(k.bad.text)} Зняти — картою «Зняти прокляття».">${artIcon(k, 'ai')}${cs.length > 3 ? '' : `<i>${esc(CURSE_SHORT[k.bad.p] || k.name)}</i>`}</button>`).join('')}</div>`;
+}
 const sexName = p => p.sex === 'f' ? 'жінка' : 'чоловік';
 const typeName = p => p.type === 'bot' ? `бот · ${DIFF[p.diff || 2].name.toLowerCase()}` : p.type === 'remote' ? 'гравець по мережі' : 'гравець';
 function openCharSheet(i) {
@@ -89,7 +96,7 @@ function buildBoard() {
   const el = $('#players');
   const len = G.coop ? 10 : G.teams ? TEAM_PER() : G.goal;
   const pips = () => Array.from({ length: len }, (_, k) => `${k === 10 ? '<b></b>' : ''}<i class="${k >= 10 && G.goal > 10 ? 'ep' : ''} ${k === len - 1 && !G.teams ? 'fin' : ''}"></i>`).join('');
-  const rowHTML = p => `<div class="brow${G.teams && !G.coop ? ' mate' : ''}" style="--pc:${p.color};--tc:${G.teams ? TEAMS[p.team].color : p.color}" data-p="${p.idx}" role="button" tabindex="0" title="Картка персонажа: ${esc(p.name)}"><div class="blvl"></div><div style="min-width:0"><div class="bname"><span class="bn">${esc(p.name)}</span><em class="btype"></em><span class="bt">хід</span><span class="bs"></span></div><div class="track">${pips()}</div><div class="bmeta"></div></div></div>`;
+  const rowHTML = p => `<div class="brow${G.teams && !G.coop ? ' mate' : ''}" style="--pc:${p.color};--tc:${G.teams ? TEAMS[p.team].color : p.color}" data-p="${p.idx}" role="button" tabindex="0" title="Картка персонажа: ${esc(p.name)}"><div class="blvl"></div><div style="min-width:0"><div class="bname"><span class="bn">${esc(p.name)}</span><span class="bcur" hidden></span><em class="btype"></em><span class="bt">хід</span><span class="bs"></span></div><div class="track">${pips()}</div><div class="bmeta"></div></div></div>`;
   const head = `<div class="bhead"><span>Табло</span><span>${G.coop ? 'похід' : G.teams ? 'команди' : `мета <b>${G.goal}</b>`}</span></div>`;
   const coopHead = G.coop ? `<div class="bcoop"><div class="tl"><span>Загроза</span><b class="thv"></b></div><div class="thr">${Array.from({ length: G.coop.max }, (_, k) => `<i class="${k >= Math.ceil(G.coop.max * 2 / 3) ? 'z2' : k >= Math.ceil(G.coop.max / 3) ? 'z1' : ''}"></i>`).join('')}</div><div class="cinf"></div></div>` : '';
   el.innerHTML = !G.players.length ? '' : head + coopHead + (G.coop ? G.players.map(rowHTML).join('') : G.teams
@@ -128,7 +135,8 @@ function renderPlayers() {
     row.querySelector('.btype').textContent = p.type === 'bot' ? (p.wasRemote ? 'бот замість' : `бот ${'★'.repeat(p.diff || 2)}`) : p.type === 'remote' ? (offLeft(p) ? `без звʼязку ${offLeft(p)}с` : 'мережа') : (NET.role === 'client' && p.idx === NET.me ? 'ти' : '');
     row.querySelector('.blvl').textContent = p.level;
     row.querySelector('.bs').innerHTML = `${ICO.sword} ${baseStr(p)}`;
-    const rc = (rcNames(p) || 'без раси й класу') + ((p.curses || []).length ? ` · ⛓${p.curses.length}` : '');
+    const rc = rcNames(p) || 'без раси й класу';
+    { const bc = row.querySelector('.bcur'), n = (p.curses || []).length; bc.hidden = !n; if (n) { bc.textContent = `⛓${n}`; bc.title = curseTitle(p); } }
     row.querySelector('.bmeta').innerHTML = `${ICO[p.sex === 'f' ? 'f' : 'm']} ${esc(rc)} · карт ${p.hand.length} · ${p.gold} зол.`;
     const pipsEl = row.querySelectorAll('.track i');
     pipsEl.forEach((pip, k) => pip.classList.toggle('on', k < p.level));
@@ -192,8 +200,8 @@ function renderDock() {
     return;
   }
   if (privacy() && v !== cur()) { const c0 = cur(); if (!G.window && c0 && c0.type === 'human') $('#status').innerHTML += ` Потім сховай карти — хід за <b>${esc(c0.name)}</b>.`; const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = 'Сховати карти'; b.onclick = hideHand; box.appendChild(b); }
-  $('#strText').textContent = `${v.name} · сила ${baseStr(v)}`;
-  setHTML($('#equip'), dollHTML(v, false) + `<button class="btn small char-btn" type="button" data-sheet>Картка персонажа · сила ${baseStr(v)} · втеча +${fleeBonus(v)}</button>`);
+  $('#strText').innerHTML = `${esc(v.name)} · сила ${baseStr(v)}${(v.curses || []).length ? ` <span class="ccount" title="${esc(curseTitle(v))}">⛓ ${v.curses.length}</span>` : ''}`;
+  setHTML($('#equip'), dollHTML(v, false) + curseChips(v) + `<button class="btn small char-btn" type="button" data-sheet>Картка персонажа · сила ${baseStr(v)} · втеча ${sgn(fleeBonus(v))}</button>`);
   { const lim = handLimit(v), n = v.hand.length; setHTML($('#handOwner'), `${esc(v.name)} · <span class="hc${n > lim ? ' over' : ''}" title="Ліміт руки: ${lim}. Зайві карти доведеться віддати в кінці ходу.">${n} з ${lim}</span> ${plural(lim, 'карти', 'карт', 'карт')}${n > lim ? ' — забагато, зайві віддаси в кінці ходу' : ''}`); }
   const nowT = performance.now(); G.fresh.forEach(u => { if (!freshT[u]) freshT[u] = nowT + 700; }); G.fresh.clear();
   setHTML($('#hand'), v.hand.map(c => cardHTML(c, (freshT[c.uid] > nowT ? 'fresh ' : '') + (cardActions(c, 'hand').some(a => !a.dis && !/^(Продати|Скинути|Віддати)/.test(a.label)) ? 'playable' : ''))).join('') || '<div class="empty">Рука порожня.</div>');

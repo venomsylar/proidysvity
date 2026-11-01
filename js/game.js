@@ -510,9 +510,9 @@ async function fleeCombat() {
     for (const x of cb.mons) {
       const mon = x.c;
       const sayRoll = (r, ok, again) => {
-        const math = fb ? `${r} + ${fb} (бонус втечі) = ${r + fb}` : `${r}`;
+        const math = fb ? `${r} ${fb > 0 ? '+' : '−'} ${Math.abs(fb)} (${fb > 0 ? 'бонус' : 'штраф'} втечі) = ${r + fb}` : `${r}`;
         say(`${again ? 'Перекидання' : 'Кубик'} · ${q.name}${many ? ` від «${mon.name}»` : ''}: ${math}. Треба 5+ — ${ok ? 'втеча вдалася!' : 'втекти не вдалося.'}`, 2600);
-        log(`${nameTag(q)} ${again ? 'перекидає' : 'кидає'} кубик${many ? ` (тікає від «${esc(mon.name)}»)` : ''}: випало <b>${r}</b>${fb ? `, бонус втечі +${fb} → ${r + fb}` : ''}. Треба 5+ → ${ok ? 'втеча вдалася' : 'не вдалося'}.`);
+        log(`${nameTag(q)} ${again ? 'перекидає' : 'кидає'} кубик${many ? ` (тікає від «${esc(mon.name)}»)` : ''}: випало <b>${r}</b>${fb ? `, ${fb > 0 ? 'бонус' : 'штраф'} втечі ${sgn(fb)} → ${r + fb}` : ''}. Треба 5+ → ${ok ? 'втеча вдалася' : 'не вдалося'}.`);
       };
       let r = await rollDie(q); let ok = r + fb >= 5; sayRoll(r, ok, false);
       if (!ok && hasRace(q, 'halfling')) { await wait(1400); r = await rollDie(q); ok = r + fb >= 5; sayRoll(r, ok, true); }

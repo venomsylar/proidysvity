@@ -262,14 +262,14 @@ function dotTex() { return canvasTex(64, 64, (g) => { const r = g.createRadialGr
 let cardGeo, edgeMat, BACKS;
 function cardMesh(c) {
   const ft = faceTex(c);
-  const front = new THREE.MeshStandardMaterial({ map: ft, roughness: .62, emissive: 0xffffff, emissiveMap: ft, emissiveIntensity: SKIN.glow });
-  const back = new THREE.MeshStandardMaterial({ map: BACKS[c.deck], roughness: .62, emissive: 0xffffff, emissiveMap: BACKS[c.deck], emissiveIntensity: SKIN.glow * .6 }); back.userData.back = true;
+  const front = new THREE.MeshStandardMaterial({ map: ft, alphaTest: .5, roughness: .62, emissive: 0xffffff, emissiveMap: ft, emissiveIntensity: SKIN.glow });
+  const back = new THREE.MeshStandardMaterial({ map: BACKS[c.deck], alphaTest: .5, roughness: .62, emissive: 0xffffff, emissiveMap: BACKS[c.deck], emissiveIntensity: SKIN.glow * .6 }); back.userData.back = true;
   const m = new THREE.Mesh(cardGeo, [edgeMat, edgeMat, front, back, edgeMat, edgeMat]);
   m.castShadow = true; m.receiveShadow = true; m.userData.card = c; m.userData.own = [front, back];
   return m;
 }
 function backMesh(deck) {
-  const back = new THREE.MeshStandardMaterial({ map: BACKS[deck], roughness: .62, emissive: 0xffffff, emissiveMap: BACKS[deck], emissiveIntensity: SKIN.glow * .6 }); back.userData.back = true;
+  const back = new THREE.MeshStandardMaterial({ map: BACKS[deck], alphaTest: .5, roughness: .62, emissive: 0xffffff, emissiveMap: BACKS[deck], emissiveIntensity: SKIN.glow * .6 }); back.userData.back = true;
   const m = new THREE.Mesh(cardGeo, [edgeMat, edgeMat, back, back, edgeMat, edgeMat]); m.castShadow = true; m.userData.own = [back]; return m;
 }
 function disposeMesh(m) { if (!m) return; if (m.parent) m.parent.remove(m); (m.userData.own || []).forEach(x => x.dispose()); }
@@ -378,12 +378,12 @@ function init3D() {
 
   const stackEdge = canvasTex(64, 64, (g) => { g.fillStyle = '#e6dccb'; g.fillRect(0, 0, 64, 64); g.fillStyle = 'rgba(80,60,40,.35)'; for (let y = 0; y < 64; y += 4) g.fillRect(0, y, 64, 1); });
   for (const kind of ['door', 'treasure']) {
-    const top = new THREE.MeshStandardMaterial({ map: BACKS[kind], roughness: .6, emissive: 0x000000 });
+    const top = new THREE.MeshStandardMaterial({ map: BACKS[kind], alphaTest: .5, roughness: .6, emissive: 0x000000 });
     const side = new THREE.MeshStandardMaterial({ map: stackEdge, roughness: .8 });
     const m = new THREE.Mesh(new THREE.BoxGeometry(CARD_W, 1, CARD_H), [side, side, top, side, side, side]);
     m.position.set(DECK_POS[kind][0], TABLE_Y, DECK_POS[kind][1]); m.castShadow = true; m.receiveShadow = true;
     m.userData.deck = kind; m.userData.topMat = top; scene.add(m); T.decks[kind] = m;
-    const d = new THREE.Mesh(cardGeo, [edgeMat, edgeMat, new THREE.MeshStandardMaterial({ roughness: .62 }), new THREE.MeshStandardMaterial({ map: BACKS[kind], roughness: .62 }), edgeMat, edgeMat]);
+    const d = new THREE.Mesh(cardGeo, [edgeMat, edgeMat, new THREE.MeshStandardMaterial({ roughness: .62 }), new THREE.MeshStandardMaterial({ map: BACKS[kind], alphaTest: .5, roughness: .62 }), edgeMat, edgeMat]);
     applyPose(d, discardPose(kind)); d.position.y = TABLE_Y + .02; d.visible = false; d.castShadow = true; d.receiveShadow = true; scene.add(d); T.disc[kind] = d;
   }
 
@@ -442,8 +442,11 @@ function plateDraw(p) {
   g.fillStyle = p.color; g.beginPath(); g.arc(62, h / 2, 40, 0, Math.PI * 2); g.fill();
   g.fillStyle = '#15100d'; g.font = '50px Underdog, cursive'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(p.level), 62, h / 2 + 3);
   g.fillStyle = '#f3e9d8'; g.textAlign = 'left'; g.font = '700 40px Rubik, sans-serif';
-  let name = p.name; while (g.measureText(name).width > w - 140 && name.length > 3) name = name.slice(0, -2) + '…';
+  const nc = (p.curses || []).length;
+  let name = p.name; while (g.measureText(name).width > w - 140 - (nc ? 104 : 0) && name.length > 3) name = name.slice(0, -2) + '…';
   g.fillText(name, 118, h / 2 + 2);
+  // тривалі прокляття — червоний жетон із ланцюгом
+  if (nc) { rr(g, w - 112, h / 2 - 30, 92, 60, 30); g.fillStyle = '#8a2242'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#ff9fbd'; g.stroke(); g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = '34px ' + EMOJI_FONT; g.fillText('⛓', w - 82, h / 2 + 2); g.font = '700 32px Rubik, sans-serif'; g.fillText(String(nc), w - 44, h / 2 + 2); }
   t.needsUpdate = true;
 }
 function buildSeat(p) {

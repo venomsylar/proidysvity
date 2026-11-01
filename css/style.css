@@ -487,3 +487,13 @@ body.in-menu #ui{visibility:hidden}
 .cstats td:not(:first-child),.cstats th:not(:first-child){text-align:center}
 .seg.wrap{flex-wrap:wrap}
 @media (max-width:760px){ .bcoop{flex:0 0 auto;width:170px;margin:0} }
+
+/* тривалі прокляття біля персонажа */
+.cchips{display:flex;flex-wrap:wrap;gap:4px;margin:5px 0 1px}
+.cchip{display:inline-flex;align-items:center;gap:4px;max-width:100%;padding:2px 7px 2px 3px;border-radius:8px;border:1px solid #c45a7c;background:rgba(138,34,66,.32);color:#ffd0dc;cursor:pointer;font:600 11px/1.2 var(--f-ui);white-space:nowrap}
+.cchip:hover{background:rgba(138,34,66,.5)}
+.cchip .ai{width:18px;height:18px;flex:0 0 auto}
+.cchip i{font-style:normal;overflow:hidden;text-overflow:ellipsis}
+.ccount{display:inline-block;padding:0 6px;border-radius:8px;background:#8a2242;color:#fff;font-size:11px;font-weight:700;margin-left:4px;cursor:help}
+.bcur{flex:0 0 auto;padding:0 5px;border-radius:7px;background:#8a2242;color:#fff;font-size:10.5px;font-weight:700;line-height:16px;cursor:help}
+.bcur[hidden]{display:none}
