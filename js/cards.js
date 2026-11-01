@@ -323,6 +323,7 @@ function cardInfo(c) {
 
 function typeBadge(c) {
   if (c.boss) return { t: 'Бос', e: '👑', bg: '#4a2a55', bd: '#e6b3ff', fg: '#fbefff' };
+  if (c.guard) return { t: 'Вартовий', e: '🛡️', bg: '#2f4867', bd: '#a9c8f0', fg: '#eef5ff' };
   if (c.kind === 'key') return { t: 'Ключ', e: '🗝️', bg: '#7a5a12', bd: '#ffd36b', fg: '#fff6dc' };
   if (c.kind === 'alarm') return { t: 'Тривога', e: '⚠️', bg: '#8a2c14', bd: '#ffb26b', fg: '#fff1e2' };
   if (c.kind === 'monster') {

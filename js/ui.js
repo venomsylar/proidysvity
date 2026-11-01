@@ -115,7 +115,7 @@ function renderPlayers() {
       b.querySelector('.thv').textContent = `${co.threat} / ${co.max}`;
       b.querySelectorAll('.thr i').forEach((pip, k) => pip.classList.toggle('on', k < co.threat));
       const f = co.lair ? coopFc() : null;
-      b.querySelector('.cinf').innerHTML = `🗝️ ${co.keys}/${co.need} · ${co.lair ? `<b class="lair">лігво відчинене</b>` : 'лігво зачинене'} · Підземелля: ${NET.role === 'client' ? co.handN | 0 : co.hand.length} карт${co.lair && co.boss ? `<div class="cboss">${esc(co.boss.art || '')} <b>${esc(co.boss.name)}</b>${f ? ` · загін ${f.hero}${f.shots ? '+' + f.shots : ''} проти ${f.mon}` : ''}</div>` : ''}`;
+      b.querySelector('.cinf').innerHTML = `🗝️ ${co.keys}/${co.need} · ${co.lair ? `<b class="lair">лігво відчинене</b>` : 'лігво зачинене'} · Підземелля: ${NET.role === 'client' ? co.handN | 0 : co.hand.length} карт${co.lair && co.guards && co.guardsDone < co.guards.length ? `<div class="cboss">🛡️ Вартові: ${co.guards.map((g, k) => k < co.guardsDone ? `<s>${esc(g.name)}</s>` : k === co.guardsDone ? `<b>${esc(g.name)} (${g.lvl})</b>` : `${esc(g.name)} (${g.lvl})`).join(' → ')}</div>` : ''}${co.lair && co.boss ? `<div class="cboss">${esc(co.boss.art || '')} <b>${esc(co.boss.name)}</b>${f ? ` · загін ${f.hero}${f.shots ? '+' + f.shots : ''} проти ${f.mon}` : ''}</div>` : ''}`;
     }
   } else if (G.teams) {
     const best = Math.max(...teamIds().map(t => teamScore(t) / teamTarget(t)));
@@ -175,7 +175,8 @@ function statusText() {
       if (v && wait.includes(v)) return 'Перед першим ходом: зіграй расу, клас і вдягни речі (клацни карту в руці). Коли готовий — натисни <b>«Я спорядився»</b>.';
       return wait.length ? `Чекаємо, поки спорядяться: ${wait.map(q => nameTag(q) + (offLeft(q) ? ` (без звʼязку, ще ${offLeft(q)} с)` : '')).join(', ')}.` : 'Усі спорядилися. Починаємо!';
     }
-    case 'start': if (you && G.coop && G.coop.lair) { const f = coopFc(); return `Лігво відчинене! Можеш вести загін на Боса${f ? ` (зараз ${f.hero} проти ${f.mon}${f.shots ? `, у загону ще ${f.shots} у разових картах` : ''})` : ''} — або вибивай двері, щоб прокачатися.`; }
+    case 'start': if (you && G.coop && G.coop.lair && G.coop.guards && G.coop.guardsDone < G.coop.guards.length) { const g = G.coop.guards[G.coop.guardsDone]; return `Лігво відчинене, але його стережуть: наступний вартовий — <b>${esc(g.name)}</b> (рівень ${g.lvl}, ${g.treasures || 4} скарби). Атакуй його замість дверей (можна кликати на поміч) — або спершу прокачайся.`; }
+      if (you && G.coop && G.coop.lair) { const f = coopFc(); return `Лігво відчинене! Можеш вести загін на Боса${f ? ` (зараз ${f.hero} проти ${f.mon}${f.shots ? `, у загону ще ${f.shots} у разових картах` : ''})` : ''} — або вибивай двері, щоб прокачатися.`; }
       return you ? 'Твій хід. Зіграй расу, клас і речі з руки, потім <b>вибий двері</b> — кнопкою або клацнувши колоду на столі.' : `Хід: ${nm}${p.type === 'remote' ? ' (на іншому пристрої)' : ''}.`;
     case 'afterKick': return you ? 'Бою не було. <b>Обшукай кімнату</b> або зіграй монстра з руки, щоб шукати пригод.' : `${nm} вирішує, що робити далі.`;
     case 'combat': { if (!G.combat) return ''; const s = sides(); const fp = fighter(); const fy = v && v === fp; if (fp !== p) return fy ? (s.win ? 'Монстра перенаправили на тебе, але ти сильніший — <b>бий!</b>' : 'Монстра перенаправили на тебе! Додай сили, клич на поміч або тікай.') : `<b>${esc(fp.name)}</b> бʼється з «${esc(monNames())}» (бій перенаправили).`; return you ? (s.win ? 'Ти сильніший — <b>бий!</b> Але суперники ще можуть підсилити монстра.' : 'Монстри сильніші. Зіграй разові карти, поклич на поміч (і запропонуй ціну) або тікай.') : `${nm} бʼється з «${esc(monNames())}». Можеш зіграти карту на монстра або на допомогу.`; }

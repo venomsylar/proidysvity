@@ -17,6 +17,15 @@ const BOSSES = [
   { id: 'goblins', name: 'Матінка Гоблінів', art: '👵', flavor: 'Сто онуків. Усі голодні.', ability: '+2 за кожну карту в руці Підземелля на початку бою.' },
   { id: 'monday', name: 'Тінь Понеділка', art: '🌑', flavor: 'Приходить щотижня. Ніхто не готовий.', ability: '+2 за кожне тривале прокляття на гравцях.' }
 ];
+// вартові лігва: троє сильніших за звичайних монстрів, з кращою здобиччю
+const GUARDS = [
+  { name: 'Бабця-вахтерка', art: '🧶', bad: BAD.lvl(2), bt: 'Не пускає без перепустки й відчитує до сліз. −2 рівні.', flavor: '«Ви до кого? А бахіли?»' },
+  { name: 'Камʼяний голем-охоронник', art: '🗿', bad: BAD.best, bt: 'Конфіскує найдорожчу річ «до зʼясування».', flavor: 'Стоїть тут із льодовикового періоду.' },
+  { name: 'Двоголовий пес-сторож', art: '🐕', bad: BAD.slot('hands'), bt: 'Одна голова гавкає, друга відгризає. Втрачаєш усе, що в руках.', flavor: 'Одна голова добра. Друга — ні.' },
+  { name: 'Лицар-турнікет', art: '🛡️', bad: BAD.lvl(2), bt: 'Затискає тебе турнікетом. −2 рівні.', flavor: 'Прикладіть картку. Ще раз. Ще раз.' },
+  { name: 'Тролиця-контролерка', art: '🎫', bad: BAD.hand(99), bt: 'Штраф за безквитковий прохід: скинь усю руку.', flavor: 'Ваш квиток недійсний. Як і ви.' }
+];
+const GUARD_LVL = { easy: [11, 13, 15], normal: [13, 15, 17], hard: [14, 16, 19] };
 // невидимий гравець «Підземелля»
 const DUNGEON = { idx: -1, name: 'Підземелля', color: '#b77be0', type: 'dungeon', hand: [], gear: [], curses: [], level: 1, sex: 'm', mem: {} };
 const coopOn = () => !!G.coop;
@@ -76,7 +85,10 @@ function openLair() {
   const co = G.coop; co.lair = true;
   const pool = BOSSES.filter(b => (!b.dragon || (G.types || {}).dragon !== false) && (!b.undead || (G.types || {}).undead !== false));
   co.boss = pool[rnd(pool.length)];
-  log(`🚪 Усі ключі зібрано — лігво відчинено! Там чекає <b>${esc(co.boss.name)}</b>. ${esc(co.boss.ability)}`, 'turn');
+  const gs = shuffle(GUARDS.slice()).slice(0, 3), lv = GUARD_LVL[co.diff] || GUARD_LVL.normal;
+  co.guards = gs.map((g, i) => mk({ deck: 'door', kind: 'monster', guard: true, name: g.name, art: g.art, lvl: lv[i], treasures: i === 2 ? 5 : 4, levels: 1, undead: false, dragon: false, vs: null, flavor: g.flavor, bad: { ...g.bad, text: g.bt } }));
+  co.guardsDone = 0;
+  log(`🚪 Усі ключі зібрано — лігво відчинено! Там чекає <b>${esc(co.boss.name)}</b>. ${esc(co.boss.ability)} Але спершу треба здолати трьох вартових: ${co.guards.map(g => `<b>${esc(g.name)}</b> (${g.lvl})`).join(', ')}.`, 'turn');
   say(`Лігво відчинено! Бос: ${co.boss.name}`, 3200); banner('Лігво відчинено!', '#b77be0'); netAll({ t: 'fx', type: 'banner', a: { text: 'Лігво відчинено!', color: '#b77be0' } });
 }
 async function addThreat(n, why) {
@@ -141,7 +153,7 @@ async function coopRoundEnd() {
 
 /* --- фінальний бій --- */
 const groupStr = () => sum(G.players, q => baseStr(q));
-function bossBase() { const co = G.coop, n = G.players.length; return Math.round((6 + 11 * n) * COOP_DIFF[co.diff].mult); }
+function bossBase() { const co = G.coop, n = G.players.length; return Math.round((10 + 14 * n) * COOP_DIFF[co.diff].mult); }
 function bossExtraNow() {
   const co = G.coop, b = co.boss; if (!b) return 0;
   switch (b.id) {
@@ -162,10 +174,20 @@ function bossForecast() {
   return { hero, shots, mon: bossBase() + bossExtraNow() + threatBonus() + (co.boss.id === 'lich' ? 6 : 0), dmg: Math.round(dmg) };
 }
 const coopFc = () => !G.coop ? null : NET.role === 'client' ? G.coop.fc || null : bossForecast();
+const guardsLeft = () => G.coop && G.coop.guards ? G.coop.guards.length - G.coop.guardsDone : 0;
+const nextGuard = () => guardsLeft() ? G.coop.guards[G.coop.guardsDone] : null;
 function coopWantsAssault() {
   const co = G.coop; if (!co || !co.lair || G.over) return false;
-  const f = bossForecast(); if (!f) return false;
   const left = co.max - co.threat;
+  const g = nextGuard();
+  if (g) {
+    // на вартового йде той, хто з напарником-помічником і своїми картами переважить
+    const p = cur(), ty = { dragon: false, undead: false };
+    const mine = baseStr(p) + shotBoost(p, ty), mate = Math.max(0, ...teamMates(p).filter(q => !q.offline).map(q => baseStr(q)));
+    const need = g.lvl + threatBonus();
+    return mine + mate >= need + 3 || (left <= 3 && mine + mate >= need) || left <= 1;
+  }
+  const f = bossForecast(); if (!f) return false;
   if (f.hero + f.shots >= f.mon + f.dmg + 2) return true;
   if (left <= 2 && f.hero + f.shots >= (f.mon + f.dmg) * .85) return true;
   return left <= 1;
@@ -174,8 +196,24 @@ function bossCard() {
   const b = G.coop.boss;
   return mk({ deck: 'door', kind: 'monster', boss: true, name: b.name, art: b.art, lvl: bossBase(), treasures: 0, levels: 0, dragon: !!b.dragon, undead: !!b.undead, vs: null, flavor: b.flavor, ability: b.ability, bad: { t: 'boss', text: 'Програш: кожен втрачає рівень, Загроза +3.' } });
 }
+async function fightGuard() {
+  const co = G.coop, p = cur(), c = nextGuard(); if (!c) return;
+  log(`🛡️ ${nameTag(p)} атакує вартового лігва: <b>${esc(c.name)}</b> (рівень ${c.lvl}). Здолано вартових: ${co.guardsDone} з ${co.guards.length}.`, 'turn');
+  sfx('alert');
+  const m = cardMesh(c); scene.add(m);
+  await fly(m, deckPose('door'), centerPose(0, 1), 800, 2.4);
+  await beginCombat(c, m);
+}
+// вартовий переможений — лишається менше; програли — вартовий повертається на пост
+function guardDefeated(c) {
+  const co = G.coop; co.guardsDone++;
+  log(`🛡️ Вартового <b>${esc(c.name)}</b> здолано! ${guardsLeft() ? `Лишилось вартових: ${guardsLeft()}.` : 'Шлях до Боса відкрито!'}`, 'turn');
+  say(guardsLeft() ? `Вартового здолано! Лишилось ${guardsLeft()}` : 'Усіх вартових здолано — шлях до Боса відкрито!', 2800);
+  if (!guardsLeft()) { banner('Шлях до Боса відкрито!', '#b77be0'); netAll({ t: 'fx', type: 'banner', a: { text: 'Шлях до Боса відкрито!', color: '#b77be0' } }); }
+}
 async function assaultLair() {
   const co = G.coop, p = cur(); if (!co || !co.lair || G.combat) return;
+  if (guardsLeft()) { await fightGuard(); return; }
   co.tries++;
   const c = bossCard();
   log(`⚔️ ${nameTag(p)} веде загін на штурм лігва! <b>${esc(c.name)}</b> (сила ${c.lvl}). ${esc(co.boss.ability)}`, 'turn');

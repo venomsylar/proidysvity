@@ -493,7 +493,7 @@ async function winCombat() {
   const names = monNames();
   log(`${nameTag(p)}${helper ? ' і ' + nameTag(helper) + ' перемагають' : ' перемагає'} <b>${esc(names)}</b>!`);
   say(`Перемога над «${names}»!`);
-  for (const x of cb.mons) { if (x.m) { const m = x.m; x.m = null; await defeatAnim(m); } discard(x.c); }
+  for (const x of cb.mons) { if (x.m) { const m = x.m; x.m = null; await defeatAnim(m); } if (x.c.guard) guardDefeated(x.c); else discard(x.c); }
   await clearSideCards();
   coopStat(p, 'kills'); if (helper) coopStat(helper, 'kills');
   await changeLevel(p, gain, true);
@@ -544,6 +544,7 @@ async function clearCombat() {
   const cb = G.combat; if (!cb) return;
   const jobs = [clearSideCards()];
   for (const x of cb.mons) {
+    if (x.c.guard) { if (x.m) { const m = x.m; x.m = null; jobs.push(fly(m, poseOf(m), deckPose('door'), 650, 1.3).then(() => disposeMesh(m))); } log(`${esc(x.c.name)} повертається на пост біля лігва.`); continue; }
     if (x.m) { const m = x.m; x.m = null; jobs.push(fly(m, poseOf(m), discardPose('door'), 650, 1.3).then(() => { disposeMesh(m); discard(x.c); })); }
     else discard(x.c);
   }
