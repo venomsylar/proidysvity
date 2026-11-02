@@ -696,3 +696,12 @@ html.less-motion .reactpop{animation-name:fadeo}
   .hand .card{--k:.58}
   .tip{top:auto;bottom:calc(var(--dockH,150px) + 10px);left:auto;right:12px;width:min(340px,calc(100vw - 24px))}
 }
+
+/* QR-код кімнати */
+.netshare{display:flex;gap:14px;align-items:center;margin-top:10px;flex-wrap:wrap}
+.netshare .qr{width:150px;height:150px;flex:0 0 auto;border-radius:10px;background:#fff;box-shadow:0 6px 18px rgba(0,0,0,.4)}
+.netshare .qr-wait{background:rgba(255,255,255,.08);box-shadow:none;animation:pulse 1.2s ease-in-out infinite alternate}
+@keyframes pulse{from{opacity:.4}to{opacity:1}}
+.netshare .ns-txt{flex:1 1 200px;min-width:0}
+.netshare .ns-txt .hint{margin:0 0 8px}
+@media (max-width:560px){ .netshare{justify-content:center;text-align:center} .netshare .qr{width:180px;height:180px} .netshare .row{justify-content:center} }

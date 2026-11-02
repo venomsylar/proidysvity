@@ -38,6 +38,7 @@ async function boot() {
   try { init3D(); } catch (e) { loaderFail('Цей браузер не зміг запустити 3D-графіку. Спробуй інший браузер.'); throw e; }
   renderUI();
   openMainMenu();
+  if (typeof joinFromURL === 'function') joinFromURL();
   loaderSet('Готово!', 1); loaderDone();
 }
 boot();

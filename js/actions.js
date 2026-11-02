@@ -409,7 +409,8 @@ function openSetup() {
   const s = setupState;
   const netBlock = () => NET.role === 'host'
     ? `<h3>Гра по мережі</h3><div class="netcode"><span>Код кімнати</span><b>${esc(NET.code)}</b></div>
-       <p class="hint">Друзі відкривають цей самий файл, тиснуть «Приєднатися» й вводять код. Підключено: ${s.rows.filter(r => r.type === 'remote').length}.</p>
+       ${shareBlock(NET.code)}
+       <p class="hint">Або друзі відкривають гру, тиснуть «Приєднатися» й вводять код. Підключено: ${s.rows.filter(r => r.type === 'remote').length}.</p>
        <p class="hint net-relay ${NET.relay ? 'on' : ''}">${NET.relay ? '● Сервер-посередник увімкнено: можна грати з різних мереж і мобільного інтернету.' : '○ Сервер-посередник недоступний: надійно працює в одній мережі Wi-Fi, з різних мереж — як пощастить.'}</p>
        <div class="row" style="margin-top:6px"><button class="btn small" type="button" data-chat-open>Чат</button><button class="btn small ghost" type="button" id="netStop">Закрити кімнату</button></div>`
     : `<h3>Гра по мережі</h3><p class="hint">Грайте з різних пристроїв: один створює кімнату, інші приєднуються за кодом. Можна грати й з різних мереж: якщо пристрої не бачать один одного напряму, дані підуть через сервер-посередник.</p>

@@ -204,10 +204,58 @@ function netBeat() {
 setInterval(netBeat, 4000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) netBeat(); });
 
+/* --- QR-код і посилання на кімнату ---
+   Посилання виду …/?room=K7P2Q: відкрив — і гра одразу пропонує приєднатися з цим кодом.
+   Бібліотеку QR вантажимо лише тоді, коли хтось створює кімнату. */
+const linkable = () => /^https?:$/.test(location.protocol);
+function joinURL(code) { const u = new URL(location.href); u.search = ''; u.hash = ''; u.searchParams.set('room', code); return u.href; }
+let qrLoading = null;
+function loadQR() {
+  if (window.qrcode) return Promise.resolve();
+  return qrLoading = qrLoading || new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = `js/qrcode.js?v=${APP_VERSION}`; sc.onload = () => res(); sc.onerror = () => { qrLoading = null; rej(new Error('qr')); }; document.head.appendChild(sc); });
+}
+function qrSVG(text) {
+  const q = qrcode(0, 'M'); q.addData(text); q.make();
+  const n = q.getModuleCount(), m = 3; let d = '';
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (q.isDark(y, x)) d += `M${x + m} ${y + m}h1v1h-1z`;
+  return `<svg class="qr" viewBox="0 0 ${n + 2 * m} ${n + 2 * m}" role="img" aria-label="QR-код для приєднання до кімнати" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#fff"/><path d="${d}" fill="#1b1512"/></svg>`;
+}
+function shareInner(code) {
+  if (!linkable()) return '<p class="hint">QR-код і посилання зʼявляться, коли гра відкрита з сайту, а не з файлу на компʼютері.</p>';
+  const url = joinURL(code);
+  return `${window.qrcode ? qrSVG(url) : '<div class="qr qr-wait" aria-hidden="true"></div>'}
+    <div class="ns-txt"><p class="hint">Наведи камеру телефона на код — гра відкриється й одразу запропонує приєднатися. Або надішли посилання.</p>
+    <div class="row"><button class="btn small primary" type="button" data-share-link="${esc(code)}">${navigator.share ? 'Поділитися посиланням' : 'Скопіювати посилання'}</button>${navigator.share ? `<button class="btn small" type="button" data-copy-link="${esc(code)}">Скопіювати</button>` : ''}</div></div>`;
+}
+// блок для екрана налаштувань: малюємо одразу, а QR домальовуємо, щойно завантажиться бібліотека
+function shareBlock(code) {
+  if (linkable() && !window.qrcode) loadQR().then(() => { const el = $('#netShare'); if (el && el.dataset.code === code) el.innerHTML = shareInner(code); }).catch(() => { const el = $('#netShare .qr-wait'); if (el) el.remove(); });
+  return `<div class="netshare" id="netShare" data-code="${esc(code)}">${shareInner(code)}</div>`;
+}
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); return true; } catch (e) { }
+  try { const i = document.createElement('textarea'); i.value = t; i.setAttribute('readonly', ''); i.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(i); i.select(); const ok = document.execCommand('copy'); i.remove(); return ok; } catch (e) { return false; }
+}
+document.addEventListener('click', async e => {
+  const s = e.target.closest('[data-share-link]'), c = e.target.closest('[data-copy-link]'); if (!s && !c) return;
+  e.stopPropagation();
+  const code = (s || c).dataset.shareLink || (s || c).dataset.copyLink, url = joinURL(code);
+  if (s && navigator.share) { try { await navigator.share({ title: 'Пройдисвіти', text: `Приєднуйся до гри «Пройдисвіти»! Код кімнати: ${code}`, url }); } catch (er) { } return; }
+  toast(await copyText(url) ? 'Посилання скопійовано' : url, 2200);
+}, true);
+// гру відкрили за посиланням із кодом кімнати
+function joinFromURL() {
+  let code = ''; try { code = (new URLSearchParams(location.search).get('room') || '').trim().toUpperCase(); } catch (e) { }
+  if (!code) return false;
+  try { const u = new URL(location.href); u.searchParams.delete('room'); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch (e) { }
+  if (!/^[A-Z0-9]{4,6}$/.test(code)) return false;
+  openJoin(code); return true;
+}
+
 /* --- клієнт --- */
-function openJoin() {
+function openJoin(code = '') {
   const r0 = setupState.rows.find(r => r.type === 'human') || { name: 'Гість', sex: 'm' };
-  const st = { sex: r0.sex || 'm' };
+  const st = { sex: r0.sex || 'm', code };
   const draw = (err = '') => `<h2>Приєднатися</h2><p>Введи код кімнати, який бачить господар гри на своєму екрані.</p>
     <label class="lbl2" for="jCode">Код кімнати</label><input class="inp code" id="jCode" maxlength="5" autocomplete="off" spellcheck="false" placeholder="напр. K7P2Q" value="${esc(st.code || '')}">
     <label class="lbl2" for="jName">Твоє імʼя</label><input class="inp" id="jName" maxlength="16" value="${esc(st.name || r0.name)}">
