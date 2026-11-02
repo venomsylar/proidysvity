@@ -39,7 +39,7 @@ function curseChips(p) {
   return `<div class="cchips" role="list" aria-label="Тривалі прокляття">${cs.map(k => `<button type="button" class="cchip" role="listitem" data-sheet title="${esc(k.name)}: ${esc(k.bad.text)} Зняти — картою «Зняти прокляття».">${artIcon(k, 'ai')}${cs.length > 3 ? '' : `<i>${esc(CURSE_SHORT[k.bad.p] || k.name)}</i>`}</button>`).join('')}</div>`;
 }
 const sexName = p => p.sex === 'f' ? 'жінка' : 'чоловік';
-const typeName = p => p.type === 'bot' ? `бот · ${DIFF[p.diff || 2].name.toLowerCase()}` : p.type === 'remote' ? 'гравець по мережі' : 'гравець';
+const typeName = p => p.type === 'bot' ? `бот · ${DIFF[p.diff || 2].name.toLowerCase()}${traitOf(p) ? ' · ' + TRAITS[p.trait].name.toLowerCase() : ''}` : p.type === 'remote' ? 'гравець по мережі' : 'гравець';
 function openCharSheet(i) {
   const p = G.players[i]; if (!p) return;
   closeMenu(); hidePeek();
@@ -57,7 +57,8 @@ function openCharSheet(i) {
   const abil = [...raceCards(p).map(c => `<p class="ability"><b>${esc(c.name)}.</b> ${esc(RACES[c.race].text)}</p>`), ...clsCards(p).map(c => `<p class="ability"><b>${esc(c.name)}.</b> ${esc(CLASSES[c.cls].text)}</p>`),
     p.dualRace && `<p class="ability"><b>${esc(p.dualRace.name)}.</b> ${p.raceCard2 ? 'Дві раси одночасно.' : 'Можна мати другу расу. Поки її немає — монстри не мають бонусів проти твоєї раси.'}</p>`,
     p.dualCls && `<p class="ability"><b>${esc(p.dualCls.name)}.</b> ${p.clsCard2 ? 'Два класи одночасно.' : 'Можна мати другий клас. Поки його немає — монстри не мають бонусів проти твого класу.'}</p>`].filter(Boolean).join('') || `<p class="ability">Немає раси й класу. ${mine ? 'Зіграй карту раси чи класу з руки поза боєм.' : ''}</p>`;
-  const mood = p.type === 'bot' && v && v !== p ? `<h3>Характер</h3><div class="kv"><span>Складність</span><b style="color:var(--text)">${DIFF[p.diff || 2].name}</b></div><div class="kv"><span>Ставлення до тебе</span><b style="color:var(--text)">${attitude(p, v)}</b></div><p class="hint" style="margin-top:6px">Бот памʼятає, хто йому допомагав і хто підставляв. Від цього залежить, чи погодиться він допомогти і чи захоче нашкодити.</p>` : '';
+  const tr = traitOf(p);
+  const mood = p.type === 'bot' && v && v !== p ? `<h3>Характер</h3>${tr ? `<div class="kv"><span>Вдача</span><b style="color:var(--text)">${tr.icon} ${esc(tr.name)}</b></div><p class="hint" style="margin:4px 0 6px">${esc(tr.desc)}</p>` : ''}<div class="kv"><span>Складність</span><b style="color:var(--text)">${DIFF[p.diff || 2].name}</b></div><div class="kv"><span>Ставлення до тебе</span><b style="color:var(--text)">${attitude(p, v)}</b></div><p class="hint" style="margin-top:6px">Бот памʼятає, хто йому допомагав і хто підставляв. Від цього залежить, чи погодиться він допомогти і чи захоче нашкодити.</p>` : '';
   const handsUsed = sum(p.gear.filter(g => g.slot === 'hands'), g => g.hands), bigN = p.gear.filter(g => g.big).length;
   const s = slotItems(p);
   const miscList = s.misc.length > 1 ? `<div class="misc-list">${s.misc.map(c => `<button class="tag" type="button" data-g="${c.uid}">${artIcon(c)} ${esc(c.name)}${c.bonus ? ' +' + c.bonus : ''}</button>`).join('')}</div>` : '';
@@ -132,7 +133,7 @@ function renderPlayers() {
     const isCur = p.idx === G.cur && !G.over;
     row.classList.toggle('cur', isCur);
     row.querySelector('.bt').hidden = !isCur;
-    row.querySelector('.btype').textContent = p.type === 'bot' ? (p.wasRemote ? 'бот замість' : `бот ${'★'.repeat(p.diff || 2)}`) : p.type === 'remote' ? (offLeft(p) ? `без звʼязку ${offLeft(p)}с` : 'мережа') : (NET.role === 'client' && p.idx === NET.me ? 'ти' : '');
+    row.querySelector('.btype').textContent = p.type === 'bot' ? (p.wasRemote ? 'бот замість' : `${traitOf(p) ? TRAITS[p.trait].icon + ' ' : ''}бот ${'★'.repeat(p.diff || 2)}`) : p.type === 'remote' ? (offLeft(p) ? `без звʼязку ${offLeft(p)}с` : 'мережа') : (NET.role === 'client' && p.idx === NET.me ? 'ти' : '');
     row.querySelector('.blvl').textContent = p.level;
     row.querySelector('.bs').innerHTML = `${ICO.sword} ${baseStr(p)}`;
     const rc = rcNames(p) || 'без раси й класу';
@@ -202,8 +203,8 @@ function renderDock() {
   }
   if (privacy() && v !== cur()) { const c0 = cur(); if (!G.window && c0 && c0.type === 'human') $('#status').innerHTML += ` Потім сховай карти — хід за <b>${esc(c0.name)}</b>.`; const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = 'Сховати карти'; b.onclick = hideHand; box.appendChild(b); }
   $('#strText').innerHTML = `${esc(v.name)} · сила ${baseStr(v)}${(v.curses || []).length ? ` <span class="ccount" title="${esc(curseTitle(v))}">⛓ ${v.curses.length}</span>` : ''}`;
-  setHTML($('#equip'), dollHTML(v, false) + curseChips(v) + `<button class="btn small char-btn" type="button" data-sheet>Картка персонажа · сила ${baseStr(v)} · втеча ${sgn(fleeBonus(v))}</button>`);
-  { const lim = handLimit(v), n = v.hand.length; setHTML($('#handOwner'), `${esc(v.name)} · <span class="hc${n > lim ? ' over' : ''}" title="Ліміт руки: ${lim}. Зайві карти доведеться віддати в кінці ходу.">${n} з ${lim}</span> ${plural(lim, 'карти', 'карт', 'карт')}${n > lim ? ' — забагато, зайві віддаси в кінці ходу' : ''}`); }
+  setHTML($('#equip'), dollHTML(v, false) + curseChips(v) + `<button class="btn small char-btn" type="button" data-sheet><span class="cb-l">Картка персонажа · </span><span class="cb-i" aria-hidden="true">👤 </span>сила ${baseStr(v)} · втеча ${sgn(fleeBonus(v))}</button>`);
+  { const lim = handLimit(v), n = v.hand.length; setHTML($('#handOwner'), `<span class="ho-n">${esc(v.name)} · </span><span class="hc${n > lim ? ' over' : ''}" title="Ліміт руки: ${lim}. Зайві карти доведеться віддати в кінці ходу.">${n} з ${lim}</span> <span class="ho-x">${plural(lim, 'карти', 'карт', 'карт')}${n > lim ? ' — забагато, зайві віддаси в кінці ходу' : ''}</span>`); }
   const nowT = performance.now(); G.fresh.forEach(u => { if (!freshT[u]) freshT[u] = nowT + 700; }); G.fresh.clear();
   setHTML($('#hand'), v.hand.map(c => cardHTML(c, (freshT[c.uid] > nowT ? 'fresh ' : '') + (cardActions(c, 'hand').some(a => !a.dis && !/^(Продати|Скинути|Віддати)/.test(a.label)) ? 'playable' : ''))).join('') || '<div class="empty">Рука порожня.</div>');
   G.fresh.clear();
@@ -227,6 +228,7 @@ function renderCombat() {
     if (a.slayer) mods.push(`<span class="tag h">${who}🛡️ Драконобій +${a.slayer}</span>`);
   });
   if (epicFor(p)) mods.unshift(`<span class="tag m">Епічна зона: рівень монстрів ×2</span>`);
+  cb.mons.forEach(x => { if (!x.c.ab) return; const e = monExtra(cb, x, p, h); mods.unshift(`<span class="tag ${e < 0 ? 'h' : 'm'}" title="${esc(MON_AB[x.c.ab])}">⚡ ${esc(AB_SHORT[x.c.ab])}${e ? ' ' + sgn(e) : ''}${x.c.ab === 'glutton' ? ' · разові ×½' : ''}</span>`); });
   if (cb.boss) { G.players.filter(q => q !== p).forEach(q => mods.push(`<span class="tag h">${esc(q.name)} +${baseStr(q)}</span>`)); if (cb.bossX) mods.push(`<span class="tag m">Здібність Боса +${cb.bossX}</span>`); }
   if (G.coop && G.coop.threat >= Math.ceil(G.coop.max / 3)) mods.push(`<span class="tag m">⚠️ Підземелля прокинулось +${G.coop.threat >= Math.ceil(G.coop.max * 2 / 3) ? 4 : 2}</span>`);
   cb.mons.forEach(x => { const vb = vsBonus(x.c, p); if (vb) mods.push(`<span class="tag m">${esc(x.c.name)}: бонус проти тебе +${vb}</span>`); });
@@ -250,7 +252,7 @@ function renderCombat() {
   el.hidden = false;
   const m = $('#meddle'); if (m) m.onclick = openInterfere;
 }
-function renderUI() { renderPlayers(); renderDock(); renderCombat(); queueSnap(); chatSync(); tipCheck(); }
+function renderUI() { renderPlayers(); renderDock(); dockTgLabel(); renderCombat(); queueSnap(); chatSync(); reactSync(); tipCheck(); }
 
 /* --- делеговані обробники --- */
 $('#hand').addEventListener('click', e => { const el = e.target.closest('.card'); if (!el || !handVisible()) return; const v = viewerP(); const c = v && v.hand.find(x => x.uid === +el.dataset.uid); if (c) openCardMenu(c, 'hand'); });
@@ -265,5 +267,24 @@ $('#players').addEventListener('keydown', e => { if (e.key !== 'Enter' && e.key 
 $('#btnLog').onclick = () => { const l = $('#log'); l.hidden = !l.hidden; };
 $('#btnLogClose').onclick = () => { $('#log').hidden = true; };
 $('#btnNew').onclick = () => openMainMenu();
+/* --- телефон: меню «☰» у верхній панелі й згортання руки --- */
+{
+  const ta = $('#topMore'), mb = $('#btnMore');
+  const setMore = on => { ta.classList.toggle('open', on); mb.setAttribute('aria-expanded', String(on)); };
+  mb.onclick = e => { e.stopPropagation(); setMore(!ta.classList.contains('open')); };
+  ta.addEventListener('click', e => { if (e.target.closest('.btn') && e.target.closest('.btn') !== mb) setMore(false); });
+  document.addEventListener('pointerdown', e => { if (ta.classList.contains('open') && !e.target.closest('#topMore')) setMore(false); });
+  let collapsed = false; try { collapsed = localStorage.getItem('pdsv-dock') === '1'; } catch (e) { }
+  const setDock = on => { collapsed = on; $('#dock').classList.toggle('collapsed', on); $('#dockTg').setAttribute('aria-expanded', String(!on)); try { localStorage.setItem('pdsv-dock', on ? '1' : '0'); } catch (e) { } dockTgLabel(); };
+  $('#dockTg').onclick = () => setDock(!collapsed);
+  setDock(collapsed);
+  // на телефоні панель бою стиснута: дотик розгортає подробиці
+  $('#combat').addEventListener('click', e => { if (e.target.closest('button')) return; $('#combat').classList.toggle('full'); });
+}
+function dockTgLabel() {
+  const b = $('#dockTg'); if (!b) return; const v = typeof viewerP === 'function' ? viewerP() : null;
+  const n = v && handVisible() ? v.hand.length : null, c = $('#dock').classList.contains('collapsed');
+  b.innerHTML = `${c ? '▴' : '▾'} Рука${n != null ? ` <b>${n}</b>` : ''}`;
+}
 addEventListener('keydown', e => { if (e.key === 'Escape') { closeMenu(); } });
-if (innerWidth < 760) $('#log').hidden = true;
+if (innerWidth < 760 || phoneLayout()) $('#log').hidden = true;

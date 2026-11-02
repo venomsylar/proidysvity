@@ -129,3 +129,54 @@ function chatOnClient(d) {
 
 chatBuild();
 document.addEventListener('click', e => { if (e.target.closest('[data-chat-open]')) chatToggle(true); });
+
+/* ============================== ШВИДКІ РЕАКЦІЇ ==============================
+   Лише в мережевій грі: емодзі вилітає над місцем того, хто його надіслав.
+   Гість шле номер емодзі господарю, той перевіряє частоту й розсилає всім. */
+const REACTS = ['😂', '😡', '👏', '😱', '🤔', '🙏', '😎', '💀'];
+const REACT = { open: false, t: [] };
+const reactOn = () => chatOn() && G.players.length > 0 && !!$('#ui') && !document.body.classList.contains('in-menu');
+function reactBuild() {
+  if ($('#reactBtn')) return;
+  const b = document.createElement('button');
+  b.id = 'reactBtn'; b.type = 'button'; b.className = 'react-btn'; b.hidden = true;
+  b.setAttribute('aria-label', 'Швидка реакція'); b.setAttribute('aria-expanded', 'false'); b.title = 'Швидка реакція';
+  b.textContent = '😀';
+  const bar = document.createElement('div');
+  bar.id = 'reactBar'; bar.className = 'react-bar'; bar.hidden = true; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Реакції');
+  bar.innerHTML = REACTS.map((e, i) => `<button type="button" data-r="${i}" aria-label="Реакція ${e}">${e}</button>`).join('');
+  document.body.append(b, bar);
+  b.onclick = () => reactToggle();
+  bar.onclick = e => { const x = e.target.closest('[data-r]'); if (!x) return; reactSend(+x.dataset.r); reactToggle(false); };
+  document.addEventListener('pointerdown', e => { if (REACT.open && !e.target.closest('#reactBar,#reactBtn')) reactToggle(false); });
+}
+function reactToggle(open = !REACT.open) {
+  REACT.open = open && reactOn();
+  $('#reactBar').hidden = !REACT.open; $('#reactBtn').setAttribute('aria-expanded', String(REACT.open));
+}
+function reactSync() {
+  reactBuild();
+  const on = reactOn(); $('#reactBtn').hidden = !on;
+  if (!on && REACT.open) reactToggle(false);
+}
+// частота: не більше 4 реакцій за 5 секунд від одного гравця
+function reactAllowed(arr) { const now = Date.now(); while (arr.length && now - arr[0] > 5000) arr.shift(); if (arr.length >= 4) return false; arr.push(now); return true; }
+function reactSend(i) {
+  if (!REACTS[i] || !reactOn()) return;
+  if (!reactAllowed(REACT.t)) { toast('Не так швидко 🙂', 1200); return; }
+  if (NET.role === 'client') { netSendHost({ t: 'react', e: i }); return; }
+  const me = viewerP() || G.players.find(q => q.type === 'human'); if (!me) return;
+  reactShow(me.idx, i); emitFx('react', { who: me.idx, e: i });
+}
+function reactFromGuest(conn, d) {
+  const p = conn._pidx != null ? G.players[conn._pidx] : null; if (!p || !REACTS[d.e | 0]) return;
+  conn._reactT = conn._reactT || []; if (!reactAllowed(conn._reactT)) return;
+  reactShow(p.idx, d.e | 0); emitFx('react', { who: p.idx, e: d.e | 0 });
+}
+function reactShow(who, i) {
+  const p = G.players[who], e = REACTS[i]; if (!p || !e || !p.seat || typeof screenOf !== 'function') return;
+  const sp = screenOf(p.seat.anchor.clone().setY(2));
+  domPop('reactpop', `${e}<small style="color:${p.color}">${esc(p.name)}</small>`, sp.x + (rnd(40) - 20), Math.max(sp.y, 140), 2200);
+  playSfx('click');
+}
+reactBuild();

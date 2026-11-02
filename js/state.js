@@ -66,7 +66,7 @@ function attitude(b, toward) { if (sameTeam(b, toward)) return 'напарник
 /* пів-життя образ і вдячності — приблизно половина середньої партії (класика ≈ 9 кіл, епік ≈ 16); важкі боти памʼятають довше */
 function forgetTick(p) {
   if (!p.mem) return;
-  const half = (G.goal > 10 ? 8 : 4.5) * [1, .7, 1, 1.4][p.diff || 2];
+  const half = (G.goal > 10 ? 8 : 4.5) * [1, .7, 1, 1.4][p.diff || 2] * TT(p, 'half', 1);
   const k = Math.pow(.5, 1 / half);
   for (const i in p.mem) { p.mem[i] *= k; if (Math.abs(p.mem[i]) < .05) delete p.mem[i]; }
 }
@@ -122,11 +122,20 @@ function typeAdj(q, ty) {
 }
 const adjSum = r => r.fireOff + r.fireUndead + r.slayer;
 const shotVal = (c, ty, heroSide) => !heroSide || !c.fire || c.bonus < 0 ? c.bonus : ty.dragon ? 0 : c.bonus + (ty.undead ? 2 : 0);
+const abOf = (cb, k) => !!cb && cb.mons.some(x => x.c.ab === k);
+// поправка до сили конкретного монстра від його вміння
+function monExtra(cb, x, p, h) {
+  let e = 0;
+  if (x.c.ab === 'firefear' && ([p, h].filter(Boolean).some(q => q.gear.some(g => g.fire && usable(q, g))) || cb.pShots.some(c => c.fire && c.bonus > 0))) e -= 6;
+  if (x.c.ab === 'grow') e += 2 * (cb.mods.length + cb.mShots.length + cb.pShots.length + cb.wiz + sum(Object.values(cb.stab || {}), n => n));
+  return e;
+}
 function sides() {
   const cb = G.combat, p = fighter();
   const h = cb.helper != null ? G.players[cb.helper] : null;
   const ty = combatTypes(cb), undead = ty.undead;
-  let hero = baseStr(p) + adjSum(typeAdj(p, ty)) + sum(cb.pShots, c => shotVal(c, ty, true)) + cb.wiz * 2;
+  const glut = abOf(cb, 'glutton');
+  let hero = baseStr(p) + adjSum(typeAdj(p, ty)) + sum(cb.pShots, c => { const v = shotVal(c, ty, true); return glut && v > 0 ? Math.floor(v / 2) : v; }) + cb.wiz * 2;
   if (hasCls(p, 'cleric') && undead) hero += 3;
   if (h) { hero += baseStr(h) + adjSum(typeAdj(h, ty)); if (hasCls(h, 'cleric') && undead) hero += 3; }
   // бій з Босом: бʼється весь загін
@@ -134,7 +143,7 @@ function sides() {
   allies.forEach(q => { hero += baseStr(q) + adjSum(typeAdj(q, ty)) + (hasCls(q, 'cleric') && undead ? 3 : 0); });
   hero -= 2 * sum(Object.values(cb.stab || {}), n => n); // удари в спину від злодюжок
   hero = Math.max(0, hero);
-  let mon = curseN(p, 'magnet') * 2 + sum(cb.mons, x => monLvl(x.c, p) + vsBonus(x.c, p)) + sum(cb.mods, c => c.bonus) + sum(cb.mShots, c => shotVal(c, ty, false));
+  let mon = curseN(p, 'magnet') * 2 + sum(cb.mons, x => monLvl(x.c, p) + vsBonus(x.c, p) + monExtra(cb, x, p, h)) + sum(cb.mods, c => c.bonus) + sum(cb.mShots, c => shotVal(c, ty, false));
   if (G.coop) mon += (cb.bossX || 0) + (G.coop.threat >= Math.ceil(G.coop.max * 2 / 3) ? 4 : G.coop.threat >= Math.ceil(G.coop.max / 3) ? 2 : 0);
   mon = Math.max(1, mon);
   const tie = hasCls(p, 'warrior') || (h && hasCls(h, 'warrior')) || allies.some(q => hasCls(q, 'warrior'));

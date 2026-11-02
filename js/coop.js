@@ -307,7 +307,7 @@ async function coopEnd(win) {
   if (!win) log(`☠️ Загроза дійшла до ${co.max}: Підземелля прокинулось. Похід провалено.`, 'turn');
   renderUI(); sfx(win ? 'win' : 'curse');
   if (win) confetti('#b77be0');
-  const a = { win, boss: co.boss ? co.boss.name : '', threat: co.threat, max: co.max, round: co.round, stats: G.players.map(q => ({ name: q.name, color: q.color, level: q.level, ...co.stats[q.idx] })) };
+  const a = { sum: summaryData(), win, boss: co.boss ? co.boss.name : '', threat: co.threat, max: co.max, round: co.round, stats: G.players.map(q => ({ name: q.name, color: q.color, level: q.level, ...co.stats[q.idx] })) };
   emitFx('coopEnd', a);
   await wait(900);
   showCoopEnd(a, true);
@@ -319,8 +319,9 @@ function showCoopEnd(a, isHost) {
     <p>${a.win ? `Загін переміг за ${a.round} ${plural(a.round, 'коло', 'кола', 'кіл')}, Загроза — ${a.threat} з ${a.max}.` : `Шкала Загрози заповнилась на ${a.round}-му колі.${a.boss ? ` ${esc(a.boss)} так і лишився в лігві.` : ''}`}</p></div>
     <table class="cstats"><tr><th>Гравець</th><th>Рівень</th><th>Перемог</th><th>Ключів</th><th>Карт на Боса</th></tr>
     ${a.stats.map(s => `<tr><td><b style="color:${s.color}">${esc(s.name)}</b>${s.kills + s.keys * 2 + s.shots === best && best > 0 ? ' ⭐' : ''}</td><td>${s.level}</td><td>${s.kills}</td><td>${s.keys}</td><td>${s.shots}</td></tr>`).join('')}</table>
+    ${summaryHTML(a.sum)}
     <div class="row end"><button class="btn ghost" data-close type="button">Роздивитися стіл</button>${isHost ? '<button class="btn primary" id="again" type="button">Нова гра</button>' : ''}</div>
-    ${isHost ? '' : '<p class="hint" style="text-align:center">Нову партію запускає господар кімнати.</p>'}`);
+    ${isHost ? '' : '<p class="hint" style="text-align:center">Нову партію запускає господар кімнати.</p>'}`, 'wide');
   const b = $('#again'); if (b) b.onclick = () => { closeModal(); openSetup(); };
 }
 // хід бота в поході: ріг, коли Загроза росте

@@ -558,3 +558,141 @@ html.less-motion .comic,html.less-motion .mbubble,html.less-motion .lvfloat{anim
 .ach.on{opacity:1;border-color:var(--brass);background:rgba(224,169,59,.08)}
 .ach .ae{font-size:24px;flex:0 0 auto}
 .ach b{display:block;font-size:13.5px}.ach small{display:block;font-size:11.5px;color:var(--muted);line-height:1.3}
+
+/* підсумок партії */
+.sumbox{margin:14px 0 6px;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--line);text-align:left}
+.sumbox h3{margin-top:0}
+.sumchart{width:100%;height:auto;display:block}
+.sumchart .gl{stroke:rgba(255,255,255,.08);stroke-width:1}
+.sumchart text{fill:var(--muted);font:11px var(--f-ui)}
+.sumleg{display:flex;flex-wrap:wrap;gap:4px 14px;margin:6px 0 8px;font-size:12.5px}
+.sumleg i{display:inline-block;width:12px;height:4px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.sumhl{margin:0;padding-left:0;list-style:none;font-size:13.5px;line-height:1.7}
+
+/* репліки ботів */
+.mbubble.say{white-space:normal;max-width:min(240px,62vw);text-align:center;font-size:14px;padding:6px 12px 8px;animation-duration:2.9s;z-index:12}
+.mbubble.say small{display:block;font:800 10.5px/1.2 var(--f-ui);letter-spacing:.06em;text-transform:uppercase;margin-bottom:2px}
+.trait{font-size:13px}
+
+/* швидкі реакції (гра по мережі) */
+.react-btn{position:fixed;z-index:12;left:max(14px,env(safe-area-inset-left,0px));bottom:calc(var(--dockH,250px) + 12px);width:46px;height:46px;border-radius:50%;border:1.5px solid var(--brass);background:#2a2016;font-size:24px;line-height:1;box-shadow:0 6px 18px rgba(0,0,0,.45);cursor:pointer;display:grid;place-items:center;padding:0}
+.react-btn[hidden],.react-bar[hidden]{display:none}
+.react-btn[aria-expanded="true"]{background:#3a2c1c}
+.react-bar{position:fixed;z-index:13;left:max(14px,env(safe-area-inset-left,0px));bottom:calc(var(--dockH,250px) + 66px);display:flex;flex-wrap:wrap;gap:4px;max-width:calc(100vw - 28px);padding:6px;border-radius:16px;background:#2a2016;border:1.5px solid var(--brass);box-shadow:0 10px 30px rgba(0,0,0,.55);animation:tipIn .18s ease-out}
+.react-bar button{width:44px;height:44px;border:0;border-radius:12px;background:transparent;font-size:26px;line-height:1;cursor:pointer;padding:0}
+.react-bar button:hover,.react-bar button:focus-visible{background:rgba(255,255,255,.08);transform:scale(1.12)}
+.reactpop{position:fixed;z-index:13;pointer-events:none;transform:translate(-50%,-50%);font-size:46px;line-height:1;text-align:center;filter:drop-shadow(0 4px 8px rgba(0,0,0,.5));animation:rpop 2.2s ease-out forwards}
+.reactpop small{display:block;font:800 11px/1.2 var(--f-ui);letter-spacing:.05em;text-transform:uppercase;margin-top:2px;-webkit-text-stroke:0;text-shadow:0 1px 3px #000}
+@keyframes rpop{0%{transform:translate(-50%,-20%) scale(.3);opacity:0}12%{transform:translate(-50%,-50%) scale(1.25);opacity:1}22%{transform:translate(-50%,-50%) scale(1)}75%{opacity:1}100%{transform:translate(-50%,-160%) scale(.9);opacity:0}}
+html.less-motion .reactpop{animation-name:fadeo}
+
+/* ============================== ТЕЛЕФОН ==============================
+   Мета: стіл видно завжди. Згори — тонка панель і смужка гравців, знизу — компактна панель
+   з діями й рукою (згортається), бій — стисла смужка, подробиці на дотик. */
+.more-btn,.dock-tg{display:none}
+.cb-i{display:none}
+@media (max-width:760px), (max-height:520px) and (pointer:coarse){
+  .equip .doll{display:none}
+  #ui{gap:6px;padding-left:max(8px,env(safe-area-inset-left,0px));padding-right:max(8px,env(safe-area-inset-right,0px));padding-block:calc(env(safe-area-inset-top,0px) + 6px) calc(env(safe-area-inset-bottom,0px) + 6px)}
+  /* верхня панель: назва + «Чат» + «☰» */
+  .topbar{align-items:center;position:relative;z-index:6}
+  .brand{font-size:20px;padding-top:0}
+  .brand .ver{vertical-align:3px;margin-left:6px}
+  .top-actions{pointer-events:auto;display:flex;gap:6px;align-items:center;flex-wrap:nowrap}
+  .top-actions > .btn{display:none}
+  .top-actions > #btnChat:not([hidden]),.top-actions > .more-btn{display:inline-flex}
+  .top-actions .btn{padding:8px 12px;font-size:13px;min-height:38px;align-items:center}
+  .more-btn{font-size:18px;line-height:1;min-width:42px;justify-content:center}
+  .top-actions.open > .btn:not(.more-btn):not(#btnChat){display:flex}
+  .top-actions.open{position:relative}
+  .top-actions.open::before{content:'';position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:-1}
+  .top-actions.open > .btn:not(.more-btn):not(#btnChat){position:absolute;right:0;width:200px;justify-content:flex-start;font-size:15px;padding:12px 16px;border-radius:0;margin:0;background:#241b14;border:1px solid var(--line);border-top:0;box-shadow:0 12px 30px rgba(0,0,0,.5)}
+  .top-actions.open > #btnSound{top:46px;border-top:1px solid var(--line);border-radius:12px 12px 0 0}
+  .top-actions.open > #btnSkin{top:93px}
+  .top-actions.open > #btnRules{top:140px}
+  .top-actions.open > #btnLog{top:187px}
+  .top-actions.open > #btnNew{top:234px;border-radius:0 0 12px 12px}
+  .top-actions.open .more-btn{background:var(--brass);color:#1b1512}
+  /* смужка гравців */
+  .middle{gap:6px}
+  .board{padding:4px;gap:4px;border-radius:12px}
+  .brow{flex:1 1 0;min-width:84px;width:auto;grid-template-columns:auto minmax(0,1fr);gap:5px;padding:4px 6px;border-left-width:3px;border-radius:9px}
+  .blvl{font-size:22px;min-width:16px;text-align:center}
+  .bname{font-size:12px;gap:3px}
+  .bname .btype{display:none}
+  .bname .bcur{font-size:9.5px;line-height:14px;padding:0 4px}
+  .bmeta{display:none}
+  .track{margin:3px 0 0}
+  .track i{height:5px}
+  .bcoop{width:150px;padding:5px 8px}
+  .bteam{width:58px}
+  /* бій: стисла смужка, подробиці — на дотик */
+  .side{margin-top:auto;gap:6px}
+  .combat{padding:6px 10px 7px;gap:3px 10px;border-radius:12px;cursor:pointer}
+  .cside .cl{font-size:11px}
+  .cside .big{font-size:30px}
+  .vs{font-size:12px}.vs b{font-size:18px}
+  .vs b .ico{width:20px;height:20px}
+  .cbar{height:6px}
+  .combat .cmods{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;scrollbar-width:none;gap:4px;mask-image:linear-gradient(90deg,#000 85%,transparent)}
+  .combat .cmods::-webkit-scrollbar{display:none}
+  .combat .tag{font-size:11px;padding:2px 7px}
+  .combat .cnote{font-size:11.5px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+  .combat.full .cmods{flex-wrap:wrap;justify-content:center;mask-image:none}
+  .combat.full .cnote{-webkit-line-clamp:unset;display:block}
+  .combat:not(.full)::after{content:'⌄';position:absolute;right:10px;bottom:2px;font-size:14px;color:var(--muted)}
+  .combat{position:relative}
+  .combat .crow .btn{padding:6px 12px;font-size:13px}
+  /* нижня панель */
+  .dock{padding:8px 10px 6px;gap:5px;border-radius:14px}
+  .dock-head{gap:6px;position:relative}
+  .status{font-size:13px;line-height:1.35;min-height:0;flex-basis:100%;padding-right:86px}
+  .actions{gap:6px;min-height:0;flex:1 1 auto}
+  .actions .btn{padding:9px 13px;font-size:14px;min-height:40px}
+  .dock-tg{display:inline-flex;align-items:center;gap:4px;position:absolute;top:-2px;right:0;padding:6px 10px;font-size:12.5px;min-height:32px}
+  .dock-tg b{background:rgba(255,255,255,.1);border-radius:7px;padding:0 5px;font-weight:700}
+  .dock.collapsed .dock-body{display:none}
+  .dock-body{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"hl ch" "hand hand";gap:2px 8px;align-items:center}
+  .dock-body > div{display:contents}
+  .dock-body > div:first-child > .lbl{display:none}
+  .dock-body > div:last-child > .lbl{grid-area:hl;min-height:0;align-self:center}
+  .equip{grid-area:ch;margin:0;min-height:0;display:flex;gap:4px;align-items:center;justify-content:flex-end;flex-wrap:nowrap;min-width:0}
+  .equip .cchips{margin:0;flex-wrap:nowrap;overflow:hidden;max-width:120px}
+  .equip .cchip i{display:none}
+  .char-btn{display:inline-flex;padding:5px 10px;font-size:12.5px;white-space:nowrap}
+  .cb-l{display:none}.cb-i{display:inline}
+  .lbl .ho-n,.lbl .ho-x{display:none}
+  .hand{grid-area:hand;min-height:0;padding:6px 2px 4px;gap:7px;scroll-snap-type:x proximity}
+  .hand .card{--k:.74;scroll-snap-align:start}
+  .hand .card:hover{transform:none}
+  .hand-cover{grid-area:hand;min-height:0;padding:6px 2px}
+  .log{bottom:calc(var(--dockH,250px) + 14px);max-height:40vh}
+  .tip{top:calc(env(safe-area-inset-top,0px) + 112px)}
+  .toast{top:40%;font-size:16px;padding:10px 14px;max-width:calc(100vw - 32px)}
+  .banner{top:30%}
+}
+@media (max-width:760px), (max-height:520px) and (pointer:coarse){
+  .brow{position:relative}
+  .bname .bcur{position:absolute;top:2px;right:3px}
+}
+
+/* телефон лежачи: табло ліворуч, бій праворуч, панель знизу — тонка */
+@media (max-height:520px) and (pointer:coarse) and (orientation:landscape){
+  .brand small{display:none}
+  .middle{display:grid;grid-template-columns:minmax(0,150px) minmax(0,1fr) minmax(0,250px);grid-template-areas:"board . side";align-items:start;gap:8px}
+  .board{flex-direction:column;overflow-y:auto;overflow-x:hidden;max-height:100%}
+  .bhead{display:none}
+  .brow{flex:0 0 auto;min-width:0}
+  .bteam,.bcoop{width:auto}
+  .side{margin-top:0;max-height:100%;overflow-y:auto}
+  .log{position:fixed;left:auto;right:max(8px,env(safe-area-inset-right,0px));width:300px;top:50px;bottom:calc(var(--dockH,150px) + 10px);max-height:none;z-index:5}
+  .dock{padding:5px 8px 4px;gap:3px}
+  .dock-head{flex-wrap:nowrap;gap:8px}
+  .status{flex:1 1 auto;flex-basis:auto;min-width:0;font-size:12px;padding-right:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .actions{flex:0 0 auto;flex-wrap:nowrap}
+  .actions .btn{padding:6px 10px;font-size:12.5px;min-height:34px;white-space:nowrap}
+  .dock-tg{position:static;flex:0 0 auto}
+  .hand{padding:3px 2px 2px}
+  .hand .card{--k:.58}
+  .tip{top:auto;bottom:calc(var(--dockH,150px) + 10px);left:auto;right:12px;width:min(340px,calc(100vw - 24px))}
+}

@@ -439,7 +439,7 @@ function init3D() {
   syncDeck('door'); syncDeck('treasure');
   bindPointer();
   addEventListener('resize', resize);
-  new ResizeObserver(resize).observe($('#dock'));
+  { const ro = new ResizeObserver(resize); ro.observe($('#dock')); ro.observe($('#combat')); ro.observe($('#players')); }
   resize();
   applyQuality(QUAL);
   requestAnimationFrame(loop);
@@ -518,7 +518,7 @@ async function changeLevel(p, delta, allowWin = false) {
   p.level = clamp(before + delta, 1, cap);
   if (p.level !== before) {
     log(`${nameTag(p)} ${p.level > before ? 'піднімається' : 'падає'} на ${p.level}-й рівень.`);
-    levelFx(p, p.level > before); floatLevel(p, p.level - before); renderUI(); await wait(550);
+    levelFx(p, p.level > before); floatLevel(p, p.level - before); renderUI(); if (p.level > before) botLeadCheck(p); await wait(550);
   } else if (delta > 0 && !allowWin && (G.teams ? levelsToWin(p) <= 1 : before >= G.goal - 1)) log(G.teams ? `${nameTag(p)} не може так здобути переможний рівень команди — лише перемогою над монстром.` : `${nameTag(p)} не може отримати ${G.goal}-й рівень так — лише перемогою над монстром.`);
   plateDraw(p);
   if (G.teams ? levelsToWin(p) <= 0 : p.level >= G.goal) await gameOver(p);
@@ -764,11 +764,19 @@ function loop(now) {
   renderer.render(scene, camera);
 }
 let viewW = 0, viewH = 0;
+const phoneLayout = () => matchMedia('(max-width:760px), (max-height:520px) and (pointer:coarse)').matches;
 function resize() {
   if (!renderer) return;
   const w = innerWidth, h = innerHeight;
   const dock = $('#dock').getBoundingClientRect().height, top = $('#topbar').getBoundingClientRect().height;
-  cam.offTarget = Math.round(dock - top);
+  document.documentElement.style.setProperty('--dockH', Math.round(dock) + 'px');
+  // телефон: стіл показуємо у вільній смузі між табло (зверху) і панеллю бою чи руки (знизу)
+  if (phoneLayout()) {
+    const brd = $('#players').getBoundingClientRect(), cbe = $('#combat'), cr = cbe.hidden ? null : cbe.getBoundingClientRect();
+    const strip = brd.width > w * .6; // табло смужкою згори (стоячи) чи колонкою збоку (лежачи)
+    const upper = strip ? Math.max(top, brd.bottom) : top, lower = strip && cr && cr.height ? cr.top : h - dock;
+    cam.offTarget = Math.round((h - lower) - upper);
+  } else cam.offTarget = Math.round(dock - top);
   if (w !== viewW || h !== viewH || cam.offK == null) {
     viewW = w; viewH = h; renderer.setSize(w, h);
     cam.offK = cam.offTarget;

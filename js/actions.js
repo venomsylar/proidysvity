@@ -17,7 +17,7 @@ function actAllowed(p, act) {
   if (act.k === 'ready') return G.phase === 'prep' && (G.prepWait || []).includes(p.idx);
   if (act.k === 'gift') { const f = findOwnCard(p, act.uid), t = G.players[act.target]; return !!f && !!t && sameTeam(p, t) && !G.over && !G.combat && !['setup', 'deal'].includes(G.phase) && !p._acting; }
   if (act.k === 'trade') return canTrade(p) && !!G.players[act.target] && act.target !== p.idx;
-  if (act.k === 'help') { const cb = G.combat; return !G.busy && G.phase === 'combat' && !!cb && p === fighter() && !curseN(p, 'lonely') && cb.helper == null && !!G.players[act.target] && act.target !== p.idx && !cb.asked.has(act.target); }
+  if (act.k === 'help') { const cb = G.combat; return !G.busy && G.phase === 'combat' && !!cb && p === fighter() && !curseN(p, 'lonely') && !abOf(cb, 'nohelp') && cb.helper == null && !!G.players[act.target] && act.target !== p.idx && !cb.asked.has(act.target); }
   if (act.uid) { const f = findOwnCard(p, act.uid); return !!f && flatActs(cardActions(f.c, f.where, p)).some(a => !a.dis && sameAct(a.act, act)); }
   return dockActs(p).some(a => a.act && !a.dis && sameAct(a.act, act));
 }
@@ -217,7 +217,7 @@ function dockActs(v) {
     const fp = fighter(); if (v !== fp) return acts;
     const s = sides(), cb = G.combat;
     acts.push({ label: 'Битися!', act: { k: 'fight' }, cls: 'primary pulse', dis: !s.win });
-    acts.push({ label: 'Покликати на поміч', fn: openHelp, dis: curseN(fp, 'lonely') ? 'Прокляття «Ніхто не любить»: допомагати тобі ніхто не може.' : cb.helper != null || G.players.every(q => q === fp || cb.asked.has(q.idx)) });
+    acts.push({ label: 'Покликати на поміч', fn: openHelp, dis: abOf(cb, 'nohelp') ? 'Цей монстр не терпить натовпу: кликати на поміч не можна.' : curseN(fp, 'lonely') ? 'Прокляття «Ніхто не любить»: допомагати тобі ніхто не може.' : cb.helper != null || G.players.every(q => q === fp || cb.asked.has(q.idx)) });
     acts.push({ label: 'Тікати', act: { k: 'flee' }, cls: 'danger' });
     return acts;
   }
@@ -378,7 +378,7 @@ function loadSetup(s) {
   try {
     const d = JSON.parse(localStorage.getItem(SETUP_KEY) || 'null'); if (!d) return;
     const rows = (Array.isArray(d.rows) ? d.rows : []).filter(r => r && (r.type === 'human' || r.type === 'bot')).slice(0, 6)
-      .map((r, i) => ({ name: String(r.name || '').trim().slice(0, 16) || (r.type === 'bot' ? BOT_NAMES[i] : `Гравець ${i + 1}`), type: r.type, sex: r.sex === 'f' ? 'f' : 'm', diff: [1, 2, 3].includes(r.diff) ? r.diff : 2, team: [0, 1, 2].includes(r.team) ? r.team : i % 2 }));
+      .map((r, i) => ({ name: String(r.name || '').trim().slice(0, 16) || (r.type === 'bot' ? BOT_NAMES[i] : `Гравець ${i + 1}`), type: r.type, sex: r.sex === 'f' ? 'f' : 'm', diff: [1, 2, 3].includes(r.diff) ? r.diff : 2, trait: TRAITS[r.trait] ? r.trait : '', team: [0, 1, 2].includes(r.team) ? r.team : i % 2 }));
     s.mode = ['ffa', 'teams', 'coop'].includes(d.mode) ? d.mode : d.teams ? 'teams' : 'ffa'; s.teams = s.mode === 'teams';
     if (['easy', 'normal', 'hard'].includes(d.coopDiff)) s.coopDiff = d.coopDiff;
     if (rows.length >= 2) s.rows = rows;
@@ -388,7 +388,7 @@ function loadSetup(s) {
   } catch (e) { /* без збережених налаштувань */ }
 }
 function storeSetup(s = setupState) {
-  try { localStorage.setItem(SETUP_KEY, JSON.stringify({ rows: s.rows.filter(r => r.type !== 'remote').map(r => ({ name: r.name, type: r.type, sex: r.sex, diff: r.diff || 2, team: r.team | 0 })), teams: !!s.teams, mode: s.mode, coopDiff: s.coopDiff, goal: s.goal, speed: s.speed, anim: s.anim })); } catch (e) { }
+  try { localStorage.setItem(SETUP_KEY, JSON.stringify({ rows: s.rows.filter(r => r.type !== 'remote').map(r => ({ name: r.name, type: r.type, sex: r.sex, diff: r.diff || 2, trait: r.trait || '', team: r.team | 0 })), teams: !!s.teams, mode: s.mode, coopDiff: s.coopDiff, goal: s.goal, speed: s.speed, anim: s.anim })); } catch (e) { }
 }
 loadSetup(setupState);
 function loadMonTypes() { try { const t = JSON.parse(localStorage.getItem('pdsv-montypes') || 'null'); if (t) return { undead: t.undead !== false, dragon: t.dragon !== false }; } catch (e) { } return { undead: true, dragon: true }; }
@@ -422,7 +422,7 @@ function openSetup() {
       <div class="pctl">
         ${s.teams ? `<div class="seg tseg" role="group" aria-label="Команда">${TEAMS.map((t, k) => `<button type="button" data-team="${k}" data-i="${i}" aria-pressed="${(r.team | 0) === k}" title="Команда: ${t.name}" aria-label="Команда ${t.name}" style="--tc:${t.color}">●</button>`).join('')}</div>` : ''}
         ${remote ? '<span class="tag">на іншому пристрої</span>' : `<div class="seg" role="group" aria-label="Тип гравця"><button type="button" data-t="human" data-i="${i}" aria-pressed="${r.type === 'human'}">Людина</button><button type="button" data-t="bot" data-i="${i}" aria-pressed="${r.type === 'bot'}">Бот</button></div>`}
-        ${r.type === 'bot' ? `<select class="inp sel" data-diff="${i}" aria-label="Складність бота">${[1, 2, 3].map(d => `<option value="${d}" ${(r.diff || 2) === d ? 'selected' : ''}>${DIFF[d].name}</option>`).join('')}</select>` : ''}
+        ${r.type === 'bot' ? `<select class="inp sel" data-diff="${i}" aria-label="Складність бота">${[1, 2, 3].map(d => `<option value="${d}" ${(r.diff || 2) === d ? 'selected' : ''}>${DIFF[d].name}</option>`).join('')}</select><select class="inp sel" data-trait="${i}" aria-label="Характер бота"><option value="">🎲 Характер</option>${TRAIT_KEYS.map(k => `<option value="${k}" ${r.trait === k ? 'selected' : ''}>${TRAITS[k].icon} ${TRAITS[k].name}</option>`).join('')}</select>` : ''}
         <div class="seg" role="group" aria-label="Стать"><button type="button" data-sex="m" data-i="${i}" aria-pressed="${r.sex === 'm'}" ${remote ? 'disabled' : ''} title="Чоловік">Ч</button><button type="button" data-sex="f" data-i="${i}" aria-pressed="${r.sex === 'f'}" ${remote ? 'disabled' : ''} title="Жінка">Ж</button></div>
       </div>
       <button class="btn small ghost" type="button" data-del="${i}" ${s.rows.length <= 2 ? 'disabled' : ''} aria-label="Прибрати гравця">✕</button></div>`;
@@ -458,7 +458,7 @@ function openSetup() {
     <div class="row end">${MENU.open ? '<button class="btn ghost" type="button" id="setupBack">Назад</button>' : ''}<button class="btn ghost" type="button" id="rulesB">Правила</button><button class="btn primary" type="button" id="startB">Почати гру</button></div>`;
   const save = () => s.rows.forEach((r, i) => { const el = $('#pname-' + i); if (el && r.type !== 'remote') r.name = el.value.trim() || (r.type === 'bot' ? BOT_NAMES[i] : `Гравець ${i + 1}`); });
   const bind = () => {
-    $('#sheet').onchange = e => { const sel = e.target.closest('[data-diff]'); if (sel) { save(); s.rows[+sel.dataset.diff].diff = +sel.value; storeSetup(); } const mt = e.target.closest('[data-mt]'); if (mt) { save(); s.types[mt.dataset.mt] = mt.checked; saveMonTypes(s.types); rerender(); } };
+    $('#sheet').onchange = e => { const sel = e.target.closest('[data-diff]'); if (sel) { save(); s.rows[+sel.dataset.diff].diff = +sel.value; storeSetup(); } const st = e.target.closest('[data-trait]'); if (st) { save(); s.rows[+st.dataset.trait].trait = TRAITS[st.value] ? st.value : ''; storeSetup(); } const mt = e.target.closest('[data-mt]'); if (mt) { save(); s.types[mt.dataset.mt] = mt.checked; saveMonTypes(s.types); rerender(); } };
     $('#sheet').oninput = e => { if (e.target.id && e.target.id.startsWith('pname-')) { save(); storeSetup(); } };
     $('#sheet').onclick = e => {
       const b = e.target.closest('button'); if (!b) return;
@@ -497,7 +497,7 @@ function saveGame() {
   try {
     const data = { v: APP_VERSION, t: Date.now(), goal: G.goal, teams: G.teams, types: G.types, cur: G.cur, turnNo: G.turnNo || 0, gid: G.gid,
       players: G.players, doorDeck: G.doorDeck, treasureDeck: G.treasureDeck, doorDiscard: G.doorDiscard, treasureDiscard: G.treasureDiscard,
-      log: G.log.slice(-60), coop: G.coop, setup: { speed: setupState.speed, anim: setupState.anim, mode: setupState.mode } };
+      log: G.log.slice(-60), coop: G.coop, hist: G.hist, hl: G.hl, setup: { speed: setupState.speed, anim: setupState.anim, mode: setupState.mode } };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data, (k, v) => (k && saveSkip(k)) ? undefined : v));
   } catch (e) { /* місця немає чи приватний режим — гра працює й без збереження */ }
 }
@@ -511,7 +511,7 @@ function resumeGame() {
   T.die.visible = false;
   botSpeed = d.setup.speed || 1; ANIM = d.setup.anim || 1.5;
   Object.assign(G, { reveal: -1, gid: G.gid + 1, goal: d.goal, teams: !!d.teams, types: d.types, players: d.players, doorDeck: d.doorDeck, treasureDeck: d.treasureDeck, doorDiscard: d.doorDiscard, treasureDiscard: d.treasureDiscard,
-    cur: d.cur, turnNo: d.turnNo, viewer: -1, phase: 'next', combat: null, busy: true, over: false, window: null, assist: null, bossWait: null, prepWait: [], log: d.log || [], fresh: new Set(), pendingSetup: false, coop: d.coop || null, stat: {} });
+    cur: d.cur, turnNo: d.turnNo, viewer: -1, phase: 'next', combat: null, busy: true, over: false, window: null, assist: null, bossWait: null, prepWait: [], log: d.log || [], fresh: new Set(), pendingSetup: false, coop: d.coop || null, stat: {}, hist: d.hist || null, hl: d.hl || null });
   if (G.coop) { DUNGEON.hand = G.coop.hand; DUNGEON.mem = {}; }
   // лічильник карт — вище за всі збережені, щоб нові карти не збіглися номерами
   const uids = [...G.doorDeck, ...G.treasureDeck, ...G.doorDiscard, ...G.treasureDiscard, ...G.players.flatMap(p => [...p.hand, ...p.gear, ...(p.curses || []), p.raceCard, p.clsCard, p.raceCard2, p.clsCard2, p.dualRace, p.dualCls].filter(Boolean)), ...(G.coop ? [...G.coop.hand, ...(G.coop.guards || [])] : [])].map(c => c.uid || 0);
@@ -535,6 +535,7 @@ async function newGame() {
   if (G.combat) { G.combat.mons.forEach(x => disposeMesh(x.m)); G.combat.meshes.forEach(disposeMesh); }
   T.die.visible = false;
   Object.assign(G, { reveal: -1, gid: G.gid + 1, players: [], doorDeck: shuffle(buildDoorDeck(s.goal > 10 && s.mode !== 'coop', s.types)), treasureDeck: shuffle(buildTreasureDeck(s.types)), types: { ...s.types }, doorDiscard: [], treasureDiscard: [], cur: 0, viewer: -1, phase: 'deal', combat: null, busy: true, over: false, window: null, log: [], fresh: new Set(), pendingSetup: false, stat: {} });
+  histReset();
   faceCache.forEach(t => t.dispose()); faceCache.clear();
   syncDeck('door'); syncDeck('treasure'); syncDiscardTop('door'); syncDiscardTop('treasure');
   NET.conns.clear();
@@ -550,7 +551,8 @@ async function newGame() {
   G.teams = teamsOn || coopOnNow; G.assist = null; G.bossWait = null; G.coop = null;
   if (coopOnNow) { G.goal = 10; coopBuildDecks(G.doorDeck, G.treasureDeck, s.rows.length); }
   const shade = {};
-  G.players = rows.map((r, i) => ({ idx: i, team: coopOnNow ? 0 : teamsOn ? r.team | 0 : i, name: r.name, type: r.type, sex: r.sex || 'm', diff: r.diff || 2, color: teamsOn ? TEAM_SHADES[r.team | 0][(shade[r.team | 0] = (shade[r.team | 0] || 0) + 1) - 1] : COLORS[i], level: 1, gold: 0, hand: [], gear: [], raceCard: null, raceCard2: null, clsCard2: null, dualRace: null, dualCls: null, curses: [], clsCard: null, died: false, mem: {} }));
+  G.players = rows.map((r, i) => ({ idx: i, team: coopOnNow ? 0 : teamsOn ? r.team | 0 : i, name: r.name, type: r.type, sex: r.sex || 'm', diff: r.diff || 2, trait: r.type === 'bot' && TRAITS[r.trait] ? r.trait : '', color: teamsOn ? TEAM_SHADES[r.team | 0][(shade[r.team | 0] = (shade[r.team | 0] || 0) + 1) - 1] : COLORS[i], level: 1, gold: 0, hand: [], gear: [], raceCard: null, raceCard2: null, clsCard2: null, dualRace: null, dualCls: null, curses: [], clsCard: null, died: false, mem: {} }));
+  rollTraits(G.players);
   if (coopOnNow) coopStart(s.coopDiff);
   rows.forEach((r, i) => { if (r.type === 'remote' && r.conn) { r.conn._pidx = i; NET.conns.set(i, r.conn); G.players[i].tok = makeTok(); G.players[i]._row = r; } });
   G.players.forEach(buildSeat);
