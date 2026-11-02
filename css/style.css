@@ -705,3 +705,12 @@ html.less-motion .reactpop{animation-name:fadeo}
 .netshare .ns-txt{flex:1 1 200px;min-width:0}
 .netshare .ns-txt .hint{margin:0 0 8px}
 @media (max-width:560px){ .netshare{justify-content:center;text-align:center} .netshare .qr{width:180px;height:180px} .netshare .row{justify-content:center} }
+
+/* хрестик закриття вікна (лише на вузьких екранах) */
+.modal-x{display:none}
+@media (max-width:760px){
+  .modal-x:not([hidden]){display:grid;place-items:center;position:fixed;z-index:31;top:calc(env(safe-area-inset-top,0px) + 6px);right:max(6px,env(safe-area-inset-right,0px));width:40px;height:40px;border-radius:50%;border:1px solid var(--brass);background:#2a2016;color:var(--text);font-size:18px;line-height:1;box-shadow:0 6px 18px rgba(0,0,0,.5);cursor:pointer}
+  .modal{padding-top:calc(env(safe-area-inset-top,0px) + 50px)}
+  .modal.screen{padding-top:0}
+  .modal:not(.screen) .sheet{max-height:calc(100dvh - 70px - env(safe-area-inset-top,0px))}
+}

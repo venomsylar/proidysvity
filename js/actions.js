@@ -269,6 +269,20 @@ function screenBack() {
   if (b) b.click(); else closeModal();
 }
 $('#scrBack').onclick = screenBack;
+/* вікно, яке можна просто закрити (картка персонажа, правила тощо): клік повз нього чи Escape — те саме, що «Закрити».
+   Вікна, де гра чекає рішення (без такої кнопки), так не закриваються. */
+{
+  const md = $('#modal'); let downOnBack = false;
+  const dismiss = () => { if (md.hidden || md.classList.contains('screen')) return false; const b = $('#sheet').querySelector('[data-close]'); if (!b) return false; b.click(); return true; };
+  md.addEventListener('pointerdown', e => { downOnBack = e.target === md; });
+  md.addEventListener('click', e => { if (e.target === md && downOnBack) dismiss(); downOnBack = false; });
+  addEventListener('keydown', e => { if (e.key === 'Escape' && !e.defaultPrevented && !e.target.closest('input, textarea, select') && dismiss()) e.preventDefault(); });
+  // на телефоні вікно займає майже весь екран — тому ще й хрестик у кутку
+  const x = $('#modalX'); x.onclick = dismiss;
+  const syncX = () => { x.hidden = md.hidden || md.classList.contains('screen') || !$('#sheet').querySelector('[data-close]'); };
+  new MutationObserver(syncX).observe($('#sheet'), { childList: true, subtree: true });
+  new MutationObserver(syncX).observe(md, { attributes: true, attributeFilter: ['hidden', 'class'] });
+}
 addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#modal').hidden && $('#modal').classList.contains('screen')) { e.preventDefault(); screenBack(); } });
 function confirmModal(title, text, yes, no) {
   return new Promise(res => {
