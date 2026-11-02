@@ -32,6 +32,7 @@ async function startTurn() {
   G.players.forEach(plateDraw);
   log(`Хід: ${nameTag(p)} · рівень ${p.level}`, 'turn');
   banner(`Хід: ${p.name}`, p.color); sfx('turn'); netAll({ t: 'fx', type: 'banner', a: { text: `Хід: ${p.name}`, color: p.color } });
+  if (G.coop) { G.busy = true; try { await dungeonPester(p); } finally { G.busy = false; } if (G.over) return; }
   if (p.type === 'human') {
     G.busy = true; renderUI();
     await ensureViewer(p.idx);
@@ -219,8 +220,10 @@ async function doSteal(p, t, c) {
   }
   renderUI();
 }
+// скільки карт уже спалив Маг у цьому бою (у бою з Босом — кожен Маг загону окремо)
+const wizUsed = q => { const cb = G.combat; return !cb ? 0 : cb.boss ? ((cb.wizBy || {})[q.idx] || 0) : cb.wiz; };
 async function wizardDiscard(p, c) {
-  const cb = G.combat; removeFromHand(p, c); cb.wiz++;
+  const cb = G.combat; removeFromHand(p, c); cb.wiz++; cb.wizBy = cb.wizBy || {}; cb.wizBy[p.idx] = (cb.wizBy[p.idx] || 0) + 1;
   log(`${nameTag(p)} (Маг) спалює карту «${esc(c.name)}»: +2.`);
   const m = cardMesh(c); scene.add(m); renderUI();
   await fly(m, fromHandOf(p), discardPose(c.deck), 550, 1.4, { owner: p.idx });

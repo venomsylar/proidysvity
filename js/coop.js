@@ -5,9 +5,10 @@
    й перемогти Боса раніше, ніж шкала Загрози дійде до кінця. Підземелля — невидимий гравець
    зі своєю рукою: посилює монстрів, підкидає потвор і насилає прокляття. */
 const COOP_DIFF = {
-  easy: { name: 'Легко', max: 14, mult: .85, meddle: .25, cards: 1, bossCards: 1, curse: .25, draw: 1 },
-  normal: { name: 'Нормально', max: 12, mult: 1, meddle: .42, cards: 2, bossCards: 2, curse: .45, draw: 2 },
-  hard: { name: 'Важко', max: 10, mult: 1.15, meddle: .6, cards: 3, bossCards: 3, curse: .7, draw: 2 }
+  // meddle — шанс шкоди в бою, curse — прокляття наприкінці кола, pester — пакість на початку ходу гравця
+  easy: { name: 'Легко', max: 14, mult: .85, meddle: .35, cards: 1, bossCards: 1, curse: .35, draw: 1, pester: .12 },
+  normal: { name: 'Нормально', max: 12, mult: 1, meddle: .55, cards: 2, bossCards: 2, curse: .55, draw: 2, pester: .22 },
+  hard: { name: 'Важко', max: 10, mult: 1.25, meddle: .75, cards: 3, bossCards: 3, curse: .8, draw: 3, pester: .35 }
 };
 const BOSSES = [
   { id: 'dragon', name: 'Древній Дракон Кредиту', art: '🐲', dragon: true, flavor: 'Спить на золоті. Твоєму.', ability: 'Дракон: вогняні речі й зілля проти нього не діють.' },
@@ -138,6 +139,19 @@ async function dungeonMeddle(boss = false, limit = null) {
   }
   return n;
 }
+// пакість Підземелля на початку ходу: прокляття або «протяг», що здуває карту з руки
+async function dungeonPester(p) {
+  const co = G.coop; if (!co || G.over || !p || (G.turnNo || 0) <= G.players.length) return;
+  const D = COOP_DIFF[co.diff];
+  if (Math.random() > D.pester + threatStage() * .06) return;
+  const c = co.hand.find(x => x.kind === 'curse' && badHits(p, x.bad));
+  if (c) { log(`👁 Підземелля не дрімає: насилає «${esc(c.name)}» на ${nameTag(p)}.`); await doCurse(DUNGEON, c, p); return; }
+  if (p.hand.length >= 3) {
+    const k = p.hand[rnd(p.hand.length)]; removeFromHand(p, k);
+    log(`🌬 Протяг із Підземелля здуває з руки ${nameTag(p)} карту «${esc(k.name)}».`); say(`Протяг здуває карту в ${p.name}!`, 2000); sfx('threat');
+    const m = cardMesh(k); scene.add(m); await fly(m, fromHandOf(p), discardPose(k.deck), 650, 1.6); disposeMesh(m); discard(k); renderUI();
+  }
+}
 async function coopRoundEnd() {
   const co = G.coop; if (!co || G.over) return;
   co.round++;
@@ -254,14 +268,13 @@ async function bossHeroes() {
   const sv = c => Math.abs(shotVal(c, ty, c.bonus > 0));
   const need = () => { const s = sides(); return s.win ? 0 : s.mon - s.hero + (s.tie ? 0 : 1); };
   const humans = G.players.filter(q => isPerson(q) && !q.offline);
-  const humanPot = sum(humans, q => shotBoost(q, ty));
+  const humanPot = sum(humans, q => bossPot(q, ty));
   const bots = G.players.filter(q => q.type === 'bot');
-  const botPot = sum(bots, q => sum(q.hand.filter(c => c.kind === 'oneshot' && sv(c) > 0), sv));
-  if (need() > 0 && botPot + humanPot >= need()) {
-    for (const b of bots) {
-      const shots = b.hand.filter(c => c.kind === 'oneshot' && sv(c) > 0).sort((x, y) => sv(y) - sv(x));
-      for (const c of shots) { if (need() <= Math.max(0, humanPot * .5) || G.combat !== cb) break; await botDelay(300); await playIntoCombat(b, c, c.bonus > 0 ? 'hero' : 'mon'); coopStat(b, 'shots'); }
-    }
+  const botPot = sum(bots, q => bossPot(q, ty));
+  if (need() > 0 && botPot + humanPot >= need()) await botsBossPlay(bots, cb, ty, need);
+  else if (need() > 0 && bots.length) {
+    const b = bots[0]; log(`${nameTag(b)}: <i>«Разом не дотягнемо — бракує ${need() - botPot - humanPot}. Бережемо карти, спробуємо ще.»</i>`);
+    if (typeof sayLine === 'function') sayLine(b, `Не дотягнемо: бракує ${need() - botPot - humanPot}`);
   }
   if (!humans.length || G.combat !== cb) return;
   sfx('alert');
@@ -272,6 +285,25 @@ async function bossHeroes() {
     G.bossWait = { waiting: humans.map(h => h.idx), resolve: done }; renderUI();
   });
   renderUI();
+  // люди зіграли своє — якщо бракує трохи, боти докидають решту
+  if (G.combat === cb && !G.over && need() > 0 && sum(bots, q => bossPot(q, ty)) >= need()) await botsBossPlay(bots, cb, ty, need);
+}
+// скільки бот чи гравець може додати в бій з Босом: разові карти, прокляття в монстра (−2), спалені Магом карти (+2, до 3)
+function bossPot(q, ty) {
+  const cb = G.combat;
+  const shots = sum(q.hand.filter(c => c.kind === 'oneshot' && Math.abs(shotVal(c, ty, c.bonus > 0)) > 0), c => Math.abs(shotVal(c, ty, c.bonus > 0)));
+  const curses = q.hand.filter(c => c.kind === 'curse').length * 2;
+  const wiz = hasCls(q, 'wizard') ? Math.min(3 - wizUsed(q), q.hand.filter(c => !['oneshot', 'flee', 'levelup', 'curse'].includes(c.kind)).length) * 2 : 0;
+  return shots + curses + wiz;
+}
+async function botsBossPlay(bots, cb, ty, need) {
+  const sv = c => Math.abs(shotVal(c, ty, c.bonus > 0));
+  for (const b of bots) {
+    if (need() <= 0 || G.combat !== cb || G.over) return;
+    for (const c of b.hand.filter(c => c.kind === 'oneshot' && sv(c) > 0).sort((x, y) => sv(y) - sv(x))) { if (need() <= 0 || G.combat !== cb) break; await botDelay(300); await playIntoCombat(b, c, c.bonus > 0 ? 'hero' : 'mon'); coopStat(b, 'shots'); }
+    for (const c of b.hand.filter(c => c.kind === 'curse')) { if (need() <= 0 || G.combat !== cb) break; await botDelay(300); await coopCurseMon(b, c); coopStat(b, 'shots'); }
+    while (need() > 0 && G.combat === cb && hasCls(b, 'wizard') && wizUsed(b) < 3) { const j = pickJunk(b); if (!j || j.kind === 'curse') break; await botDelay(250); await wizardDiscard(b, j); coopStat(b, 'shots'); }
+  }
 }
 function bossReady(p) {
   const w = G.bossWait; if (!w) return;

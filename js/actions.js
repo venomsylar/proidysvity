@@ -124,7 +124,7 @@ function cardActions(c, where, v = viewerP()) {
   if (!['race', 'class', 'dual'].includes(c.kind)) gift();
   const undeadIn = inCombat && cb.mons.some(x => x.c.undead);
   const fp = fighter();
-  const friend = inCombat && !isFighter && !isHelper && (sameTeam(v, fp) || sameTeam(v, G.players[cb.helper])); // бій веде напарник — шкодити йому не можна
+  const friend = inCombat && (!!cb.boss || (!isFighter && !isHelper && (sameTeam(v, fp) || sameTeam(v, G.players[cb.helper])))); // бій веде напарник (чи весь загін б'є Боса) — шкодити своїм не можна // бій веде напарник — шкодити йому не можна
   switch (c.kind) {
     case 'gear': if (sideOk) A('Спорядити', { k: 'equip', uid: c.uid }, { dis: canEquip(v, c) }); sell(); break;
     case 'race': case 'class': {
@@ -172,7 +172,7 @@ function cardActions(c, where, v = viewerP()) {
   }
   if (free && !inCombat) A('Скинути в скид', { k: 'discard', uid: c.uid });
   if (inCombat && combatOk && !isFighter && !isHelper && !friend && !cb.boss && hasCls(v, 'thief') && ((cb.stab || {})[v.idx] || 0) < 3 && !['oneshot', 'flee'].includes(c.kind) && where === 'hand') A(`Удар у спину: скинути, ${fighter().name} −2 (Злодюжка, ${((cb.stab || {})[v.idx] || 0)}/3)`, { k: 'stab', uid: c.uid });
-  if (isFighter && free && hasCls(v, 'wizard') && cb.wiz < 3 && !['oneshot', 'flee'].includes(c.kind)) A('Спалити заради +2 (Маг)', { k: 'wizard', uid: c.uid });
+  if (inCombat && hasCls(v, 'wizard') && !['oneshot', 'flee'].includes(c.kind) && where === 'hand' && wizUsed(v) < 3 && ((isFighter && free) || (cb.boss && bossW))) A(`Спалити заради +2 (Маг, ${wizUsed(v)}/3)`, { k: 'wizard', uid: c.uid });
   return acts;
 }
 function dockActs(v) {
@@ -436,7 +436,8 @@ function openSetup() {
     <h3>Режим</h3>
     <div class="seg wrap" role="group" aria-label="Режим гри"><button type="button" data-mode="ffa" aria-pressed="${s.mode === 'ffa'}">Кожен сам за себе</button><button type="button" data-mode="teams" aria-pressed="${s.mode === 'teams'}">Командна гра</button><button type="button" data-mode="coop" aria-pressed="${s.mode === 'coop'}">Похід на Боса</button></div>
     ${s.mode === 'coop' ? `<p class="hint" style="margin-top:8px">Кооператив: усі разом проти Підземелля. Знайдіть 3 ключі в колоді дверей, відчиніть лігво й перемогти Боса, поки шкала Загрози не заповниться. Підземелля — невидимий суперник: посилює монстрів, підкидає потвор і насилає прокляття. Шкала Загрози: ${COOP_DIFF[s.coopDiff].max + (s.rows.length <= 2 ? 3 : s.rows.length === 3 ? 1 : 0)}.</p>
-    <div class="seg" role="group" aria-label="Складність походу" style="margin-top:8px">${Object.entries(COOP_DIFF).map(([k, d]) => `<button type="button" data-cd="${k}" aria-pressed="${s.coopDiff === k}">${d.name}</button>`).join('')}</div>` : ''}
+    <div class="seg" role="group" aria-label="Складність походу" style="margin-top:8px">${Object.entries(COOP_DIFF).map(([k, d]) => `<button type="button" data-cd="${k}" aria-pressed="${s.coopDiff === k}">${d.name}</button>`).join('')}</div>
+    <p class="hint" style="margin-top:6px">Як пакостить Підземелля (${COOP_DIFF[s.coopDiff].name.toLowerCase()}): шкодить у бою, коли ви перемагаєте, — ${Math.round(COOP_DIFF[s.coopDiff].meddle * 100)}%, до ${COOP_DIFF[s.coopDiff].cards} ${plural(COOP_DIFF[s.coopDiff].cards, 'карти', 'карт', 'карт')} за бій · прокляття наприкінці кола — ${Math.round(COOP_DIFF[s.coopDiff].curse * 100)}% · пакість на початку ходу — ${Math.round(COOP_DIFF[s.coopDiff].pester * 100)}%. Що вища Загроза, то частіше.</p>` : ''}
     ${s.teams ? `<p class="hint" style="margin-top:8px">Команда перемагає, коли сума рівнів її гравців досягне мети (${s.goal > 10 ? 16 : 8} на гравця; меншій команді — фора). Переможний рівень — лише за монстра. Напарники допомагають безплатно, передають одне одному речі й не можуть шкодити своїм.<br>${setupTeamsText(s)}</p>` : ''}
     <p class="hint" style="margin-top:6px">Складність бота: легкий частіше допомагає й рідко шкодить, важкий торгується, мстить і полює на лідера. Кілька людей за одним пристроєм грають по черзі.</p>
     ${netBlock()}
