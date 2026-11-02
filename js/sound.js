@@ -6,7 +6,7 @@ try { const sv = JSON.parse(localStorage.getItem('pdsv-sound') || '{}'); if (typ
 function saveSound() { try { localStorage.setItem('pdsv-sound', JSON.stringify({ m: SND.musicVol, s: SND.sfxVol, mute: SND.muted })); } catch (e) { /* сховище недоступне */ } }
 const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
 function ensureAudio() {
-  if (SND.ctx) { if (SND.ctx.state === 'suspended' && !document.hidden) SND.ctx.resume(); return; }
+  if (SND.ctx) { if (SND.ctx.state !== 'running' && !document.hidden) SND.ctx.resume().catch(() => { }); return; }
   const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
   let c; try { c = SND.ctx = new AC(); } catch (e) { return; }
   const comp = c.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4; comp.connect(c.destination);
@@ -172,7 +172,7 @@ function playSfx(name) {
 }
 function sfx(name) { playSfx(name); emitFx('sfx', { n: name }); }
 function soundLabel() { const b = $('#btnSound'); if (b) b.textContent = SND.muted ? 'Звук вимк.' : 'Звук'; }
-function toggleMute() { ensureAudio(); SND.muted = !SND.muted; applyVolumes(); saveSound(); soundLabel(); toast(SND.muted ? 'Звук вимкнено' : 'Звук увімкнено', 1200); }
+function toggleMute() { ensureAudio(); SND.muted = !SND.muted; if (keepAlive) { if (SND.muted) keepAlive.pause(); else keepAlive.play().catch(() => { }); } applyVolumes(); saveSound(); soundLabel(); toast(SND.muted ? 'Звук вимкнено' : 'Звук увімкнено', 1200); }
 function openSound() {
   ensureAudio();
   const M = MUSIC[SKIN_ID] || MUSIC.tavern;
@@ -194,7 +194,38 @@ function openSound() {
   };
   bind();
 }
-addEventListener('pointerdown', ensureAudio, { capture: true });
-addEventListener('keydown', e => { ensureAudio(); if ((e.key === 'm' || e.key === 'M' || e.key === 'ь' || e.key === 'Ь') && !e.target.closest('input, textarea, select')) toggleMute(); }, { capture: true });
-document.addEventListener('visibilitychange', () => { if (!SND.ctx) return; if (document.hidden) SND.ctx.suspend(); else SND.ctx.resume(); });
+/* --- розблокування звуку ---
+   iPhone й iPad вмикають Web Audio лише всередині «справжнього» дотику (touchend чи click, а не pointerdown)
+   і лише після того, як у ньому щось прозвучало. До того ж перемикач «Беззвучно» на iPhone глушить Web Audio:
+   просимо в системи режим «відтворення» (iOS 17+), а на старіших — граємо беззвучний цикл через <audio>. */
+const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+let keepAlive = null;
+function silentWavURL() {
+  const n = 4000, b = new ArrayBuffer(44 + n), v = new DataView(b), w = (o, t) => [...t].forEach((ch, i) => v.setUint8(o + i, ch.charCodeAt(0)));
+  w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); w(36, 'data'); v.setUint32(40, n, true);
+  for (let i = 0; i < n; i++) v.setUint8(44 + i, 128);
+  return URL.createObjectURL(new Blob([b], { type: 'audio/wav' }));
+}
+function unlockAudio() {
+  ensureAudio();
+  const c = SND.ctx; if (!c || document.hidden) return;
+  if (IOS && navigator.audioSession) { try { navigator.audioSession.type = 'playback'; } catch (e) { } }
+  else if (IOS && !SND.muted) {
+    try {
+      if (!keepAlive) { keepAlive = new Audio(silentWavURL()); keepAlive.loop = true; keepAlive.setAttribute('playsinline', ''); keepAlive.setAttribute('x-webkit-airplay', 'deny'); keepAlive.preload = 'auto'; }
+      if (keepAlive.paused) keepAlive.play().catch(() => { });
+    } catch (e) { }
+  }
+  if (c.state !== 'running') c.resume().catch(() => { });
+  if (!SND.primed || c.state !== 'running') {
+    try { const s = c.createBufferSource(); s.buffer = c.createBuffer(1, 1, 22050); s.connect(c.destination); s.start(0); SND.primed = true; } catch (e) { }
+  }
+}
+['pointerdown', 'touchend', 'click'].forEach(ev => addEventListener(ev, unlockAudio, { capture: true, passive: true }));
+addEventListener('keydown', e => { unlockAudio(); if ((e.key === 'm' || e.key === 'M' || e.key === 'ь' || e.key === 'Ь') && !e.target.closest('input, textarea, select')) toggleMute(); }, { capture: true });
+document.addEventListener('visibilitychange', () => {
+  if (keepAlive) { if (document.hidden) keepAlive.pause(); else if (!SND.muted) keepAlive.play().catch(() => { }); }
+  if (!SND.ctx) return; if (document.hidden) SND.ctx.suspend().catch(() => { }); else SND.ctx.resume().catch(() => { });
+});
 document.addEventListener('click', e => { if (e.target.closest('.btn, .card, .slot, .ochip, .skin, .brow, .seg button')) playSfx('click'); });
