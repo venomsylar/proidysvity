@@ -416,12 +416,15 @@ function onNetFx(d) {
     case 'flash': flashAt(new THREE.Vector3(a.x, a.y, a.z), a.i, a.dur, a.color, true); break;
     case 'roar': { const m = NET.mirror.get(a.uid); if (m) roar(m); break; }
     case 'lunge': { const m = NET.mirror.get(a.uid); if (m) lunge(m); break; }
+    case 'strike': { const m = NET.mirror.get(a.uid), q = G.players[a.who]; if (m && q) monsterStrike(m, q, a.word); break; }
+    case 'gloat': { const m = NET.mirror.get(a.uid); if (m) monsterGloat(m, a.text); break; }
+    case 'lvl': { const q = G.players[a.who]; if (q) floatLevel(q, a.d); break; }
     case 'defeat': { const m = NET.mirror.get(a.uid); if (m) { NET.mirror.delete(a.uid); defeatAnim(m); } break; }
     case 'die': { const q = G.players[a.who]; if (q) rollDie(q, a.v); break; }
     case 'banner': banner(a.text, a.color); break;
     case 'confetti': for (let i = 0; i < 4; i++) setTimeout(() => burst(new THREE.Vector3((Math.random() - .5) * 8, 9, (Math.random() - .5) * 8), [a.color, '#ffd36b', '#ffffff', '#ef6b5d', '#5aa9e2', '#86cf6e'], 260, 5, 4.5, -2.6, .22, false, 6, true), i * 450); break;
     case 'sfx': playSfx(a.n); break;
-    case 'win': { const p = G.players[a.idx]; if (p) setTimeout(() => showWin(p, false), 900); break; }
-    case 'coopEnd': setTimeout(() => showCoopEnd(a, false), 900); break;
+    case 'win': { const p = G.players[a.idx]; if (p) { statGameEnd(isMe(p) || sameTeam(p, statMe())); setTimeout(() => showWin(p, false), 900); } break; }
+    case 'coopEnd': statGameEnd(!!a.win); setTimeout(() => showCoopEnd(a, false), 900); break;
   }
 }

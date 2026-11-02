@@ -21,6 +21,7 @@ async function startTurn() {
   if (G.over || NET.role === 'client' || G.phase !== 'next') return;
   if (G.pendingSetup) { G.pendingSetup = false; openSetup(); return; }
   applyReclaims();
+  saveGame();
   const p = cur(); G.phase = 'start'; G.combat = null; forgetTick(p); G.turnNo = (G.turnNo || 0) + 1;
   G.players.forEach(plateDraw);
   log(`Хід: ${nameTag(p)} · рівень ${p.level}`, 'turn');
@@ -71,10 +72,10 @@ async function kickDoor() {
   }
   G.phase = 'afterKick';
 }
-async function drawTo(p, deck) {
+async function drawTo(p, deck, from = null) {
   const c = draw(deck); if (!c) return null;
   const m = cardMesh(c); scene.add(m);
-  await fly(m, deckPose(deck), toHandOf(p), 620, 1.6, { owner: p.idx });
+  await fly(m, from || deckPose(deck), toHandOf(p), 620, 1.6, { owner: p.idx });
   disposeMesh(m); giveCard(p, c); renderUI();
   return c;
 }
@@ -161,10 +162,10 @@ async function addMonster(p, mc, via) {
 async function thiefStab(p, c) {
   const cb = G.combat; if (!cb || !c) return;
   const f = fighter(); removeFromHand(p, c);
-  cb.stab = cb.stab || {}; cb.stab[p.idx] = (cb.stab[p.idx] || 0) + 1;
+  cb.stab = cb.stab || {}; cb.stab[p.idx] = (cb.stab[p.idx] || 0) + 1; if (isMe(p) && cb.stab[p.idx] >= 3) achieve('backstab');
   log(`${nameTag(p)} (Злодюжка) бʼє в спину ${nameTag(f)}, скинувши «${esc(c.name)}»: −2.`);
   memo(f, p, -2); if (cb.helper != null) memo(G.players[cb.helper], p, -1);
-  sfx('curse'); say(`${p.name} бʼє в спину!`, 1600);
+  sfx('stab'); say(`${p.name} бʼє в спину!`, 1600);
   const m = cardMesh(c); scene.add(m); renderUI();
   await fly(m, fromHandOf(p), discardPose(c.deck), 550, 1.4, { owner: p.idx });
   hitFx(f); disposeMesh(m); discard(c); renderUI();
@@ -176,7 +177,7 @@ async function doSteal(p, t, c) {
   if (!t || !c || !t.gear.includes(c)) return;
   p.stoleTurn = G.turnNo;
   log(`${nameTag(p)} (Злодюжка) намагається поцупити в ${nameTag(t)} «${esc(c.name)}»…`);
-  memo(t, p, -3); renderUI();
+  memo(t, p, -3); sfx('steal'); renderUI();
   const r = await rollDie(p);
   say(`Кубик · ${p.name}: ${r}. Треба 4+ — ${r >= 4 ? 'вийшло!' : 'спіймали!'}`, 2400);
   await wait(1100);
@@ -185,7 +186,7 @@ async function doSteal(p, t, c) {
     const m = cardMesh(c); scene.add(m);
     await fly(m, seatPose(t.idx, true), toHandOf(p), 650, 1.6, { owner: p.idx }); disposeMesh(m);
     giveCard(p, c); sfx('coins');
-    log(`${nameTag(p)} цупить «${esc(c.name)}»!`); tell(t, `${p.name} поцупив у тебе «${c.name}»`, 2600);
+    log(`${nameTag(p)} цупить «${esc(c.name)}»!`); if (isMe(p)) achieve('thief'); tell(t, `${p.name} поцупив у тебе «${c.name}»`, 2600);
   } else {
     log(`${nameTag(p)} спіймали на гарячому!`); hitFx(p);
     await changeLevel(p, -1);
@@ -392,6 +393,7 @@ function helpForecast(i) {
 }
 async function askHelp(i, offer) {
   const cb = G.combat, p = fighter(), h = G.players[i]; if (!cb || !h || curseN(p, 'lonely')) return false;
+  if (isMe(p)) statFlag('asked');
   cb.asked.add(i);
   const T = treasureCount();
   offer = { tr: clamp(offer.tr | 0, 0, T), cards: (offer.cards || []).filter(c => p.hand.includes(c)) };
@@ -533,9 +535,11 @@ async function winCombat() {
   if (orcBonus) log(`${nameTag(p)} (Орк) розносить монстра з перевагою ${s0.hero - s0.mon}: +1 рівень зверху!`);
   if (curseN(p, 'sack') && treasureCount()) log(`Прокляття «Дірявий мішок»: ${nameTag(p)} отримує на ${Math.min(treasureCount(), curseN(p, 'sack'))} скарб менше.`);
   const helper = cb.helper != null ? G.players[cb.helper] : null;
+  statOnKill(p, helper, cb);
   const names = monNames();
   log(`${nameTag(p)}${helper ? ' і ' + nameTag(helper) + ' перемагають' : ' перемагає'} <b>${esc(names)}</b>!`);
   say(`Перемога над «${names}»!`);
+  const lootFrom = cb.mons[0] && cb.mons[0].m ? { ...poseOf(cb.mons[0].m), s: .3 } : null;
   for (const x of cb.mons) { if (x.m) { const m = x.m; x.m = null; await defeatAnim(m); } if (x.c.guard) guardDefeated(x.c); else discard(x.c); }
   await clearSideCards();
   coopStat(p, 'kills'); if (helper) coopStat(helper, 'kills');
@@ -543,8 +547,8 @@ async function winCombat() {
   if (G.over) return;
   const hs = helper ? Math.min(tr, cb.offer ? cb.offer.tr : Math.floor(tr / 2)) : 0;
   if (tr) log(`Здобич: ${tr} ${plural(tr, 'скарб', 'скарби', 'скарбів')}${hs ? ` (${hs} — помічникові)` : ''}.`);
-  for (let i = 0; i < tr - hs; i++) await drawTo(p, 'treasure');
-  for (let i = 0; i < hs; i++) await drawTo(helper, 'treasure');
+  for (let i = 0; i < tr - hs; i++) await drawTo(p, 'treasure', lootFrom);
+  for (let i = 0; i < hs; i++) await drawTo(helper, 'treasure', lootFrom);
   if (helper && hasRace(helper, 'elf')) await changeLevel(helper, 1, false);
   T.die.visible = false; G.combat = null; G.phase = 'charity'; renderUI(); combatEnded();
 }
@@ -564,10 +568,12 @@ async function fleeCombat() {
       if (!ok && hasRace(q, 'halfling')) { await wait(1400); r = await rollDie(q); ok = r + fb >= 5; sayRoll(r, ok, true); }
       await wait(1300);
       if (!ok) {
-        await lunge(x.m); hitFx(q);
+        if (isMe(q)) statFlag('hit');
+        await monsterStrike(x.m, q);
         log(`Халепа від «${esc(mon.name)}»: ${esc(mon.bad.text)}`);
-        await applyBad(q, mon.bad);
+        G._badTo = x.m; try { await applyBad(q, mon.bad); } finally { G._badTo = null; }
         if (G.over) return;
+        await monsterGloat(x.m);
       }
     }
   }
@@ -596,14 +602,14 @@ async function clearCombat() {
 }
 
 async function applyBad(q, bad) {
-  const lost = [];
-  const take = items => items.forEach(g => { q.gear.splice(q.gear.indexOf(g), 1); discard(g); lost.push(g.name); });
+  const lost = [], flyTo = G._badTo, flying = [];
+  const take = items => items.forEach(g => { q.gear.splice(q.gear.indexOf(g), 1); discard(g); lost.push(g.name); flying.push(g); });
   switch (bad.t) {
     case 'level': { let d = Math.min(bad.n, q.level - 1); if (d > 0 && hasRace(q, 'orc')) { d--; log(`${nameTag(q)} (Орк) товстошкірий: втрачає на 1 рівень менше.`); } if (d > 0) await changeLevel(q, -d); else if (q.level <= 1) log(`${nameTag(q)} і так на 1-му рівні.`); break; }
     case 'slot': take(q.gear.filter(g => g.slot === bad.slot)); break;
     case 'gear': take(q.gear.slice()); break;
     case 'best': { const b = q.gear.slice().sort((x, y) => y.value - x.value)[0]; if (b) take([b]); break; }
-    case 'hand': { const n = Math.min(bad.n, q.hand.length); for (let i = 0; i < n; i++) { const c = q.hand.splice(rnd(q.hand.length), 1)[0]; discard(c); lost.push(c.name); } break; }
+    case 'hand': { const n = Math.min(bad.n, q.hand.length); for (let i = 0; i < n; i++) { const c = q.hand.splice(rnd(q.hand.length), 1)[0]; discard(c); lost.push(c.name); flying.push(c); } break; }
     case 'gold': if (q.gold) { lost.push(`${q.gold} зол.`); q.gold = 0; } break;
     case 'race': if (q.raceCard) { const x = q.raceCard; removeRC(q, x); discard(x); lost.push(x.name); } break;
     case 'class': if (q.clsCard) { const x = q.clsCard; removeRC(q, x); discard(x); lost.push(x.name); } break;
@@ -615,13 +621,14 @@ async function applyBad(q, bad) {
       syncSeat(q); renderUI(); await wait(350); return;
     }
     case 'death': {
-      take(q.gear.slice()); q.hand.splice(0).forEach(c => { discard(c); lost.push(c.name); });
+      take(q.gear.slice()); q.hand.splice(0).forEach(c => { discard(c); lost.push(c.name); flying.push(c); });
       q.died = true; log(`${nameTag(q)} гине! Рівень лишається, речі — ні.`);
       if (G.coop) addThreat(1, `${q.name} гине`);
       burst(q.seat.anchor, ['#ef6b5d', '#5a1f1a', '#ffffff'], 120, 4, 1.4);
       break;
     }
   }
+  if (flyTo && flying.length) await lootToMonster(q, flying, flyTo);
   if (bad.t !== 'level') log(lost.length ? `${nameTag(q)} втрачає: ${esc(lost.join(', '))}.` : `${nameTag(q)} пощастило: нічого втрачати.`);
   syncSeat(q); renderUI();
   await wait(350);
@@ -879,6 +886,7 @@ async function doSell(p, c) {
   if (p.gear.includes(c)) p.gear.splice(p.gear.indexOf(c), 1); else removeFromHand(p, c);
   const dbl = halflingDouble(p), price = sellPrice(p, c);
   if (dbl) p.dblTurn = G.turnNo;
+  statSold(p, price);
   discard(c); p.gold += price; sfx('coins');
   log(`${nameTag(p)} продає «${esc(c.name)}» за ${price} зол.${dbl ? ' (напіврослик: удвічі дорожче!)' : ''}${curseN(p, 'inflation') ? ' (інфляція!)' : ''}`);
   let gained = 0; while (p.gold >= 1000 && gained < levelsToWin(p) - 1) { p.gold -= 1000; gained++; }
@@ -931,6 +939,7 @@ async function doCurse(from, c, target) {
 /* --- тривалі прокляття --- */
 function attachCurse(q, c) {
   q.curses = q.curses || []; q.curses.push(c);
+  if (isMe(q) && q.curses.length >= 3) achieve('cursed');
   log(`${nameTag(q)} тепер під прокляттям «${esc(c.name)}»: ${esc(c.bad.text)} Діє, поки його не знімуть.`);
   tell(q, `Прокляття «${c.name}» діє, поки не знімеш`, 2600);
   ringFx(q.seat.anchor, 0x9a6ad0); syncSeat(q); renderUI();
@@ -1044,6 +1053,7 @@ async function botTurn(p) {
 
 async function gameOver(p) {
   if (G.over) return;
+  clearSave(); statGameEnd(isMe(p) || sameTeam(p, statMe()));
   G.over = true; G.phase = 'over'; G.busy = false; G.window = null;
   log(G.teams ? `${nameTag(p)} здобуває переможний рівень — команда ${teamTag(p.team)} перемагає (${teamScore(p.team)} з ${teamTarget(p.team)})!` : `${nameTag(p)} досягає ${G.goal}-го рівня і перемагає!`, 'turn');
   confetti(G.teams ? TEAMS[p.team].color : p.color); renderUI(); sfx('win');

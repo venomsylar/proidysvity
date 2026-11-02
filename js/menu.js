@@ -38,10 +38,14 @@ function buildMainMenu() {
         <nav class="mm-nav" aria-label="Головне меню">
           <button type="button" class="mm-btn primary" data-mm="continue" hidden>Продовжити гру</button>
           <button type="button" class="mm-btn primary" data-mm="new">Нова гра</button>
+          <button type="button" class="mm-btn primary" data-mm="resume" hidden>Продовжити збережену гру</button>
           <button type="button" class="mm-btn primary" data-mm="rejoin" hidden>Повернутися в гру</button>
           <button type="button" class="mm-btn" data-mm="join">Приєднатися до гри</button>
           <button type="button" class="mm-btn" data-mm="rules">Правила</button>
-          <button type="button" class="mm-btn" data-mm="cards">Усі карти</button>
+          <div class="mm-row">
+            <button type="button" class="mm-btn small" data-mm="cards">Усі карти</button>
+            <button type="button" class="mm-btn small" data-mm="stats">Досягнення</button>
+          </div>
           <div class="mm-row">
             <button type="button" class="mm-btn small" data-mm="table">Стіл і графіка</button>
             <button type="button" class="mm-btn small" data-mm="sound">Звук</button>
@@ -96,6 +100,10 @@ function openMainMenu() {
   el.querySelector('[data-mm="continue"]').hidden = !gameRunning();
   el.querySelector('[data-mm="new"]').classList.toggle('primary', !gameRunning());
   el.querySelector('[data-mm="join"]').hidden = NET.role === 'client' && gameRunning();
+  const sv = !gameRunning() && NET.role === 'local' ? loadSave() : null, sb = el.querySelector('[data-mm="resume"]');
+  sb.hidden = !sv;
+  if (sv) { const d = new Date(sv.t), cur = sv.players[sv.cur]; sb.innerHTML = `Продовжити збережену гру<small>${sv.coop ? 'Похід на Боса' : sv.teams ? 'Командна гра' : 'Кожен сам за себе'} · хід ${esc(cur ? cur.name : '')} · ${d.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' })}, ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}</small>`; }
+  el.querySelector('[data-mm="new"]').classList.toggle('primary', !gameRunning() && !sv);
   const rj = rejoinRec(), rb = el.querySelector('[data-mm="rejoin"]');
   rb.hidden = !rj || NET.role !== 'local' || gameRunning(); if (rj) rb.textContent = `Повернутися в гру · ${rj.code}`;
   const vb = el.querySelector('[data-mm="ver"]'); vb.textContent = 'v' + APP_VERSION; vb.classList.toggle('new', seenVersion() < APP_VERSION);
@@ -117,8 +125,10 @@ function menuAction(a) {
       openSetup(); break;
     case 'join': openJoin(); break;
     case 'rejoin': manualRejoin(); break;
+    case 'resume': resumeGame(); break;
     case 'rules': openRules(); break;
     case 'cards': openGallery(); break;
+    case 'stats': openStats(); break;
     case 'table': openSkins(); break;
     case 'sound': openSound(); break;
     case 'ver': openChangelog(); break;

@@ -487,13 +487,54 @@ function openSetup() {
   rerenderSetup = () => { save(); rerender(); };
   showModal(html()); NET.setupOpen = true; bind();
 }
+/* ---------- автозбереження ----------
+   Гру на одному пристрої (з ботами чи кількома людьми) зберігаємо на початку кожного ходу.
+   Якщо сторінку закрили чи оновили — на головному екрані зʼявиться «Продовжити збережену гру». */
+const SAVE_KEY = 'pdsv-save';
+const saveSkip = k => k === 'seat' || k[0] === '_' || k === 'conn' || k === 'tok';
+function saveGame() {
+  if (NET.role !== 'local' || G.over || !G.players.length || G.players.some(p => p.type === 'remote')) return;
+  try {
+    const data = { v: APP_VERSION, t: Date.now(), goal: G.goal, teams: G.teams, types: G.types, cur: G.cur, turnNo: G.turnNo || 0, gid: G.gid,
+      players: G.players, doorDeck: G.doorDeck, treasureDeck: G.treasureDeck, doorDiscard: G.doorDiscard, treasureDiscard: G.treasureDiscard,
+      log: G.log.slice(-60), coop: G.coop, setup: { speed: setupState.speed, anim: setupState.anim, mode: setupState.mode } };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data, (k, v) => (k && saveSkip(k)) ? undefined : v));
+  } catch (e) { /* місця немає чи приватний режим — гра працює й без збереження */ }
+}
+function loadSave() { try { const d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); return d && d.v === APP_VERSION && Array.isArray(d.players) && d.players.length ? d : null; } catch (e) { return null; } }
+function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { } }
+function resumeGame() {
+  const d = loadSave(); if (!d) { toast('Збереженої гри немає'); return; }
+  hideMainMenu(); closeModal();
+  G.players.forEach(destroySeat);
+  if (G.combat) { G.combat.mons.forEach(x => disposeMesh(x.m)); G.combat.meshes.forEach(disposeMesh); }
+  T.die.visible = false;
+  botSpeed = d.setup.speed || 1; ANIM = d.setup.anim || 1.5;
+  Object.assign(G, { reveal: -1, gid: G.gid + 1, goal: d.goal, teams: !!d.teams, types: d.types, players: d.players, doorDeck: d.doorDeck, treasureDeck: d.treasureDeck, doorDiscard: d.doorDiscard, treasureDiscard: d.treasureDiscard,
+    cur: d.cur, turnNo: d.turnNo, viewer: -1, phase: 'next', combat: null, busy: true, over: false, window: null, assist: null, bossWait: null, prepWait: [], log: d.log || [], fresh: new Set(), pendingSetup: false, coop: d.coop || null, stat: {} });
+  if (G.coop) { DUNGEON.hand = G.coop.hand; DUNGEON.mem = {}; }
+  // лічильник карт — вище за всі збережені, щоб нові карти не збіглися номерами
+  const uids = [...G.doorDeck, ...G.treasureDeck, ...G.doorDiscard, ...G.treasureDiscard, ...G.players.flatMap(p => [...p.hand, ...p.gear, ...(p.curses || []), p.raceCard, p.clsCard, p.raceCard2, p.clsCard2, p.dualRace, p.dualCls].filter(Boolean)), ...(G.coop ? [...G.coop.hand, ...(G.coop.guards || [])] : [])].map(c => c.uid || 0);
+  UID = Math.max(UID, ...uids) + 1;
+  faceCache.forEach(t => t.dispose()); faceCache.clear();
+  NET.conns.clear();
+  G.players.forEach(buildSeat);
+  const firstHuman = G.players.find(p => p.type === 'human');
+  G.viewer = firstHuman ? firstHuman.idx : -1;
+  cam.az = firstHuman ? seatAngle(firstHuman.idx) : 0; cam.userAz = 0; cam.userEl = 0;
+  syncDeck('door'); syncDeck('treasure'); syncDiscardTop('door'); syncDiscardTop('treasure');
+  boardFor = null;
+  log('Збережену гру відновлено. Продовжуємо з початку ходу.', 'turn');
+  renderUI(); renderLog();
+  setTimeout(startTurn, 300);
+}
 async function newGame() {
-  hideMainMenu();
+  hideMainMenu(); clearSave();
   const s = setupState; botSpeed = s.speed; ANIM = s.anim || 1.5; G.goal = s.goal;
   G.players.forEach(destroySeat);
   if (G.combat) { G.combat.mons.forEach(x => disposeMesh(x.m)); G.combat.meshes.forEach(disposeMesh); }
   T.die.visible = false;
-  Object.assign(G, { reveal: -1, gid: G.gid + 1, players: [], doorDeck: shuffle(buildDoorDeck(s.goal > 10 && s.mode !== 'coop', s.types)), treasureDeck: shuffle(buildTreasureDeck(s.types)), types: { ...s.types }, doorDiscard: [], treasureDiscard: [], cur: 0, viewer: -1, phase: 'deal', combat: null, busy: true, over: false, window: null, log: [], fresh: new Set(), pendingSetup: false });
+  Object.assign(G, { reveal: -1, gid: G.gid + 1, players: [], doorDeck: shuffle(buildDoorDeck(s.goal > 10 && s.mode !== 'coop', s.types)), treasureDeck: shuffle(buildTreasureDeck(s.types)), types: { ...s.types }, doorDiscard: [], treasureDiscard: [], cur: 0, viewer: -1, phase: 'deal', combat: null, busy: true, over: false, window: null, log: [], fresh: new Set(), pendingSetup: false, stat: {} });
   faceCache.forEach(t => t.dispose()); faceCache.clear();
   syncDeck('door'); syncDeck('treasure'); syncDiscardTop('door'); syncDiscardTop('treasure');
   NET.conns.clear();

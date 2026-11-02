@@ -154,7 +154,16 @@ const SFX = {
   redirect: t => { noise(t, .35, { type: 'bandpass', freq: 400, sweep: 5, q: .8, vol: .1 }); bell(t + .25, mtof(70), .07, SND.sfx); },
   win: t => [[60, 64, 67], [65, 69, 72], [67, 71, 74], [72, 76, 79, 84]].forEach((ch, i) => ch.forEach(n => tone(t + i * .22, mtof(n), i === 3 ? 1.4 : .25, { type: 'triangle', vol: .07, out: SND.sfx, send: SND.sfxSend }))),
   click: t => tone(t, 1000, .035, { type: 'triangle', vol: .025, out: SND.sfx }),
-  deny: t => tone(t, 170, .18, { type: 'square', vol: .07, cutoff: 900, out: SND.sfx })
+  deny: t => tone(t, 170, .18, { type: 'square', vol: .07, cutoff: 900, out: SND.sfx }),
+  // удар монстра: свист замаху, гупання й хрускіт
+  smack: t => { noise(t, .18, { type: 'bandpass', freq: 900, sweep: 3, q: .8, vol: .12 }); tom(t + .16, 70, .55, SND.sfx); noise(t + .16, .22, { type: 'lowpass', freq: 1200, vol: .3 }); for (let i = 0; i < 5; i++) noise(t + .2 + i * .035, .03, { type: 'highpass', freq: 2500 + i * 400, vol: .09 }); },
+  chomp: t => { for (let i = 0; i < 3; i++) { noise(t + i * .17, .07, { type: 'bandpass', freq: 650, q: 2, vol: .16 }); tom(t + i * .17, 110, .12, SND.sfx); } },
+  crack: t => { for (let i = 0; i < 6; i++) noise(t + i * .045 + Math.random() * .02, .04, { type: 'highpass', freq: 3000 + Math.random() * 2500, vol: .14 }); bell(t + .3, mtof(91), .05, SND.sfx); tone(t + .28, 1800, .6, { type: 'triangle', vol: .05, glide: .3, out: SND.sfx, send: SND.sfxSend }); },
+  stab: t => { noise(t, .12, { type: 'bandpass', freq: 3200, sweep: .4, q: 3, vol: .14 }); tone(t + .05, 520, .25, { type: 'sawtooth', vol: .06, glide: .5, cutoff: 1600, out: SND.sfx }); },
+  steal: t => { [88, 84, 91].forEach((n, i) => tone(t + i * .07, mtof(n), .09, { type: 'triangle', vol: .05, out: SND.sfx })); noise(t + .2, .2, { type: 'bandpass', freq: 1800, sweep: .5, vol: .06 }); },
+  threat: t => { tone(t, 55, 1.6, { type: 'sawtooth', vol: .12, cutoff: 260, vib: .02, vibRate: 3, out: SND.sfx }); tom(t, 48, .8, SND.sfx); tom(t + .5, 46, .8, SND.sfx); },
+  key: t => [79, 86, 91].forEach((n, i) => bell(t + i * .08, mtof(n), .08, SND.sfx)),
+  guard: t => { tom(t, 60, .5, SND.sfx); tom(t + .22, 60, .5, SND.sfx); tone(t + .1, 98, 1, { type: 'square', vol: .05, cutoff: 500, out: SND.sfx }); }
 };
 function playSfx(name) {
   if (!SND.ctx || SND.muted || SND.sfxVol <= 0 || SND.ctx.state !== 'running' || !SFX[name]) return;

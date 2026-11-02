@@ -250,7 +250,7 @@ function renderCombat() {
   el.hidden = false;
   const m = $('#meddle'); if (m) m.onclick = openInterfere;
 }
-function renderUI() { renderPlayers(); renderDock(); renderCombat(); queueSnap(); chatSync(); }
+function renderUI() { renderPlayers(); renderDock(); renderCombat(); queueSnap(); chatSync(); tipCheck(); }
 
 /* --- делеговані обробники --- */
 $('#hand').addEventListener('click', e => { const el = e.target.closest('.card'); if (!el || !handVisible()) return; const v = viewerP(); const c = v && v.hand.find(x => x.uid === +el.dataset.uid); if (c) openCardMenu(c, 'hand'); });

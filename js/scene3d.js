@@ -171,7 +171,12 @@ function openSkins(back) {
     <h3>Рух в інтерфейсі</h3>
     <div class="seg" role="group" aria-label="Рух в інтерфейсі"><button type="button" data-mo="full" aria-pressed="${!reduceMotion}">Повний</button><button type="button" data-mo="less" aria-pressed="${reduceMotion}">Менше руху</button></div>
     <p class="hint" style="margin-top:8px">«Менше руху» прибирає літаючі карти на заставці, хитання лампи й пульсування кнопок — для тих, кому від руху некомфортно.</p>
+    <h3>Підказки для новачка</h3>
+    <div class="seg" role="group" aria-label="Підказки"><button type="button" data-tp="on" aria-pressed="${!TIPS.off}">Показувати</button><button type="button" data-tp="off" aria-pressed="${TIPS.off}">Вимкнено</button></div>
+    <div class="row" style="margin-top:8px"><button type="button" class="btn small ghost" id="tpReset">Показати всі підказки спочатку</button></div>
     <div class="row end"><button class="btn primary" type="button" id="skDone">Готово</button></div>`);
+  $('#sheet').querySelectorAll('[data-tp]').forEach(b => b.onclick = () => { tipsSet(b.dataset.tp === 'on'); $('#sheet').querySelectorAll('[data-tp]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
+  $('#tpReset').onclick = () => { tipsReset(); $('#sheet').querySelectorAll('[data-tp]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.tp === 'on'))); toast('Підказки покажуться знову', 1800); };
   $('#sheet').querySelectorAll('[data-mo]').forEach(b => b.onclick = () => { setLessMotion(b.dataset.mo === 'less'); $('#sheet').querySelectorAll('[data-mo]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
   $('#sheet').querySelectorAll('[data-q]').forEach(b => b.onclick = () => { applyQuality(b.dataset.q); $('#sheet').querySelectorAll('[data-q]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); $('#qDesc').textContent = QUALITY[QUAL].desc; });
   $('#sheet').querySelectorAll('[data-skin]').forEach(b => b.onclick = () => { applySkin(b.dataset.skin); $('#sheet').querySelectorAll('[data-skin]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
@@ -466,6 +471,8 @@ function plateDraw(p) {
   const nc = (p.curses || []).length;
   let name = p.name; while (g.measureText(name).width > w - 140 - (nc ? 104 : 0) && name.length > 3) name = name.slice(0, -2) + '…';
   g.fillText(name, 118, h / 2 + 2);
+  // сліди кігтів після удару монстра
+  if (p._claw && performance.now() < p._claw) { g.save(); g.strokeStyle = 'rgba(230,40,30,.9)'; g.lineWidth = 9; g.lineCap = 'round'; for (let k = 0; k < 3; k++) { g.beginPath(); g.moveTo(150 + k * 70, 18); g.quadraticCurveTo(190 + k * 70, h / 2, 170 + k * 70, h - 16); g.stroke(); } g.restore(); }
   // тривалі прокляття — червоний жетон із ланцюгом
   if (nc) { rr(g, w - 112, h / 2 - 30, 92, 60, 30); g.fillStyle = '#8a2242'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#ff9fbd'; g.stroke(); g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = '34px ' + EMOJI_FONT; g.fillText('⛓', w - 82, h / 2 + 2); g.font = '700 32px Rubik, sans-serif'; g.fillText(String(nc), w - 44, h / 2 + 2); }
   t.needsUpdate = true;
@@ -511,7 +518,7 @@ async function changeLevel(p, delta, allowWin = false) {
   p.level = clamp(before + delta, 1, cap);
   if (p.level !== before) {
     log(`${nameTag(p)} ${p.level > before ? 'піднімається' : 'падає'} на ${p.level}-й рівень.`);
-    levelFx(p, p.level > before); renderUI(); await wait(550);
+    levelFx(p, p.level > before); floatLevel(p, p.level - before); renderUI(); await wait(550);
   } else if (delta > 0 && !allowWin && (G.teams ? levelsToWin(p) <= 1 : before >= G.goal - 1)) log(G.teams ? `${nameTag(p)} не може так здобути переможний рівень команди — лише перемогою над монстром.` : `${nameTag(p)} не може отримати ${G.goal}-й рівень так — лише перемогою над монстром.`);
   plateDraw(p);
   if (G.teams ? levelsToWin(p) <= 0 : p.level >= G.goal) await gameOver(p);
@@ -563,14 +570,100 @@ async function lunge(m) {
   await animate(380, t => { const k = Math.sin(t * Math.PI); applyPose(m, { ...p0, x: p0.x + w.x * k, z: p0.z + w.z * k, y: p0.y + k * .3 }); });
   applyPose(m, p0); m.userData.anim = false;
 }
+// перемога героя: монстр тремтить, тріскається й розлітається уламками
 async function defeatAnim(m) {
-  playSfx('defeat');
+  playSfx('crack');
   if (m.userData.card) emitFx('defeat', { uid: m.userData.card.uid });
   const p0 = poseOf(m); m.userData.anim = true;
-  await animate(300, t => applyPose(m, { ...p0, flip: Math.sin(t * Math.PI * 8) * .12, s: p0.s * (1 + t * .1) }));
-  burst(m.position, ['#ffd36b', '#ff9a3c', '#fff1c4', '#ef6b5d'], 190, 6.5, 1.5, -7, .16, true, 1, true);
-  await animate(420, t => applyPose(m, { ...p0, s: p0.s * (1.1 - t * 1.1) + .001, yaw: p0.yaw + t * 4, y: p0.y + t * .6 }), easeOut);
+  await animate(420, t => applyPose(m, { ...p0, flip: Math.sin(t * Math.PI * 16) * .06 * (.3 + t), x: p0.x + Math.sin(t * 60) * .03 * t, s: p0.s * (1 + t * .08) }));
+  playSfx('defeat'); camShake(.18, 260);
+  shatter(m);
+  burst(m.position, ['#ffd36b', '#ff9a3c', '#fff1c4', '#ef6b5d'], 160, 6, 1.3, -7, .14, true, 1, true);
   disposeMesh(m);
+  await wait(380);
+}
+function shatter(m) {
+  const mat = Array.isArray(m.material) ? m.material[2] : null, tex = mat && mat.map; if (!tex) return;
+  m.updateMatrixWorld();
+  const grp = new THREE.Group(); m.matrixWorld.decompose(grp.position, grp.quaternion, grp.scale); scene.add(grp);
+  const cols = 3, rows = 4, w = CARD_W / cols, h = CARD_H / rows, shards = [];
+  for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
+    const g = new THREE.PlaneGeometry(w * .97, h * .97), uv = g.attributes.uv;
+    for (let k = 0; k < uv.count; k++) uv.setXY(k, (i + uv.getX(k)) / cols, 1 - (j + 1 - uv.getY(k)) / rows);
+    const sm = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+    sm.rotation.x = -Math.PI / 2; sm.position.set(-CARD_W / 2 + (i + .5) * w, CARD_T / 2 + .002, -CARD_H / 2 + (j + .5) * h);
+    const dir = new THREE.Vector3(sm.position.x, 0, sm.position.z).normalize();
+    shards.push({ sm, v: new THREE.Vector3(dir.x * (1.5 + Math.random() * 2), 2.5 + Math.random() * 2.5, dir.z * (1.5 + Math.random() * 2)), r: new THREE.Vector3(Math.random() * 8 - 4, Math.random() * 8 - 4, Math.random() * 8 - 4), p0: sm.position.clone() });
+    grp.add(sm);
+  }
+  animate(900, (e, t) => {
+    for (const s of shards) {
+      s.sm.position.set(s.p0.x + s.v.x * t, s.p0.y + s.v.y * t - 4.5 * t * t, s.p0.z + s.v.z * t);
+      s.sm.rotation.set(-Math.PI / 2 + s.r.x * t, s.r.y * t, s.r.z * t);
+      s.sm.material.opacity = 1 - t * t;
+    }
+  }, x => x).then(() => { shards.forEach(s => { s.sm.geometry.dispose(); s.sm.material.dispose(); }); scene.remove(grp); });
+}
+/* --- поразка героя: монстр бʼє, забирає своє й глузує --- */
+const SMACK = { def: ['ХРУСЬ!', 'ЦАП!', 'ГАМ!', 'БАЦ!', 'ХРЯСЬ!', 'ГУП!'], dragon: ['ПФФ-Ф!', 'ШШШ-Х!', 'Ф-Ф-ФУХ!'], undead: ['У-У-У!', 'БРРР!', 'ХР-Р-Р!'] };
+const GLOAT = ['Смачно!', 'Приходь ще!', 'Це було легко.', 'Ням-ням.', 'Наступний!', 'Хе-хе.', 'Не плач.', 'Дякую за обід!', 'А ти думав?', 'Ще хочеш?'];
+const pick = a => a[rnd(a.length)];
+function camShake(p = .35, ms = 420) { if (document.documentElement.classList.contains('less-motion')) return; cam.shake = { p, ms, t0: performance.now() }; }
+function screenOf(v3) { const p = v3.clone().project(camera), r = renderer.domElement.getBoundingClientRect(); return { x: r.left + (p.x + 1) / 2 * r.width, y: r.top + (1 - p.y) / 2 * r.height }; }
+function domPop(cls, html, x, y, ms) {
+  const el = document.createElement('div'); el.className = cls; el.innerHTML = html;
+  // не ховаємо під панель руки: своє місце гравця за нижнім краєм — піднімаємо над панеллю
+  const dock = document.querySelector('.dock'), maxY = dock && dock.offsetParent ? dock.getBoundingClientRect().top - 60 : innerHeight - 50;
+  el.style.left = clamp(x, 60, innerWidth - 60) + 'px'; el.style.top = clamp(y, 50, Math.max(120, maxY)) + 'px';
+  document.body.appendChild(el); setTimeout(() => el.remove(), ms); return el;
+}
+function vignette() { let v = $('#vignette'); if (!v) { v = document.createElement('div'); v.id = 'vignette'; document.body.appendChild(v); } v.classList.remove('on'); void v.offsetWidth; v.classList.add('on'); }
+const hereHuman = q => !!q && (NET.role === 'client' ? q.idx === NET.me : q.type === 'human');
+async function monsterStrike(m, q, word = null) {
+  if (!m || !q || !q.seat) return;
+  const c = m.userData.card || {};
+  word = word || pick(SMACK[c.dragon ? 'dragon' : c.undead ? 'undead' : 'def']);
+  if (NET.role === 'host') emitFx('strike', { uid: c.uid, who: q.idx, word });
+  const p0 = poseOf(m), tgt = q.seat.anchor; m.userData.anim = true;
+  playSfx('roar');
+  await animate(380, t => applyPose(m, { ...p0, y: p0.y + t * 1.1, s: p0.s * (1 + t * .25), flip: -t * .25 }), easeOut);
+  const mx = p0.x + (tgt.x - p0.x) * .72, mz = p0.z + (tgt.z - p0.z) * .72;
+  await animate(170, t => applyPose(m, { ...p0, x: p0.x + (mx - p0.x) * t, z: p0.z + (mz - p0.z) * t, y: p0.y + 1.1 - t * .7, s: p0.s * 1.25, flip: -.25 + t * .45 }), x => x * x);
+  playSfx('smack'); camShake(.5, 480); ringFx(tgt, 0xff4a3a, 800, true); flashAt(tgt.clone().setY(1.5), 3.5, 500, 0xff3020, true);
+  if (hereHuman(q)) vignette();
+  const sp = screenOf(tgt.clone().setY(1.4)); domPop('comic', esc(word), sp.x, sp.y, 1300);
+  q._claw = performance.now() + 3500; plateDraw(q); setTimeout(() => { if (q.seat) plateDraw(q); }, 3600);
+  await wait(240);
+  const b = poseOf(m);
+  await animate(330, t => applyPose(m, { ...b, x: b.x + (p0.x - b.x) * t, z: b.z + (p0.z - b.z) * t, y: b.y + (p0.y - b.y) * t, s: b.s + (p0.s - b.s) * t, flip: b.flip * (1 - t) }), easeOut);
+  applyPose(m, p0); m.userData.anim = false;
+}
+async function monsterGloat(m, text = null) {
+  if (!m) return; const c = m.userData.card || {};
+  text = text || pick(GLOAT);
+  if (NET.role === 'host') emitFx('gloat', { uid: c.uid, text });
+  const p0 = poseOf(m); m.userData.anim = true;
+  const sp = screenOf(m.position.clone().setY(m.position.y + 1.3)); domPop('mbubble', esc(text), sp.x, sp.y, 1700);
+  playSfx('chomp');
+  await animate(850, t => { const k = Math.sin(t * Math.PI * 6); applyPose(m, { ...p0, s: p0.s * (1 + k * .07), y: p0.y + Math.abs(k) * .1 }); }, x => x);
+  applyPose(m, p0); m.userData.anim = false;
+}
+// що забрав монстр — летить до нього
+async function lootToMonster(q, cards, mon) {
+  if (!mon || !q.seat || !cards.length) return;
+  const to = { ...poseOf(mon), y: poseOf(mon).y + .3, s: .35 };
+  await Promise.all(cards.slice(0, 6).map((c, i) => wait(i * 110).then(async () => {
+    const m = cardMesh(c); scene.add(m);
+    await fly(m, seatPose(q.idx, true), to, 520, 1.2);
+    disposeMesh(m);
+  })));
+}
+// спливна цифра рівня над гравцем
+function floatLevel(p, d) {
+  if (!p || !p.seat || !d) return;
+  if (NET.role === 'host') emitFx('lvl', { who: p.idx, d });
+  const sp = screenOf(p.seat.anchor.clone().setY(2));
+  domPop('lvfloat ' + (d > 0 ? 'up' : 'down'), `${d > 0 ? '+' : '−'}${Math.abs(d)} ${plural(Math.abs(d), 'рівень', 'рівні', 'рівнів')}`, sp.x + 150, sp.y - 30, 1600);
 }
 async function rollDie(q, forced = 0) {
   const v = forced || 1 + rnd(6);
@@ -665,6 +758,7 @@ function loop(now) {
   if (cam.offK != null && Math.abs(cam.offK - cam.offTarget) > .5) { cam.offK += (cam.offTarget - cam.offK) * Math.min(1, dt * 4); applyView(); }
   const az = cam.az + cam.userAz, el = clamp(cam.el + cam.userEl, .25, 1.35), d = cam.dist * cam.zoom;
   camera.position.set(Math.sin(az) * Math.cos(el) * d, Math.sin(el) * d + .5, Math.cos(az) * Math.cos(el) * d);
+  if (cam.shake) { const k = 1 - (performance.now() - cam.shake.t0) / cam.shake.ms; if (k <= 0) cam.shake = null; else { const a = cam.shake.p * k * k; camera.position.x += (Math.random() - .5) * a; camera.position.y += (Math.random() - .5) * a; camera.position.z += (Math.random() - .5) * a; } }
   camera.lookAt(0, .5, 0);
   scene.fog.near = d + 6; scene.fog.far = d + 48;
   renderer.render(scene, camera);

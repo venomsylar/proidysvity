@@ -74,7 +74,7 @@ async function coopSpecial(p, c) {
     if (G.coop.lair) { discard(c); log(`${nameTag(p)} знаходить ще один ключ, але лігво вже відчинене.`); return true; }
     G.coop.keys++; coopStat(p, 'keys');
     log(`🗝️ ${nameTag(p)} знаходить «${esc(c.name)}»! Ключів: ${G.coop.keys} з ${G.coop.need}.`, 'turn');
-    say(`Ключ знайдено! ${G.coop.keys} з ${G.coop.need}`, 2600); sfx('levelUp');
+    say(`Ключ знайдено! ${G.coop.keys} з ${G.coop.need}`, 2600); sfx('key');
     if (G.coop.keys >= G.coop.need && !G.coop.lair) openLair();
     renderUI(); return true;
   }
@@ -95,7 +95,7 @@ async function addThreat(n, why) {
   const co = G.coop; if (!co || G.over || n <= 0) return;
   const st = threatStage();
   co.threat = Math.min(co.max, co.threat + n);
-  log(`⚠️ Загроза +${n}${why ? ` (${why})` : ''}: ${co.threat} з ${co.max}.`);
+  log(`⚠️ Загроза +${n}${why ? ` (${why})` : ''}: ${co.threat} з ${co.max}.`); sfx('threat');
   if (threatStage() > st) { say(`Підземелля прокидається: монстри +${threatBonus()}`, 2800); log(`Підземелля прокидається: усі монстри тепер +${threatBonus()}, і воно частіше втручається.`, 'turn'); sfx('curse'); }
   renderUI();
   if (co.threat >= co.max) await coopEnd(false);
@@ -199,7 +199,7 @@ function bossCard() {
 async function fightGuard() {
   const co = G.coop, p = cur(), c = nextGuard(); if (!c) return;
   log(`🛡️ ${nameTag(p)} атакує вартового лігва: <b>${esc(c.name)}</b> (рівень ${c.lvl}). Здолано вартових: ${co.guardsDone} з ${co.guards.length}.`, 'turn');
-  sfx('alert');
+  sfx('guard');
   const m = cardMesh(c); scene.add(m);
   await fly(m, deckPose('door'), centerPose(0, 1), 800, 2.4);
   await beginCombat(c, m);
@@ -291,7 +291,7 @@ async function bossDefeat() {
   log(`💥 ${esc(co.boss.name)} відкидає загін (${sides().hero} проти ${sides().mon}). Кожен втрачає рівень, Загроза +3.`, 'turn');
   say('Бос відкинув загін! Відновіть сили й спробуйте знову.', 3000);
   const cb = G.combat;
-  for (const x of cb.mons) if (x.m) await lunge(x.m);
+  for (const x of cb.mons) if (x.m) { await monsterStrike(x.m, fighter()); break; }
   for (const q of G.players) { if (q.level > 1) await changeLevel(q, -1); }
   // бос лишається в лігві, його карту прибираємо зі столу
   cb.mons = cb.mons.filter(x => { if (x.c.boss) { if (x.m) disposeMesh(x.m); return false; } return true; });
@@ -300,6 +300,7 @@ async function bossDefeat() {
 }
 async function coopEnd(win) {
   if (G.over) return;
+  clearSave(); statGameEnd(win);
   const co = G.coop;
   G.over = true; G.phase = 'over'; G.busy = false; G.window = null; G.assist = null; G.bossWait = null;
   if (G.combat) { G.combat.mons.forEach(x => x.m && disposeMesh(x.m)); G.combat.meshes.forEach(disposeMesh); G.combat = null; }
