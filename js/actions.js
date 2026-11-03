@@ -11,6 +11,9 @@ function actAllowed(p, act) {
   if (!act || G.over) return false;
   if (act.k === 'pass') return waitingOn().includes(p);
   if (act.k === 'steal') { const t = G.players[act.target]; return canSteal(p) && !!t && !sameTeam(p, t) && t !== p && t.gear.some(c => c.uid === act.item && stealable(t, c)); }
+  if (['charm', 'wolf', 'vanish', 'sniff'].includes(act.k)) return !G.busy && PERK[act.k](p);
+  if (act.k === 'forge') return !G.busy && PERK.forge(p) && p.gear.some(g => g.uid === act.g && (g.forged || 0) < 3);
+  if (act.k === 'heal') { const t = G.players[act.target]; return !G.busy && PERK.heal(p) && !!t && (t.curses || []).some(k => k.uid === act.curse); }
   if (act.k === 'assault') return !!G.coop && G.coop.lair && !G.busy && !G.combat && G.phase === 'start' && cur() === p;
   if (act.k === 'bossReady') return !!G.bossWait && G.bossWait.waiting.includes(p.idx);
   if (act.k === 'assistDone') return !!G.assist && G.assist.who === p.idx;
@@ -29,6 +32,22 @@ function prepReady(p) {
   renderUI();
 }
 const canSteal = p => !!p && hasCls(p, 'thief') && !G.busy && !G.over && !G.combat && p === cur() && ['start', 'afterKick', 'charity'].includes(G.phase) && p.stoleTurn !== G.turnNo && G.players.some(q => q !== p && !sameTeam(p, q) && q.gear.some(c => stealable(q, c)));
+function openForge() {
+  const v = viewerP(); if (!PERK.forge(v)) return;
+  const pay = payTwo(v), items = v.gear.filter(g => (g.forged || 0) < 3);
+  showModal(`<h2>Гарт</h2><p>Обери річ — вона назавжди отримає +1 (до +3 на річ). У горн підуть дві найменш потрібні карти з руки: ${pay.map(c => `<b>${esc(c.name)}</b>`).join(' і ')}.</p>
+    <div class="list">${items.map(g => `<button class="btn" type="button" data-fg="${g.uid}">${artIcon(g)} ${esc(g.name)} · +${g.bonus}${g.forged ? ` · гартовано ${g.forged}/3` : ''}</button>`).join('')}</div>
+    <div class="row end"><button class="btn ghost" type="button" data-close>Скасувати</button></div>`);
+  $('#sheet').querySelectorAll('[data-fg]').forEach(b => b.onclick = () => { closeModal(); dispatch({ k: 'forge', g: +b.dataset.fg }); });
+}
+function openHeal() {
+  const v = viewerP(); if (!PERK.heal(v)) return;
+  const pay = payTwo(v), rows = G.players.flatMap(q => (q.curses || []).map(k => ({ q, k })));
+  showModal(`<h2>Зілля</h2><p>Зніми тривале прокляття з будь-кого. На зілля підуть дві найменш потрібні карти з руки: ${pay.map(c => `<b>${esc(c.name)}</b>`).join(' і ')}.</p>
+    <div class="list">${rows.map(({ q, k }) => `<button class="btn" type="button" data-hl="${q.idx}:${k.uid}"><b style="color:${q.color}">${q === v ? 'Із себе' : esc(q.name)}</b> · ${artIcon(k)} ${esc(k.name)}</button>`).join('')}</div>
+    <div class="row end"><button class="btn ghost" type="button" data-close>Скасувати</button></div>`);
+  $('#sheet').querySelectorAll('[data-hl]').forEach(b => b.onclick = () => { const [t, u] = b.dataset.hl.split(':').map(Number); closeModal(); dispatch({ k: 'heal', target: t, curse: u }); });
+}
 function openSteal() {
   const v = viewerP(); if (!canSteal(v)) return;
   const rows = G.players.filter(q => q !== v && !sameTeam(v, q)).map(q => ({ q, items: q.gear.filter(c => stealable(q, c)) })).filter(r => r.items.length);
@@ -80,6 +99,13 @@ async function execAct(p, a) {
     case 'rc': return doPlayRC(p, c, a.side === 'second');
     case 'dual': return doPlayDual(p, c);
     case 'uncurse': return doUncurse(p, c, G.players[a.target], a.mon);
+    case 'charm': return perkCharm(p);
+    case 'wolf': return perkWolf(p);
+    case 'vanish': return perkVanish(p);
+    case 'sniff': return perkSniff(p);
+    case 'raise': return perkRaise(p, c);
+    case 'forge': return perkForge(p, p.gear.find(g => g.uid === a.g));
+    case 'heal': return perkHeal(p, G.players[a.target], a.curse);
     case 'droprc': { removeRC(p, c); discard(c); log(`${nameTag(p)} скидає «${esc(c.name)}» у скид.`); syncSeat(p); return; }
     case 'levelup': return doLevelUp(p, c);
     case 'curse': return doCurse(p, c, G.players[a.target]);
@@ -159,6 +185,7 @@ function cardActions(c, where, v = viewerP()) {
     case 'mod': if (combatOk && !(friend && c.bonus > 0)) A(`Зіграти на монстра (${sgn(c.bonus)})`, { k: 'mod', uid: c.uid }); break;
     case 'monster':
       if (free && myTurn && G.phase === 'afterKick') A('Шукати пригод: битися з ним', { k: 'trouble', uid: c.uid });
+      if (isFighter && free && PERK.raise(v, c)) A(`Слуга: +${Math.ceil(c.lvl / 2)} собі (Некромант, ${G.combat.necroN || 0}/2)`, { k: 'raise', uid: c.uid });
       if (combatOk && c.undead && undeadIn && !friend) A(`Підкинути мертвяка в бій (+${monLvl(c, fp) + vsBonus(c, fp)})`, { k: 'undead', uid: c.uid });
       break;
     case 'wander': {
@@ -219,6 +246,9 @@ function dockActs(v) {
     acts.push({ label: 'Битися!', act: { k: 'fight' }, cls: 'primary pulse', dis: !s.win });
     acts.push({ label: 'Покликати на поміч', fn: openHelp, dis: abOf(cb, 'nohelp') ? 'Цей монстр не терпить натовпу: кликати на поміч не можна.' : curseN(fp, 'lonely') ? 'Прокляття «Ніхто не любить»: допомагати тобі ніхто не може.' : cb.helper != null || G.players.every(q => q === fp || cb.asked.has(q.idx)) });
     acts.push({ label: 'Тікати', act: { k: 'flee' }, cls: 'danger' });
+    if (PERK.charm(v)) acts.push({ label: '🌿 Зваба: −3 монстру', act: { k: 'charm' } });
+    if (PERK.wolf(v)) acts.push({ label: '🐺 Обернутися: +3', act: { k: 'wolf' } });
+    if (PERK.vanish(v) && !s.win) acts.push({ label: '🌀 Зникнути (раз за гру)', act: { k: 'vanish' } });
     return acts;
   }
   if (v !== p) return acts;
@@ -227,6 +257,9 @@ function dockActs(v) {
   if (G.phase === 'charity') acts.push({ label: v.hand.length > handLimit(v) ? 'Завершити хід…' : 'Завершити хід', act: { k: 'end' }, pick: true, cls: 'primary' });
   if (canTrade(v)) acts.push({ label: 'Обмін…', fn: openTrade });
   if (canSteal(v)) acts.push({ label: 'Поцупити…', fn: openSteal });
+  if (PERK.sniff(v)) acts.push({ label: '🐺 Нюх: глянути двері', act: { k: 'sniff' } });
+  if (PERK.forge(v)) acts.push({ label: '🔥 Кувати…', fn: openForge });
+  if (PERK.heal(v)) acts.push({ label: '🌱 Зілля…', fn: openHeal });
   return acts;
 }
 function hintFor(c) {

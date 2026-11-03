@@ -228,6 +228,13 @@ function renderCombat() {
     if (a.slayer) mods.push(`<span class="tag h">${who}🛡️ Драконобій +${a.slayer}</span>`);
   });
   if (epicFor(p)) mods.unshift(`<span class="tag m">Епічна зона: рівень монстрів ×2</span>`);
+  // нові раси й класи
+  if (cb.charm) mods.push('<span class="tag h">🌿 Зваба: монстр −3</span>');
+  if (cb.wolf != null) mods.push(`<span class="tag h">🐺 ${esc((G.players[cb.wolf] || {}).name || '')} у вовчій подобі +3 · втеча −1</span>`);
+  if (cb.necroB) mods.push(`<span class="tag h">🦴 Слуги-нежить +${cb.necroB}</span>`);
+  { const kb = cb.boss ? G.players.filter(q => hasCls(q, 'kobzar')).length : h && (hasCls(p, 'kobzar') || hasCls(h, 'kobzar')) ? 1 : 0; if (kb) mods.push(`<span class="tag h">🎻 Натхнення +${kb * 2}</span>`); }
+  { const zn = cb.pShots.filter(c => c.bonus > 0 && c._by != null && hasCls(G.players[c._by], 'znakhar')).length; if (zn) mods.push(`<span class="tag h">🌱 Відвар +${zn}</span>`); }
+  { const nu = hasCls(p, 'necro') ? cb.mons.filter(x => x.c.undead).length : 0; if (nu) mods.push(`<span class="tag h">🦴 Нежить знає Некроманта −${nu * 2}</span>`); }
   cb.mons.forEach(x => { if (!x.c.ab) return; const e = monExtra(cb, x, p, h); mods.unshift(`<span class="tag ${e < 0 ? 'h' : 'm'}" title="${esc(MON_AB[x.c.ab])}">⚡ ${esc(AB_SHORT[x.c.ab])}${e ? ' ' + sgn(e) : ''}${x.c.ab === 'glutton' ? ' · разові ×½' : ''}</span>`); });
   if (cb.boss) { G.players.filter(q => q !== p).forEach(q => mods.push(`<span class="tag h">${esc(q.name)} +${baseStr(q)}</span>`)); if (cb.bossX) mods.push(`<span class="tag m">Здібність Боса +${cb.bossX}</span>`); }
   if (G.coop && G.coop.threat >= Math.ceil(G.coop.max / 3)) mods.push(`<span class="tag m">⚠️ Підземелля прокинулось +${G.coop.threat >= Math.ceil(G.coop.max * 2 / 3) ? 4 : 2}</span>`);
