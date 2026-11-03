@@ -52,6 +52,7 @@ function buildMainMenu() {
           </div>
         </nav>
         <div class="mm-foot"><button type="button" class="ver setup-ver" data-mm="ver"></button><span data-mm="ver">Що нового</span></div>
+        <p class="mm-credit">Неофіційна фанатська гра, натхненна настільною грою «Манчкін» (Munchkin) від Steve Jackson Games. Ми не повʼязані з авторами й видавцями оригіналу; усі карти, тексти й малюнки тут власні. Munchkin — торгова марка Steve Jackson Games. Офіційний сайт оригінальної гри: <a href="https://munchkin.game" target="_blank" rel="noopener">munchkin.game</a>.</p>
       </div>
       <div class="mm-stage" aria-hidden="true">
         <div class="mm-torch l"><i></i></div><div class="mm-torch r"><i></i></div>

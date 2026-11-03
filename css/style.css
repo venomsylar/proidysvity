@@ -714,3 +714,8 @@ html.less-motion .reactpop{animation-name:fadeo}
   .modal.screen{padding-top:0}
   .modal:not(.screen) .sheet{max-height:calc(100dvh - 70px - env(safe-area-inset-top,0px))}
 }
+
+/* згадка про оригінальну гру */
+.mm-credit{max-width:420px;margin:10px 0 0;color:var(--muted);font-size:11px;line-height:1.45;opacity:.85}
+.mm-credit a,.credit a{color:var(--brass);text-decoration:underline}
+@media (max-width:760px){ .mm-credit{text-align:center;margin:12px auto 0} }
