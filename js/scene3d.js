@@ -298,8 +298,8 @@ function backMesh(deck) {
   const back = new THREE.MeshStandardMaterial({ map: BACKS[deck], alphaTest: .5, roughness: .62, emissive: 0xffffff, emissiveMap: BACKS[deck], emissiveIntensity: SKIN.glow * .6 }); back.userData.back = true;
   const m = new THREE.Mesh(cardGeo, [edgeMat, edgeMat, back, back, edgeMat, edgeMat]); m.castShadow = true; m.userData.own = [back]; return m;
 }
-function disposeMesh(m) { if (!m) return; if (m.parent) m.parent.remove(m); (m.userData.own || []).forEach(x => x.dispose()); }
-function applyPose(m, p) { m.position.set(p.x, p.y, p.z); m.rotation.set(p.tilt, p.yaw, p.flip, 'YXZ'); m.scale.setScalar(p.s); m.userData.pose = p; }
+function disposeMesh(m) { if (!m) return; T.shadowDirty = true; if (m.parent) m.parent.remove(m); (m.userData.own || []).forEach(x => x.dispose()); }
+function applyPose(m, p) { T.shadowDirty = true; m.position.set(p.x, p.y, p.z); m.rotation.set(p.tilt, p.yaw, p.flip, 'YXZ'); m.scale.setScalar(p.s); m.userData.pose = p; }
 function poseOf(m) { const t = m.userData.pose; if (t && t.tag && Math.abs(t.x - m.position.x) < .01 && Math.abs(t.z - m.position.z) < .01) return { ...t }; return { x: m.position.x, y: m.position.y, z: m.position.z, yaw: m.rotation.y, tilt: m.rotation.x, flip: m.rotation.z, s: m.scale.x }; }
 function lerpAng(a, b, t) { let d = ((b - a) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI; return a + d * t; }
 function fly(m, from, to, dur = 700, lift = 1.5, meta = {}, raw = false) {
@@ -445,12 +445,12 @@ function init3D() {
   requestAnimationFrame(loop);
 }
 
-function syncDeck(kind) {
+function syncDeck(kind) { T.shadowDirty = true;
   const m = T.decks[kind]; if (!m) return;
   const n = (kind === 'door' ? G.doorDeck : G.treasureDeck).length;
   const h = Math.max(.001, n * .014); m.scale.y = h; m.position.y = TABLE_Y + h / 2; m.visible = n > 0;
 }
-function syncDiscardTop(kind) {
+function syncDiscardTop(kind) { T.shadowDirty = true;
   const m = T.disc[kind]; if (!m) return;
   const pile = kind === 'door' ? G.doorDiscard : G.treasureDiscard;
   if (!pile.length) { m.visible = false; return; }
@@ -708,7 +708,10 @@ function loop(now) {
   if (now - lastT < 1000 / fps - 4) return;
   camSig = sig;
   const dt = Math.min(.1, (now - lastT) / 1000); lastT = now;
-  if (!Q.live && (T.anims.length || T.fx.length || now - lastShadow > 1000)) { renderer.shadowMap.needsUpdate = true; lastShadow = now; }
+  // тіні (в економних режимах) перемальовуємо, поки щось рухається, і ще трохи після:
+  // карта часто зникає чи стає на місце вже після останнього кадру анімації — інакше її тінь висіла б до секунди-двох
+  if (T.anims.length || T.fx.length || T.shadowDirty) { T.shadowHot = now; T.shadowDirty = false; }
+  if (!Q.live && (now - (T.shadowHot || 0) < 700 || now - lastShadow > 1000)) { renderer.shadowMap.needsUpdate = true; lastShadow = now; }
   for (let i = T.anims.length - 1; i >= 0; i--) {
     const a = T.anims[i]; const t = Math.min(1, (now - a.t0) / a.dur);
     a.fn(a.e(t), t);

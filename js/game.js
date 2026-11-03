@@ -586,6 +586,10 @@ async function winCombat() {
   if (curseN(p, 'sack') && treasureCount()) log(`Прокляття «Дірявий мішок»: ${nameTag(p)} отримує на ${Math.min(treasureCount(), curseN(p, 'sack'))} скарб менше.`);
   const helper = cb.helper != null ? G.players[cb.helper] : null;
   statOnKill(p, helper, cb); hlKill(p, cb); botSay(p, 'win', {}, .7);
+  { // велика перемога — окремий банер
+    const top = Math.max(...cb.mons.map(x => monLvl(x.c, p)));
+    if (!cb.boss && (top >= 14 || cb.mons.length >= 3)) { const t = cb.mons.length >= 3 ? 'Три в одному!' : 'Велика перемога!'; banner(t, '#ffd23a'); netAll({ t: 'fx', type: 'banner', a: { text: t, color: '#ffd23a' } }); }
+  }
   const names = monNames();
   log(`${nameTag(p)}${helper ? ' і ' + nameTag(helper) + ' перемагають' : ' перемагає'} <b>${esc(names)}</b>!`);
   say(`Перемога над «${names}»!`);

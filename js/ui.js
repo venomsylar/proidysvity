@@ -82,9 +82,30 @@ function openCharSheet(i) {
   });
 }
 let lastLogHTML = '';
+/* значок для рядка журналу — за змістом */
+const LOG_ICONS = [
+  [/повертається|звʼязок|повернувся|не повернувся|замінює бот/, '📶'],
+  [/кидає кубик|перекидає кубик|Коробку відкрито|На кубику/, '🎲'],
+  [/насилає|прокля|Жбурнути|жбурляє/, '⛓'],
+  [/Халепа|втрачає|падає на|гине|відкидає загін|Протяг/, '💥'],
+  [/перемагає|перемагають|Перемога|повалено/, '🏆'],
+  [/піднімається на|Підняти рівень|рівень зверху/, '⬆️'],
+  [/допомагає|на поміч|на боці|не відмовляє|допоможе/, '🤝'],
+  [/Здобич|скарб|золот|продає|цупить|поцупив|віддає карту|Благодійність/, '💰'],
+  [/вибиває двері|обшукує кімнату|шукає пригод/, '🚪'],
+  [/Бій!|бій|монстру|герою|мертвяка|потвору|у спину|Вартов|Боса|лігв/, '⚔️'],
+  [/раса|клас|спорядж|вдягає|знімає|Стати/, '🎒'],
+  [/Загроза|Підземелля/, '👁']
+];
+function logIcon(l) {
+  if (l.ic != null) return l.ic;
+  const t = String(l.html).replace(/<[^>]+>/g, '');
+  const hit = LOG_ICONS.find(([re]) => re.test(t));
+  return (l.ic = hit ? hit[1] : '·');
+}
 function renderLog() {
   const ol = $('#logList'); if (!ol) return;
-  const html = G.log.slice(-80).map(l => `<li class="${l.cls}">${l.html}</li>`).join('');
+  const html = G.log.slice(-80).map(l => `<li class="${l.cls}">${l.cls === 'turn' ? '' : `<span class="li-i" aria-hidden="true">${logIcon(l)}</span>`}<span>${l.html}</span></li>`).join('');
   if (html === lastLogHTML) return;
   const atBottom = ol.scrollHeight - ol.scrollTop - ol.clientHeight < 40;
   lastLogHTML = html; ol.innerHTML = html;
@@ -93,11 +114,33 @@ function renderLog() {
 const freshT = {};
 function setHTML(el, html) { if (el._html === html) return false; const sl = el.scrollLeft, st = el.scrollTop; el.innerHTML = html; el._html = html; el.scrollLeft = sl; el.scrollTop = st; return true; }
 let boardFor = null, boardGoal = 0;
+/* портрет гравця: малюнок раси (або силует), значок класу в куточку */
+const portraitKey = p => [p.raceCard && p.raceCard.name, p.raceCard2 && p.raceCard2.name, p.clsCard && p.clsCard.name, p.sex].join('|');
+function portraitHTML(p) {
+  const race = p.raceCard ? artIcon(p.raceCard, 'pr') : `<span class="pr pe">${p.sex === 'f' ? '👩' : '🧑'}</span>`;
+  const r2 = p.raceCard2 ? `<span class="pr2">${artIcon(p.raceCard2, 'pi')}</span>` : '';
+  const cls = p.clsCard ? `<span class="pc">${artIcon(p.clsCard, 'pi')}</span>` : '';
+  return race + r2 + cls;
+}
+// цифра рівня перевертається, як табличка, і сиплеться іскрами
+function levelFlip(el, up) {
+  if (!el) return;
+  el.classList.remove('flip', 'dn'); void el.offsetWidth; el.classList.add('flip'); if (!up) el.classList.add('dn');
+  if (!up || document.documentElement.classList.contains('less-motion')) return;
+  const box = el.getBoundingClientRect(); if (!box.width) return;
+  for (let k = 0; k < 8; k++) {
+    const s = document.createElement('i'); s.className = 'lvspark';
+    s.style.left = (box.left + box.width / 2) + 'px'; s.style.top = (box.top + box.height / 2) + 'px';
+    const a = (k / 8) * Math.PI * 2, d = 22 + Math.random() * 14;
+    s.style.setProperty('--dx', Math.cos(a) * d + 'px'); s.style.setProperty('--dy', Math.sin(a) * d + 'px');
+    document.body.appendChild(s); setTimeout(() => s.remove(), 750);
+  }
+}
 function buildBoard() {
   const el = $('#players');
   const len = G.coop ? 10 : G.teams ? TEAM_PER() : G.goal;
   const pips = () => Array.from({ length: len }, (_, k) => `${k === 10 ? '<b></b>' : ''}<i class="${k >= 10 && G.goal > 10 ? 'ep' : ''} ${k === len - 1 && !G.teams ? 'fin' : ''}"></i>`).join('');
-  const rowHTML = p => `<div class="brow${G.teams && !G.coop ? ' mate' : ''}" style="--pc:${p.color};--tc:${G.teams ? TEAMS[p.team].color : p.color}" data-p="${p.idx}" role="button" tabindex="0" title="Картка персонажа: ${esc(p.name)}"><div class="blvl"></div><div style="min-width:0"><div class="bname"><span class="bn">${esc(p.name)}</span><span class="bcur" hidden></span><em class="btype"></em><span class="bt">хід</span><span class="bs"></span></div><div class="track">${pips()}</div><div class="bmeta"></div></div></div>`;
+  const rowHTML = p => `<div class="brow${G.teams && !G.coop ? ' mate' : ''}" style="--pc:${p.color};--tc:${G.teams ? TEAMS[p.team].color : p.color}" data-p="${p.idx}" role="button" tabindex="0" title="Картка персонажа: ${esc(p.name)}"><div class="bport" aria-hidden="true"></div><div class="blvl"></div><div style="min-width:0"><div class="bname"><span class="bn">${esc(p.name)}</span><span class="bcur" hidden></span><em class="btype"></em><span class="bt">хід</span><span class="bs"></span></div><div class="track">${pips()}</div><div class="bmeta"></div></div></div>`;
   const head = `<div class="bhead"><span>Табло</span><span>${G.coop ? 'похід' : G.teams ? 'команди' : `мета <b>${G.goal}</b>`}</span></div>`;
   const coopHead = G.coop ? `<div class="bcoop"><div class="tl"><span>Загроза</span><b class="thv"></b></div><div class="thr">${Array.from({ length: G.coop.max }, (_, k) => `<i class="${k >= Math.ceil(G.coop.max * 2 / 3) ? 'z2' : k >= Math.ceil(G.coop.max / 3) ? 'z1' : ''}"></i>`).join('')}</div><div class="cinf"></div></div>` : '';
   el.innerHTML = !G.players.length ? '' : head + coopHead + (G.coop ? G.players.map(rowHTML).join('') : G.teams
@@ -138,12 +181,14 @@ function renderPlayers() {
     row.querySelector('.bs').innerHTML = `${ICO.sword} ${baseStr(p)}`;
     const rc = rcNames(p) || 'без раси й класу';
     { const bc = row.querySelector('.bcur'), n = (p.curses || []).length; bc.hidden = !n; if (n) { bc.textContent = `⛓${n}`; bc.title = curseTitle(p); } }
-    row.querySelector('.bmeta').innerHTML = `${ICO[p.sex === 'f' ? 'f' : 'm']} ${esc(rc)} · карт ${p.hand.length} · ${p.gold} зол.`;
+    row.querySelector('.bmeta').innerHTML = `${ICO[p.sex === 'f' ? 'f' : 'm']} ${esc(rc)} · <span title="Карт у руці">🃏 ${p.hand.length}</span> · <span title="Золото">💰 ${p.gold}</span>`;
+    { const pk = portraitKey(p); if (row._pk !== pk) { row._pk = pk; row.querySelector('.bport').innerHTML = portraitHTML(p); } }
     const pipsEl = row.querySelectorAll('.track i');
     pipsEl.forEach((pip, k) => pip.classList.toggle('on', k < p.level));
     if (p._ui !== p.level) {
       const up = p.level > p._ui;
       row.classList.remove('up', 'down'); void row.offsetWidth; row.classList.add(up ? 'up' : 'down');
+      levelFlip(row.querySelector('.blvl'), up);
       if (up) for (let k = p._ui; k < p.level; k++) { const pip = pipsEl[k]; if (pip) { pip.classList.remove('pop'); void pip.offsetWidth; pip.classList.add('pop'); } }
       p._ui = p.level;
     }
@@ -209,6 +254,62 @@ function renderDock() {
   setHTML($('#hand'), v.hand.map(c => cardHTML(c, (freshT[c.uid] > nowT ? 'fresh ' : '') + (cardActions(c, 'hand').some(a => !a.dis && !/^(Продати|Скинути|Віддати)/.test(a.label)) ? 'playable' : ''))).join('') || '<div class="empty">Рука порожня.</div>');
   G.fresh.clear();
 }
+function rollNum(node, from, to) {
+  if (!node || document.documentElement.classList.contains('less-motion')) return;
+  node.classList.remove('bump-up', 'bump-dn'); void node.offsetWidth; node.classList.add(to > from ? 'bump-up' : 'bump-dn');
+  const t0 = performance.now(), dur = 450;
+  const step = now => { if (!node.isConnected || node.dataset.n !== String(to)) return; const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3); node.textContent = Math.round(from + (to - from) * e); if (k < 1) requestAnimationFrame(step); };
+  node.textContent = from; requestAnimationFrame(step);
+}
+/* «Чому так?» — розкладка сили героїв і монстрів */
+function combatBreakdown() {
+  const cb = G.combat, p = fighter(), h = cb.helper != null ? G.players[cb.helper] : null, ty = combatTypes(cb), s = sides();
+  const H = [], M = [], add = (L, label, v) => { if (v) L.push([label, v]); };
+  const strOf = (q, tag) => {
+    add(H, `${tag}рівень`, q.level);
+    q.gear.forEach(g => { if (usable(q, g) && g.bonus) add(H, `${tag}${g.name}`, g.bonus); });
+    if (hasCls(q, 'warrior')) add(H, `${tag}Воїн`, 1);
+    if (curseStr(q)) add(H, `${tag}прокляття`, -curseStr(q));
+    const a = typeAdj(q, ty); add(H, `${tag}вогонь проти дракона`, a.fireOff); add(H, `${tag}вогонь проти нежиті`, a.fireUndead); add(H, `${tag}драконобійна зброя`, a.slayer);
+    if (hasCls(q, 'cleric') && ty.undead) add(H, `${tag}Жрець проти нежиті`, 3);
+  };
+  strOf(p, cb.boss ? `${p.name}: ` : '');
+  if (h) strOf(h, `${h.name}: `);
+  if (cb.boss) G.players.filter(q => q !== p).forEach(q => strOf(q, `${q.name}: `));
+  const glut = abOf(cb, 'glutton');
+  cb.pShots.forEach(c => { const v = shotVal(c, ty, true); add(H, `«${c.name}»${glut && v > 0 ? ' (Ненажера: ½)' : ''}`, glut && v > 0 ? Math.floor(v / 2) : v); });
+  add(H, 'Маг: спалені карти', cb.wiz * 2);
+  Object.entries(cb.stab || {}).forEach(([i, n]) => add(H, `удар у спину: ${(G.players[i] || {}).name || ''}`, -2 * n));
+  add(H, 'вовча подоба', cb.wolf === p.idx ? 3 : 0); add(H, 'слуги Некроманта', cb.necroB || 0);
+  { const kb = cb.boss ? [p, ...G.players.filter(q => q !== p)].filter(q => hasCls(q, 'kobzar')).length : h && (hasCls(p, 'kobzar') || hasCls(h, 'kobzar')) ? 1 : 0; add(H, 'натхнення Кобзаря', kb * 2); }
+  add(H, 'відвар Знахаря', cb.pShots.filter(c => c.bonus > 0 && c._by != null && hasCls(G.players[c._by], 'znakhar')).length);
+  cb.mons.forEach(x => {
+    add(M, `${x.c.name}${epicFor(p) ? ' (епік ×2)' : ''}`, monLvl(x.c, p));
+    add(M, `${x.c.name}: бонус проти ${esc(p.name)}`, vsBonus(x.c, p));
+    add(M, `${x.c.name}: ${x.c.ab ? AB_SHORT[x.c.ab] : 'здібність'}`, monExtra(cb, x, p, h));
+  });
+  cb.mods.forEach(c => add(M, `«${c.name}»`, c.bonus));
+  cb.mShots.forEach(c => add(M, `«${c.name}»`, shotVal(c, ty, false)));
+  add(M, 'прокляття «Магніт»', curseN(p, 'magnet') * 2);
+  if (G.coop) { add(M, 'здібність Боса', cb.bossX || 0); add(M, 'Загроза', G.coop.threat >= Math.ceil(G.coop.max * 2 / 3) ? 4 : G.coop.threat >= Math.ceil(G.coop.max / 3) ? 2 : 0); }
+  add(M, 'зваба Мавки', cb.charm ? -3 : 0);
+  if (hasCls(p, 'necro')) add(M, 'нежить знає Некроманта', -2 * cb.mons.filter(x => x.c.undead).length);
+  // захист від розбіжностей: усе, що не потрапило в список, — окремим рядком
+  const dh = s.hero - sum(H, x => x[1]), dm = s.mon - sum(M, x => x[1]);
+  if (dh) H.push([dh < 0 && s.hero === 0 ? 'менше нуля не буває' : 'інше', dh]);
+  if (dm) M.push([dm > 0 && s.mon === 1 ? 'монстр не слабший за 1' : 'інше', dm]);
+  return { H, M, s };
+}
+function openCombatWhy() {
+  if (!G.combat) return;
+  const { H, M, s } = combatBreakdown();
+  const rows = L => L.map(([l, v]) => `<div class="kv"><span>${esc(l)}</span><b class="${v < 0 ? 'neg' : ''}">${v > 0 ? '+' : '−'}${Math.abs(v)}</b></div>`).join('');
+  showModal(`<h2>Звідки ці числа</h2>
+    <div class="why-grid"><div><h3>Герої</h3>${rows(H)}<div class="kv total"><span>Разом</span><b>${s.hero}</b></div></div>
+    <div><h3>Монстри</h3>${rows(M)}<div class="kv total"><span>Разом</span><b>${s.mon}</b></div></div></div>
+    <p class="hint">${s.win ? 'Герої перемагають' : 'Монстри сильніші'}${s.hero === s.mon ? (s.tie ? ' — нічия, але Воїн перемагає й за нічиєї.' : ' — за нічиєї перемагають монстри.') : '.'}</p>
+    <div class="row end"><button class="btn primary" type="button" data-close>Зрозуміло</button></div>`, 'wide');
+}
 function renderCombat() {
   const el = $('#combat'); const cb = G.combat;
   if (!cb || G.phase !== 'combat') { el.hidden = true; return; }
@@ -248,16 +349,23 @@ function renderCombat() {
   const meddleLbl = others.length === 1 && others[0].idx === cb.helper ? `Карти помічника: ${esc(others[0].name)}` : others.some(q => q.idx === cb.helper) ? 'Помічник чи інші гравці тут: зіграти карту' : 'Втрутитися (інші гравці тут)';
   const pct = Math.round(s.hero / (s.hero + s.mon) * 100);
   const bad = cb.mons.length > 1 ? `${cb.mons.length} монстри — тікати доведеться від кожного окремо` : cb.mons[0].c.bad.text;
-  el.innerHTML = `<div class="cside hero"><div class="cl">${cb.boss ? 'Увесь загін' : esc(p.name) + (h ? ' + ' + esc(h.name) : '')}</div><div class="big">${s.hero}</div></div>
-    <div class="vs">${s.win ? 'перемагає' : 'програє'}<b>${ICO.sword}</b></div>
-    <div class="cside mon"><div class="cl">${esc(monNames())}</div><div class="big">${s.mon}</div></div>
+  const heroPics = cb.boss ? '' : [p, h].filter(Boolean).map(q => `<span class="cpt" style="--pc:${q.color}">${portraitHTML(q)}</span>`).join('');
+  const monPics = cb.mons.slice(0, 3).map(x => `<span class="cmt${x.c.ab ? ' sp' : ''}">${artIcon(x.c, 'cmi')}</span>`).join('');
+  el.innerHTML = `<div class="cside hero"><div class="cl">${cb.boss ? 'Увесь загін' : esc(p.name) + (h ? ' + ' + esc(h.name) : '')}</div><div class="cnum">${heroPics}<div class="big" data-n="${s.hero}">${s.hero}</div></div></div>
+    <div class="vs">${s.win ? 'перемагає' : 'програє'}<b>${ICO.sword}</b><button class="cwhy" type="button" id="cbWhy" title="Звідки ці числа?">Чому так?</button></div>
+    <div class="cside mon"><div class="cl">${esc(monNames())}</div><div class="cnum"><div class="big" data-n="${s.mon}">${s.mon}</div>${monPics}</div></div>
     <div class="cbar" aria-hidden="true"><i style="width:${pct}%"></i></div>
     ${mods.length ? `<div class="cmods">${mods.join('')}</div>` : ''}
     ${cb.boss ? `<div class="cnote">Перемога — кінець походу. Програш: кожен −1 рівень, Загроза +3.</div>` : `<div class="cnote">Нагорода: <b>${tr} ${plural(tr, 'скарб', 'скарби', 'скарбів')}, +${gain} ${plural(gain, 'рівень', 'рівні', 'рівнів')}</b> · Халепа: <b>${esc(bad)}</b>${s.tie && s.hero === s.mon ? ' · Нічия на користь воїна' : ''}</div>`}
     ${G.window ? `<div class="cnote" style="color:var(--brass)">Чекаємо рішення: <b>${waitingOn().map(h => esc(h.name)).join(', ') || '…'}</b>. Бій не завершиться, доки кожен не зіграє карту або не натисне «Не втручаюсь».</div>` : ''}
-    ${canMeddle ? '<div class="crow"><button class="btn small" type="button" id="meddle">${meddleLbl}</button></div>' : ''}`;
+    ${canMeddle ? `<div class="crow"><button class="btn small" type="button" id="meddle">${meddleLbl}</button></div>` : ''}`;
   el.hidden = false;
   const m = $('#meddle'); if (m) m.onclick = openInterfere;
+  $('#cbWhy').onclick = e => { e.stopPropagation(); openCombatWhy(); };
+  // числа «прокручуються» від попередніх значень
+  const prev = renderCombat.prev || {}, key = cb.fighter + ':' + cb.mons.map(x => x.c.uid).join(',');
+  if (prev.key === key) [['.cside.hero .big', prev.hero, s.hero], ['.cside.mon .big', prev.mon, s.mon]].forEach(([q, a, b]) => { if (a != null && a !== b) rollNum(el.querySelector(q), a, b); });
+  renderCombat.prev = { key, hero: s.hero, mon: s.mon };
 }
 function renderUI() { renderPlayers(); renderDock(); dockTgLabel(); renderCombat(); queueSnap(); chatSync(); reactSync(); tipCheck(); }
 
