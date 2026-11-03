@@ -1061,7 +1061,7 @@ async function doUncurse(p, c, target, curseUid) {
 const sniffReady = p => !!p && !G.combat && G.phase === 'start' && cur() === p && hasRace(p, 'werewolf') && (p.ownTurns || 0) - (p.sniffAt ?? -9) >= 2;
 const sniffWait = p => !!p && !G.combat && G.phase === 'start' && cur() === p && hasRace(p, 'werewolf') && (p.ownTurns || 0) - (p.sniffAt ?? -9) < 2;
 const PERK = {
-  charm: p => !!G.combat && G.phase === 'combat' && fighter() === p && hasRace(p, 'mavka') && !G.combat.charm && !G.combat.boss,
+  charm: p => !!G.combat && G.phase === 'combat' && fighter() === p && hasRace(p, 'mavka') && !G.combat.charm && !G.combat.boss && !charmProof(G.combat),
   wolf: p => !!G.combat && G.phase === 'combat' && fighter() === p && hasRace(p, 'werewolf') && G.combat.wolf == null,
   vanish: p => !!G.combat && G.phase === 'combat' && fighter() === p && hasCls(p, 'kharakternyk') && !p.vanished && !G.combat.boss,
   sniff: p => sniffReady(p) && G.doorDeck.length > 1,

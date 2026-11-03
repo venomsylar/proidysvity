@@ -931,3 +931,15 @@ html[data-ui="l"] #ui,html[data-ui="l"] .modal:not(.screen) .sheet,html[data-ui=
 .achv .unl{display:block;margin-top:2px;color:#9fe08a;font-size:11.5px}
 .ach .unl{display:block;color:#9fe08a;margin-top:2px}
 .achv .unl{text-transform:none;letter-spacing:0;font-weight:600}
+/* портрет у бою: значки не вилазять за край колонки, портрет по центру цифри */
+.cnum{align-items:center}
+.cpt{width:40px;height:40px;margin:3px 2px 0 6px}
+.cpt .pr{width:35px;height:35px}
+.cpt .pe{font-size:20px}
+.cpt .pc,.cpt .pr2{width:17px;height:17px}
+.cpt .pc{right:-6px;bottom:-5px}.cpt .pr2{left:-6px;bottom:-5px}
+.cpt .pi{width:13px;height:13px;object-fit:contain}
+.cpt .psx{left:-6px;top:-5px}
+.cpt + .cpt{margin-left:4px}
+.cpt .pc,.cpt .pr2,.bport .pc,.bport .pr2{font-size:10px;line-height:1;overflow:hidden}
+.menu-acts .btn{white-space:normal;text-wrap:balance;line-height:1.3;min-height:40px;height:auto;overflow-wrap:anywhere}

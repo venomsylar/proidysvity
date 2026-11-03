@@ -167,9 +167,11 @@ function heroPerks(cb, p, h, allies) {
   b += cb.pShots.filter(c => c.bonus > 0 && c._by != null && hasCls(G.players[c._by], 'znakhar')).length;
   return b;
 }
+// монстр, що має бонус проти мавок (Лісоруб-ентузіаст), на звабу не піддається
+const charmProof = cb => !!cb && cb.mons.find(x => x.c.vs && x.c.vs.mavka);
 function monPerks(cb, p) {
   let m = 0;
-  if (cb.charm) m += 3; // Мавка
+  if (cb.charm && !charmProof(cb)) m += 3; // Мавка (на ворогів мавок зваба не діє)
   m += blessN(p, 'tame'); // благословення «монстри слабші»
   if (hasCls(p, 'necro')) m += 2 * cb.mons.filter(x => x.c.undead).length;
   return m;

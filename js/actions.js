@@ -210,8 +210,12 @@ function cardActions(c, where, v = viewerP()) {
     case 'curse': if (G.coop && combatOk) A('Жбурнути в монстра (−2)', { k: 'curseMon', uid: c.uid });
       if (free && !inCombat && G.players.some(q => q !== v && !sameTeam(v, q))) A('Наслати прокляття…', null, { sub: G.players.filter(q => q !== v && !sameTeam(v, q)).map(q => ({ label: `${q.name} · рів. ${q.level}`, act: { k: 'curse', uid: c.uid, target: q.idx } })) }); break;
   }
-  if (free && !inCombat) A('Скинути в скид', { k: 'discard', uid: c.uid });
-  if (inCombat && combatOk && !isFighter && !isHelper && !friend && !cb.boss && hasCls(v, 'thief') && ((cb.stab || {})[v.idx] || 0) < 3 && !['oneshot', 'flee'].includes(c.kind) && where === 'hand') A(`Удар у спину: скинути, ${fighter().name} −2 (Злодюжка, ${((cb.stab || {})[v.idx] || 0)}/3)`, { k: 'stab', uid: c.uid });
+  if (free && !inCombat) {
+    // понад ліміт карти не можна просто викинути: у кінці ходу зайве дістається найслабшому (чи напарнику)
+    const lim = handLimit(v), rc = v.hand.length > lim ? charityTargets(v) : [];
+    A('Скинути в скид', { k: 'discard', uid: c.uid }, { dis: rc.length ? `У руці ${v.hand.length} карт при ліміті ${lim}: зайві в кінці ходу отримає ${rc.map(r => r.name).join(', ')}${G.teams ? ' (напарник)' : ' (найнижчий рівень)'}. Скидати можна, коли в руці не більше ${lim}. Можна спорядити чи продати.` : null });
+  }
+  if (inCombat && combatOk && !isFighter && !isHelper && !friend && !cb.boss && hasCls(v, 'thief') && ((cb.stab || {})[v.idx] || 0) < 3 && !['oneshot', 'flee'].includes(c.kind) && where === 'hand') A(`Удар у спину: ${fighter().name} −2 · ${((cb.stab || {})[v.idx] || 0)}/3`, { k: 'stab', uid: c.uid }, { why: 'Злодюжка скидає цю карту — герой слабшає на 2 у цьому бою (до 3 разів).' });
   if (inCombat && hasCls(v, 'wizard') && !['oneshot', 'flee'].includes(c.kind) && where === 'hand' && wizUsed(v) < 3 && ((isFighter && free) || (cb.boss && bossW))) A(`Спалити заради +2 (Маг, ${wizUsed(v)}/3)`, { k: 'wizard', uid: c.uid });
   return acts;
 }
@@ -298,6 +302,7 @@ function dockActs(v) {
     acts.push({ label: 'Покликати на поміч', fn: openHelp, dis: eventNoHelp() ? 'Туман: на поміч кликати не можна, поки триває подія.' : abOf(cb, 'nohelp') ? 'Цей монстр не терпить натовпу: кликати на поміч не можна.' : curseN(fp, 'lonely') ? 'Прокляття «Ніхто не любить»: допомагати тобі ніхто не може.' : cb.helper != null || G.players.every(q => q === fp || cb.asked.has(q.idx)) });
     { const ch = fleeChance(fp), n = cb.mons.length, all = Math.pow(ch, n); acts.push({ label: `Тікати · ${Math.round(all * 100)}%${n > 1 ? ` (${n} кидки)` : ''}`, act: { k: 'flee' }, cls: 'danger', title: n > 1 ? `Від кожного монстра окремо: ${Math.round(ch * 100)}%` : '' }); }
     if (PERK.charm(v)) acts.push({ label: '🌿 Зваба: −3 монстру', act: { k: 'charm' } });
+    else if (fp === v && hasRace(v, 'mavka') && !cb.charm && !cb.boss && charmProof(cb)) acts.push({ label: '🌿 Зваба', act: { k: 'charm' }, dis: `${charmProof(cb).c.name} на звабу Мавки не піддається.` });
     if (PERK.wolf(v)) acts.push({ label: '🐺 Обернутися: +3', act: { k: 'wolf' } });
     if (PERK.vanish(v) && !s.win) acts.push({ label: '🌀 Зникнути (раз за гру)', act: { k: 'vanish' } });
     return acts;

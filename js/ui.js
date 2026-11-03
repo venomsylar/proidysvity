@@ -304,7 +304,7 @@ function combatBreakdown() {
   if (G.coop) { add(M, 'здібність Боса', cb.bossX || 0); add(M, 'Загроза', G.coop.threat >= Math.ceil(G.coop.max * 2 / 3) ? 4 : G.coop.threat >= Math.ceil(G.coop.max / 3) ? 2 : 0); }
   if (G.event) { add(M, `${G.event.icon} Повний місяць: нежить`, evOn('moon') ? 3 * cb.mons.filter(x => x.c.undead).length : 0); add(M, `${G.event.icon} Сезон драконів`, evOn('dragons') ? 3 * cb.mons.filter(x => x.c.dragon).length : 0);
     add(M, `${G.event.icon} Чорна кішка: лідер`, evOn('blackcat') && p.level >= Math.max(...G.players.map(q => q.level)) ? 2 : 0); }
-  add(M, 'зваба Мавки', cb.charm ? -3 : 0);
+  add(M, 'зваба Мавки', cb.charm && !charmProof(cb) ? -3 : 0);
   add(M, 'благословення: монстри слабші', -blessN(p, 'tame'));
   if (hasCls(p, 'necro')) add(M, 'нежить знає Некроманта', -2 * cb.mons.filter(x => x.c.undead).length);
   // захист від розбіжностей: усе, що не потрапило в список, — окремим рядком
