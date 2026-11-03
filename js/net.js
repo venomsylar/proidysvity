@@ -34,7 +34,37 @@ async function getIce() {
 }
 const peerOpts = ice => ice ? { debug: 0, config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, ...ice] } } : { debug: 0 };
 const makeCode = () => Array.from({ length: 5 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[rnd(32)]).join('');
-function sendConn(c, msg) { try { if (c && c.open) c.send(msg); } catch (e) { /* зʼєднання могло закритися */ } }
+/* PeerJS у режимі JSON не пропускає повідомлень від 16 КБ: замість відправки він видає помилку,
+   і зʼєднання вважалося розірваним. Під кінець партії знімок гри стає більшим за 16 КБ — гравець по мережі
+   «відпадав» і не міг повернутися. Тому великі повідомлення ріжемо на шматки й збираємо на тому боці. */
+const NET_PART = 4000; // символів у шматку: навіть кирилиця чи емодзі дають < 16 КБ
+let partSeq = 0;
+function sendConn(c, msg) {
+  try {
+    if (!c || !c.open) return;
+    const s = JSON.stringify(msg);
+    if (s.length <= NET_PART) { c.send(msg); return; }
+    const id = (++partSeq).toString(36) + Math.random().toString(36).slice(2, 6), parts = [];
+    for (let i = 0; i < s.length;) {
+      let j = Math.min(s.length, i + NET_PART);
+      const cc = s.charCodeAt(j - 1); if (j < s.length && cc >= 0xD800 && cc <= 0xDBFF) j--; // не розрізаємо емодзі навпіл
+      parts.push(s.slice(i, j)); i = j;
+    }
+    parts.forEach((d, k) => c.send({ t: 'part', id, k, n: parts.length, d }));
+  } catch (e) { /* зʼєднання могло закритися */ }
+}
+// збирає шматки; повертає повідомлення, коли все прийшло (або одразу, якщо воно й не різалось)
+function netUnpack(conn, d) {
+  if (!d || d.t !== 'part') return d;
+  const P = conn._parts = conn._parts || {};
+  if (!(d.n > 0 && d.n < 5000) || typeof d.d !== 'string') return null;
+  const e = P[d.id] = P[d.id] || { n: d.n, got: 0, a: [] };
+  if (e.a[d.k] == null) { e.a[d.k] = d.d; e.got++; }
+  if (e.got < e.n) return null;
+  delete P[d.id];
+  try { return JSON.parse(e.a.join('')); } catch (er) { return null; }
+}
+const realNetError = e => !(e && e.type === 'message-too-big');
 function netSendTo(idx, msg) { if (NET.role === 'host') sendConn(NET.conns.get(idx), msg); }
 function netAll(msg) { if (NET.role === 'host') NET.conns.forEach(c => sendConn(c, msg)); }
 function netSendHost(msg) { sendConn(NET.conn, msg); }
@@ -91,9 +121,9 @@ async function hostRoom() {
     });
     peer.on('connection', conn => {
       conn._rx = Date.now(); NET.allConns.add(conn);
-      conn.on('data', d => { conn._rx = Date.now(); hostOnData(conn, d); });
+      conn.on('data', d => { conn._rx = Date.now(); d = netUnpack(conn, d); if (d) hostOnData(conn, d); });
       conn.on('close', () => { NET.allConns.delete(conn); hostOnClose(conn); });
-      conn.on('error', () => { NET.allConns.delete(conn); hostOnClose(conn); });
+      conn.on('error', e => { if (!realNetError(e)) return; NET.allConns.delete(conn); hostOnClose(conn); });
     });
   };
   tryOpen(0);
@@ -286,8 +316,8 @@ function clientConnect(code, onOpen, onFail, timeout = 15000) {
     const conn = peer.connect(PEER_PREFIX + code, { reliable: true, serialization: 'json' });
     const lost = () => { if (conn === NET.conn && NET.role === 'client') clientDropped(); };
     conn.on('open', () => { if (failed) { try { conn.close(); } catch (e) { } return; } opened = true; clearTimeout(tm); NET.conn = conn; NET.role = 'client'; NET.code = code; NET.lastRx = Date.now(); chatSync(); onOpen(conn); });
-    conn.on('data', d => { if (conn !== NET.conn) return; NET.lastRx = Date.now(); clientOnData(d); });
-    conn.on('close', lost); conn.on('error', lost);
+    conn.on('data', d => { if (conn !== NET.conn) return; NET.lastRx = Date.now(); d = netUnpack(conn, d); if (d) clientOnData(d); });
+    conn.on('close', lost); conn.on('error', e => { if (realNetError(e)) lost(); });
   });
 }
 async function joinRoom(code, name, sex, onErr) {
