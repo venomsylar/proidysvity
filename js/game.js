@@ -1196,7 +1196,7 @@ function showWin(p, isHost, sum = G._sum) {
   const tw = G.teams ? `<div class="who" style="color:${TEAMS[p.team].color}">${teamName(p.team)}</div><p>${teamMembers(p.team).map(q => `<b style="color:${q.color}">${esc(q.name)}</b> · ${q.level}`).join(', ')} — разом ${teamScore(p.team)} з ${teamTarget(p.team)} рівнів. Переможний удар — за ${esc(p.name)}.</p><p class="hint">${teamIds().filter(t => t !== p.team).map(t => `${teamName(t)}: ${teamScore(t)} / ${teamTarget(t)}`).join(' · ')}</p>` : '';
   showModal(`<div class="curtain"><h2>Перемога${G.teams ? ' команди' : ''}!</h2>${tw || `<div class="who" style="color:${p.color}">${esc(p.name)}</div><p>досягає ${G.goal}-го рівня і стає найславетнішим пройдисвітом підземелля.</p>`}</div>
     ${summaryHTML(sum)}
-    <div class="row end"><button class="btn ghost" data-close type="button">Роздивитися стіл</button>${isHost ? '<button class="btn primary" id="again" type="button">Нова гра</button>' : ''}</div>
+    <div class="row end"><button class="btn ghost" data-close type="button">Роздивитися стіл</button><button class="btn" type="button" id="toMenu">Головне меню</button>${isHost ? '<button class="btn primary" id="again" type="button">Нова гра</button>' : ''}</div>
     ${isHost ? '' : '<p class="hint" style="text-align:center">Нову партію запускає господар кімнати.</p>'}`, sum ? 'wide' : '');
-  const a = $('#again'); if (a) a.onclick = () => { closeModal(); openSetup(); };
+  const a = $('#again'); if (a) a.onclick = () => { closeModal(); openSetup(); }; $('#toMenu').onclick = () => { closeModal(); openMainMenu(); };
 }

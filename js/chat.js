@@ -58,6 +58,9 @@ document.addEventListener('click', e => { if (e.target.closest('[data-chat-open]
 function chatBadge() {
   const b = $('#btnChat'); if (!b) return;
   const s = b.querySelector('.chat-badge'); s.hidden = !CHAT.unread; s.textContent = CHAT.unread > 9 ? '9+' : CHAT.unread;
+  // нове повідомлення — цифра підстрибує, а поки є непрочитані — кнопка тихо світиться
+  if (CHAT.unread > (CHAT.shown || 0)) { s.classList.remove('bump'); void s.offsetWidth; s.classList.add('bump'); }
+  CHAT.shown = CHAT.unread; b.classList.toggle('unread', !!CHAT.unread);
   document.querySelectorAll('[data-chat-open]').forEach(x => { x.textContent = CHAT.unread ? `Чат (${CHAT.unread})` : 'Чат'; });
 }
 const chatTime = t => { const d = new Date(t); return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`; };

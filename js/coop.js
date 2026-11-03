@@ -352,9 +352,9 @@ function showCoopEnd(a, isHost) {
     <table class="cstats"><tr><th>Гравець</th><th>Рівень</th><th>Перемог</th><th>Ключів</th><th>Карт на Боса</th></tr>
     ${a.stats.map(s => `<tr><td><b style="color:${s.color}">${esc(s.name)}</b>${s.kills + s.keys * 2 + s.shots === best && best > 0 ? ' ⭐' : ''}</td><td>${s.level}</td><td>${s.kills}</td><td>${s.keys}</td><td>${s.shots}</td></tr>`).join('')}</table>
     ${summaryHTML(a.sum)}
-    <div class="row end"><button class="btn ghost" data-close type="button">Роздивитися стіл</button>${isHost ? '<button class="btn primary" id="again" type="button">Нова гра</button>' : ''}</div>
+    <div class="row end"><button class="btn ghost" data-close type="button">Роздивитися стіл</button><button class="btn" type="button" id="toMenu">Головне меню</button>${isHost ? '<button class="btn primary" id="again" type="button">Нова гра</button>' : ''}</div>
     ${isHost ? '' : '<p class="hint" style="text-align:center">Нову партію запускає господар кімнати.</p>'}`, 'wide');
-  const b = $('#again'); if (b) b.onclick = () => { closeModal(); openSetup(); };
+  const b = $('#again'); if (b) b.onclick = () => { closeModal(); openSetup(); }; $('#toMenu').onclick = () => { closeModal(); openMainMenu(); };
 }
 // хід бота в поході: ріг, коли Загроза росте
 async function coopBotManage(p) {

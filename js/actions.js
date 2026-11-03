@@ -454,6 +454,8 @@ const FEMALE_NAMES = new Set(['Мотря', 'Одарка', 'Ганна', 'Со�
 let rerenderSetup = null;
 function openSetup() {
   if (NET.role === 'client') { toast('Нову партію запускає господар кімнати.'); return; }
+  // налаштування — завжди на весь екран (поверх головного меню), а не вузьким вікном
+  if (typeof MENU !== 'undefined' && !MENU.open) openMainMenu();
   const s = setupState;
   const netBlock = () => NET.role === 'host'
     ? `<h3>Гра по мережі</h3><div class="netcode"><span>Код кімнати</span><b>${esc(NET.code)}</b></div>
