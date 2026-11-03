@@ -73,7 +73,7 @@ async function kickDoor() {
     say(`Прокляття «${c.name}»: ${c.bad.text}${c.persist ? ' (діє, поки не знімеш)' : ''}`, 2600); sfx('curse');
     await fly(m, poseOf(m), seatPose(p.idx, true), 600, 1); hitFx(p);
     disposeMesh(m);
-    if (c.persist) attachCurse(p, c); else { discard(c); await applyBad(p, c.bad); }
+    if (wardBlocks(p, c)) discard(c); else if (c.persist) attachCurse(p, c); else { discard(c); await applyBad(p, c.bad); }
   } else {
     await fly(m, poseOf(m), toHandOf(p), 600, 1, { owner: p.idx });
     disposeMesh(m); giveCard(p, c);
@@ -309,8 +309,8 @@ const waitingOn = () => G.window && G.combat ? G.window.humans.filter(h => !G.co
 function passWindow(p) {
   const w = G.window, cb = G.combat; if (!w || !cb) return;
   cb.passed.add(p.idx);
-  log(`${nameTag(p)} не втручається.`);
-  if (w.humans.every(h => cb.passed.has(h.idx))) { G.window = null; w.resolve('pass'); }
+  log(w.playedBy && w.playedBy.has(p.idx) ? `${nameTag(p)} більше нічого не підкидає.` : `${nameTag(p)} не втручається.`);
+  if (w.humans.every(h => cb.passed.has(h.idx))) { G.window = null; w.resolve(w.played ? 'played' : 'pass'); }
   renderUI();
 }
 
@@ -579,7 +579,8 @@ function combatEnded() { if (G.assist && G.assist.resolve) G.assist.resolve('end
 async function waitCombatEnd() { while (G.combat && !G.over) { G.busy = false; renderUI(); await new Promise(r => combatWaiters.push(r)); await wait(80); } G.busy = true; renderUI(); }
 
 async function winCombat() {
-  const cb = G.combat, p = fighter(); const kob = cb.helper != null && hasCls(p, 'kobzar') && !cb.boss ? 1 : 0; const tr = Math.max(0, treasureCount() + kob - curseN(p, 'sack'));
+  const cb = G.combat, p = fighter(); const kob = cb.helper != null && hasCls(p, 'kobzar') && !cb.boss ? 1 : 0; const tr = Math.max(0, treasureCount() + kob + blessN(p, 'loot') - curseN(p, 'sack'));
+  if (blessN(p, 'loot')) log(`${nameTag(p)} (благословення): +${blessN(p, 'loot')} скарб.`);
   if (kob) log(`${nameTag(p)} (Кобзар) співає про перемогу: +1 скарб.`);
   const s0 = sides(), orcBonus = hasRace(p, 'orc') && s0.hero - s0.mon >= 10 ? 1 : 0, gain = levelsGain() + orcBonus;
   if (orcBonus) log(`${nameTag(p)} (Орк) розносить монстра з перевагою ${s0.hero - s0.mon}: +1 рівень зверху!`);
@@ -597,6 +598,8 @@ async function winCombat() {
   for (const x of cb.mons) { if (x.m) { const m = x.m; x.m = null; await defeatAnim(m); } if (x.c.guard) guardDefeated(x.c); else discard(x.c); }
   await clearSideCards();
   coopStat(p, 'kills'); if (helper) coopStat(helper, 'kills');
+  for (const x of cb.mons) if (x.c.tyrant) grantBless(p, x.c);
+  if (blessN(p, 'gold')) { p.gold += blessN(p, 'gold'); log(`${nameTag(p)} (благословення): +${blessN(p, 'gold')} золотих.`); }
   await changeLevel(p, gain, true);
   if (G.over) return;
   const hs = helper ? Math.min(tr, cb.offer ? cb.offer.tr : Math.floor(tr / 2)) : 0;
@@ -622,12 +625,13 @@ async function fleeCombat() {
       if (mon.ab === 'noflee') { say(`Від «${mon.name}» не втекти!`, 2200); log(`${nameTag(q)} намагається втекти від «${esc(mon.name)}», але від нього не втекти.`); await wait(900); }
       let r = mon.ab === 'noflee' ? 0 : await rollDie(q); let ok = mon.ab !== 'noflee' && r + fb >= 5; if (mon.ab !== 'noflee') sayRoll(r, ok, false);
       if (!ok && mon.ab !== 'noflee' && hasRace(q, 'halfling')) { await wait(1400); r = await rollDie(q); ok = r + fb >= 5; sayRoll(r, ok, true); }
+      if (!ok && mon.ab !== 'noflee' && blessN(q, 'reroll') && !(cb.rerolled || {})[q.idx]) { cb.rerolled = cb.rerolled || {}; cb.rerolled[q.idx] = true; log(`${nameTag(q)} (благословення) перекидає кубик утечі.`); await wait(1200); r = await rollDie(q); ok = r + fb >= 5; sayRoll(r, ok, true); }
       await wait(1300);
       if (!ok) {
         if (isMe(q)) statFlag('hit'); hlAdd('hits', q);
         await monsterStrike(x.m, q);
         log(`Халепа від «${esc(mon.name)}»: ${esc(mon.bad.text)}`);
-        G._badTo = x.m; try { await applyBad(q, mon.bad); } finally { G._badTo = null; }
+        G._badTo = x.m; try { await applyBad(q, mon.tyrant ? { ...mon.bad, mon } : mon.bad); } finally { G._badTo = null; }
         if (G.over) return;
         await monsterGloat(x.m);
         botSay(q, 'beaten', {}, .8);
@@ -665,6 +669,24 @@ function immuneSlot(q, slot) {
   if ((slot === 'body' || slot === 'head') && hasCls(q, 'koval')) return 'Коваль, міцна робота';
   return '';
 }
+// який бос наслав цю халепу (халепа боса посилається на свою карту)
+const cb0Mon = bad => bad && bad.mon ? bad.mon : null;
+// оберіг (благословення) гасить одне прокляття
+function wardBlocks(q, c) {
+  const w = (q.bless || []).find(b => b.k === 'ward' && b.n > 0); if (!w) return false;
+  w.n--; if (w.n <= 0) q.bless.splice(q.bless.indexOf(w), 1);
+  log(`${nameTag(q)}: оберіг «${esc(w.name)}» гасить прокляття «${esc(c.name)}».`); say(`Оберіг рятує ${q.name}!`, 1800);
+  sfx('help'); if (q.seat) ringFx(q.seat.anchor, 0x7fd0ff); syncSeat(q); renderUI(); return true;
+}
+function grantBless(p, mon) {
+  const b = mon.tyrant.bless; p.bless = p.bless || [];
+  const same = p.bless.find(x => x.name === b.name);
+  if (same) same.n += b.n; else p.bless.push({ k: b.k, n: b.n, name: b.name, icon: b.icon, text: b.text, from: mon.name });
+  log(`✨ ${nameTag(p)} отримує благословення «${esc(b.name)}»: ${esc(b.text)} Діє до кінця гри.`);
+  banner(`${b.icon} ${b.name}`, '#9fe0bd'); netAll({ t: 'fx', type: 'banner', a: { text: `${b.icon} ${b.name}`, color: '#9fe0bd' } });
+  if (p.seat) { ringFx(p.seat.anchor, 0x9fe0bd); burst(p.seat.anchor.clone().setY(.9), ['#9fe0bd', '#ffffff', '#ffe07a'], 80, 2.4, 1.2); }
+  syncSeat(p); renderUI();
+}
 async function applyBad(q, bad) {
   const lost = [], flyTo = G._badTo, flying = [];
   const take = items => items.forEach(g => { q.gear.splice(q.gear.indexOf(g), 1); discard(g); lost.push(g.name); flying.push(g); });
@@ -679,6 +701,13 @@ async function applyBad(q, bad) {
     case 'race': if (q.raceCard) { const x = q.raceCard; removeRC(q, x); discard(x); lost.push(x.name); } break;
     case 'class': if (q.clsCard) { const x = q.clsCard; removeRC(q, x); discard(x); lost.push(x.name); } break;
     case 'persist': break;
+    case 'tyrant': { // програш босу — тривале прокляття
+      const mon = cb0Mon(bad); if (!mon) break;
+      const t = mon.tyrant.curse;
+      const k = mk({ deck: 'door', kind: 'curse', persist: true, ephemeral: true, name: t.name, art: t.art, artOf: mon.name, bad: BAD.persist(t.p, t.text), flavor: `Залишив ${mon.name}.` });
+      if (wardBlocks(q, k)) break;
+      attachCurse(q, k); break;
+    }
     case 'sex': {
       q.sex = q.sex === 'f' ? 'm' : 'f';
       log(`${nameTag(q)} тепер ${q.sex === 'f' ? 'жінка' : 'чоловік'}!${q.gear.some(g => g.req && g.req.sex) ? ' Деякі речі більше не діють.' : ''}`);
@@ -999,7 +1028,7 @@ async function doCurse(from, c, target) {
   const m = cardMesh(c); scene.add(m); renderUI();
   await fly(m, fromHandOf(from), seatPose(target.idx, true), 750, 2.2);
   hitFx(target); disposeMesh(m);
-  if (c.persist) attachCurse(target, c); else { discard(c); await applyBad(target, c.bad); }
+  if (wardBlocks(target, c)) discard(c); else if (c.persist) attachCurse(target, c); else { discard(c); await applyBad(target, c.bad); }
 }
 /* --- тривалі прокляття --- */
 function attachCurse(q, c) {

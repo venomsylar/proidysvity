@@ -44,7 +44,7 @@ const mk = o => (o.uid = ++UID, o);
 
 function buildDoorDeck(epic = false, types = { undead: true, dragon: true }) {
   const d = [];
-  const M = (name, lvl, treasures, art, bad, o = {}) => d.push(mk({ deck: 'door', kind: 'monster', name, lvl, treasures, art, bad: o.bt ? { ...bad, text: o.bt } : bad, levels: o.levels || 1, undead: !!o.undead, dragon: !!o.dragon, vs: o.vs || null, flavor: o.flavor || '', ab: o.ab || null }));
+  const M = (name, lvl, treasures, art, bad, o = {}) => d.push(mk({ deck: 'door', kind: 'monster', name, lvl, treasures, art, bad: o.bt ? { ...bad, text: o.bt } : bad, levels: o.levels || 1, undead: !!o.undead, dragon: !!o.dragon, vs: o.vs || null, flavor: o.flavor || '', ab: o.ab || null, tyrant: o.tyrant || null }));
   const DEATH = 'Смерть: усі речі й карти — у скид.';
   M('Хробак-книгоїд', 1, 1, '🐛', BAD.hand(2), { flavor: 'Прочитав усе. Навіть правила.', bt: 'Гризе твої карти, як конспект перед іспитом. Скинь 2 випадкові карти.' });
   M('Злий Вареник', 1, 1, '🥟', BAD.slot('feet'), { flavor: 'Ліплений з образою.', bt: 'Стрибає тобі на ноги зі сметаною. Взуття не відмити — втрачаєш його.' });
@@ -68,6 +68,18 @@ function buildDoorDeck(epic = false, types = { undead: true, dragon: true }) {
   M('Огр-кулінар', 10, 3, '👹', BAD.lvl(2), { flavor: 'Шукає начинку до пиріжків.', bt: 'Маринує тебе на вечерю. Ледве вирвався: −2 рівні.' });
   M('Привид тещі', 10, 3, '👻', BAD.best, { undead: true, vs: { warrior: 3 }, flavor: 'Знає, що ти зробив минулого літа.', bt: 'Нагадує, скільки ти їй винен, і забирає найдорожчу річ.' });
   M('Нічна варта', 9, 3, '🔦', BAD.lvl(1), { vs: { thief: 3 }, flavor: 'Ловить злодіїв. Решту — теж.', bt: 'Світить у лице й складає протокол. −1 рівень.' });
+  // боси: програв — тривале прокляття, переміг — постійне благословення
+  const B = (name, lvl, art, curse, bless, o = {}) => M(name, lvl, o.tr || 4, art, { t: 'tyrant', text: `Тривале прокляття «${curse[0]}»: ${curse[3]}` }, { ...o, levels: 2, tyrant: { curse: { name: curse[0], art: curse[1], p: curse[2], text: curse[3] }, bless: { name: bless[0], icon: bless[1], k: bless[2], n: bless[3], text: bless[4] } } });
+  B('Голова ОСББ', 14, '🏢', ['Внески ОСББ', '🧾', 'sack', 'За перемогу отримуєш на 1 скарб менше.'], ['Ключ від даху', '🗝️', 'loot', 1, '+1 скарб за кожну перемогу.'], { flavor: 'Збори щочетверга. Явка обовʼязкова.' });
+  B('Змій Горинич-логіст', 18, '🐉', ['Опік трьох голів', '🔥', 'monday', '−2 у бою.'], ['Луска Змія', '🛡️', 'str', 2, '+2 у бою.'], { dragon: true, tr: 5, flavor: 'Три голови, три накладні, жодної доставки.' });
+  B('Баба Яга-ріелторка', 15, '🧹', ['Хатка на курячих ніжках', '🐔', 'lead', '−1 до втечі.'], ['Ступа Яги', '🪣', 'flee', 2, '+2 до втечі.'], { flavor: 'Хатка з видом на ліс. Повертається задом.' });
+  B('Кощій-пенсійний фонд', 17, '💀', ['Вічна черга', '⏳', 'lonely', 'Ніхто не може допомагати тобі в бою.'], ['Голка з яйця', '🪡', 'tame', 2, 'Монстри у твоїх боях слабші на 2.'], { undead: true, tr: 5, flavor: 'Безсмертний. Як і черга до нього.' });
+  B('Велетень із перфоратором', 16, '🔨', ['Дзвін у вухах', '🔔', 'sneeze', '−1 у бою й −1 до втечі.'], ['Беруші-обереги', '🧿', 'ward', 1, 'Наступне прокляття на тебе не подіє.'], { flavor: 'Ремонт триває з 2009 року.' });
+  B('Відьма-інфлюенсерка', 14, '📱', ['Прокляття алгоритму', '📉', 'magnet', 'Монстри мають +2 проти тебе.'], ['Синя галочка', '✅', 'hand', 1, 'Тримаєш у руці на 1 карту більше.'], { flavor: 'Підпишись, інакше перетворю на жабу.' });
+  B('Дракон-митник', 19, '🛃', ['Мито на все', '📦', 'pocket', 'Тримаєш у руці на 1 карту менше.'], ['Перлина митника', '🦪', 'gold', 300, '+300 золотих за кожну перемогу.'], { dragon: true, tr: 5, flavor: 'Декларуй навіть свої мрії.' });
+  B('Вій-аудитор', 20, '👁️', ['Ревізія', '📋', 'inflation', 'Продаєш речі лише за півціни.'], ['Нічний зір', '🌙', 'reroll', 1, 'Раз за бій можна перекинути невдалий кидок утечі.'], { undead: true, tr: 5, flavor: '«Підніміть мені повіки… і звітність».' });
+  B('Чорт-колектор', 15, '😈', ['Відсотки по боргу', '💸', 'monday', '−2 у бою.'], ['Підкова чорта', '🍀', 'str', 1, '+1 у бою.'], { flavor: 'Ви підписали дрібним шрифтом. Кровʼю.' });
+  B('Цар-Холодильник', 16, '🧊', ['Обмороження', '🥶', 'lead', '−1 до втечі.'], ['Крижаний подих', '❄️', 'tame', 1, 'Монстри у твоїх боях слабші на 1.'], { flavor: 'Тримає все свіже. Особливо образи.' });
   M('Лісоруб-ентузіаст', 6, 2, '🪓', BAD.lvl(1), { vs: { mavka: 4 }, flavor: 'Рубає все, що шелестить.', bt: 'Пиляє дерево, під яким ти стояв. −1 рівень і тріски у волоссі.' });
   M('Мисливець на перевертнів', 9, 3, '🔫', BAD.lvl(2), { vs: { werewolf: 4 }, flavor: 'Кулі срібні. Жарти — ні.', bt: 'Ловить тебе в сітку й фотографує для газети. −2 рівні.' });
   M('Критик-меломан', 5, 2, '🎧', BAD.hand(2), { vs: { kobzar: 4 }, flavor: 'Слухав і краще. Чесно.', bt: 'Пише розгромну рецензію на твою руку. Скинь 2 випадкові карти.' });
@@ -187,7 +199,7 @@ function buildDoorDeck(epic = false, types = { undead: true, dragon: true }) {
 
   for (const r of Object.keys(RACES)) for (let i = 0; i < 2; i++) d.push(mk({ deck: 'door', kind: 'race', race: r, name: RACES[r].name, art: RACES[r].art }));
   for (const c of Object.keys(CLASSES)) for (let i = 0; i < 2; i++) d.push(mk({ deck: 'door', kind: 'class', cls: c, name: CLASSES[c].name, art: CLASSES[c].art }));
-  return d.filter(c => c.kind !== 'monster' || ((!c.undead || types.undead) && (!c.dragon || types.dragon)));
+  return d.filter(c => c.kind !== 'monster' || ((!c.undead || types.undead) && (!c.dragon || types.dragon) && (!c.tyrant || types.boss !== false)));
 }
 
 function buildTreasureDeck(types = { undead: true, dragon: true }) {
@@ -346,6 +358,7 @@ function cardInfo(c) {
     case 'monster': {
       const t = [];
       if (c.boss) return { type: 'Бос', corner: c.lvl, text: `${c.ability} Бʼється весь загін.`, flavor: c.flavor, foot: ['Кінець походу', ''] };
+      if (c.tyrant) { const tb = c.tyrant.bless; t.push(`Перемога — благословення «${tb.name}»: ${tb.text}`); }
       if (c.ab) t.push('⚡ ' + MON_AB[c.ab]);
       if (c.dragon) t.push('Дракон: вогняні речі й зілля проти нього не діють.');
       if (c.undead) t.push('Нежить: можна підкинути в бій до іншої нежиті.');
@@ -383,6 +396,7 @@ function typeBadge(c) {
   if (c.guard) return { t: 'Вартовий', e: '🛡️', bg: '#2f4867', bd: '#a9c8f0', fg: '#eef5ff' };
   if (c.kind === 'key') return { t: 'Ключ', e: '🗝️', bg: '#7a5a12', bd: '#ffd36b', fg: '#fff6dc' };
   if (c.kind === 'alarm') return { t: 'Тривога', e: '⚠️', bg: '#8a2c14', bd: '#ffb26b', fg: '#fff1e2' };
+  if (c.kind === 'monster' && c.tyrant) return { t: c.dragon ? 'Бос-дракон' : c.undead ? 'Бос-нежить' : 'Бос', e: '👑', bg: '#6a4a10', bd: '#ffd36b', fg: '#fff6dc' };
   if (c.kind === 'monster' && c.ab && !c.dragon && !c.undead) return { t: 'Особливий', e: '⚡', bg: '#5a3a8a', bd: '#d9b8ff', fg: '#f6efff' };
   if (c.kind === 'monster') {
     if (c.dragon && c.undead) return { t: 'Нежить-дракон', e: '💀', bg: '#4a2a55', bd: '#d9a6ff', fg: '#fbefff' };

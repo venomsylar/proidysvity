@@ -34,6 +34,11 @@ function dollHTML(p, big) {
 const CURSE_SHORT = { monday: '−2 у бою', lead: '−1 до втечі', pocket: '−1 карта в руці', inflation: 'продаж за пів ціни', lonely: 'без помічників', magnet: 'монстри +2', sack: '−1 скарб', sneeze: '−1 у бою й утечі' };
 const curseTitle = p => (p.curses || []).map(k => `${k.name}: ${k.bad.text}`).join('\n');
 // жетони тривалих проклять біля персонажа — видно без відкривання картки
+const blessText = b => b.k === 'ward' ? `Наступне прокляття на тебе не подіє${b.n > 1 ? ` (×${b.n})` : ''}.` : b.k === 'str' ? `+${b.n} у бою.` : b.k === 'flee' ? `+${b.n} до втечі.` : b.k === 'hand' ? `+${b.n} карт у руці.` : b.k === 'loot' ? `+${b.n} скарб за перемогу.` : b.k === 'gold' ? `+${b.n} зол. за перемогу.` : b.k === 'tame' ? `Монстри в твоїх боях −${b.n}.` : b.text;
+function blessChips(p) {
+  const bs = p.bless || []; if (!bs.length) return '';
+  return `<div class="cchips bchips" role="list" aria-label="Благословення">${bs.map(b => `<button type="button" class="cchip bchip" role="listitem" data-sheet title="${esc(b.name)}: ${esc(blessText(b))}">${b.icon} <i>${esc(b.name)}</i></button>`).join('')}</div>`;
+}
 function curseChips(p) {
   const cs = p.curses || []; if (!cs.length) return '';
   return `<div class="cchips" role="list" aria-label="Тривалі прокляття">${cs.map(k => `<button type="button" class="cchip" role="listitem" data-sheet title="${esc(k.name)}: ${esc(k.bad.text)} Зняти — картою «Зняти прокляття».">${artIcon(k, 'ai')}${cs.length > 3 ? '' : `<i>${esc(CURSE_SHORT[k.bad.p] || k.name)}</i>`}</button>`).join('')}</div>`;
@@ -68,6 +73,7 @@ function openCharSheet(i) {
       <h3>Втеча</h3><div class="kv"><span>Потрібно на кубику</span><b>${need <= 1 ? 'будь-яке' : need + '+'}</b></div><div class="kv"><span>Шанс утекти</span><b>${Math.round(chance * 100)}%</b></div>${fleeSrc.length ? `<p class="hint" style="margin-top:6px">${esc(fleeSrc.join(' · '))}</p>` : ''}
       <h3>Здібності</h3>${abil}
       <h3>Тривалі прокляття</h3>${(p.curses || []).length ? p.curses.map(k => `<div class="kv off-curse"><span>${artIcon(k)} ${esc(k.name)}</span><b>${esc(k.bad.text)}</b></div>`).join('') + '<p class="hint">Зняти можна картою «Бабусина замова» чи «Свята вода з-під крана».</p>' : '<p class="hint">Немає. Пощастило!</p>'}
+      ${(p.bless || []).length ? `<h3>Благословення</h3>${p.bless.map(b => `<div class="kv on-bless"><span>${b.icon} ${esc(b.name)}</span><b>${esc(blessText(b))}</b></div>`).join('')}<p class="hint">Дарунки переможених босів. Діють до кінця гри.</p>` : ''}
       ${mood}
       <h3>Запаси</h3>
       <div class="kv"><span>Золото</span><b>${p.gold} / 1000</b></div><div class="meter" aria-hidden="true"><i style="width:${Math.min(100, p.gold / 10)}%"></i></div>
@@ -120,7 +126,7 @@ function portraitHTML(p) {
   const race = p.raceCard ? artIcon(p.raceCard, 'pr') : `<span class="pr pe">${p.sex === 'f' ? '👩' : '🧑'}</span>`;
   const r2 = p.raceCard2 ? `<span class="pr2">${artIcon(p.raceCard2, 'pi')}</span>` : '';
   const cls = p.clsCard ? `<span class="pc">${artIcon(p.clsCard, 'pi')}</span>` : '';
-  return race + r2 + cls;
+  return race + r2 + cls + `<span class="psx ${p.sex === 'f' ? 'f' : 'm'}" title="${p.sex === 'f' ? 'жінка' : 'чоловік'}">${p.sex === 'f' ? '♀' : '♂'}</span>`;
 }
 // цифра рівня перевертається, як табличка, і сиплеться іскрами
 function levelFlip(el, up) {
@@ -181,7 +187,7 @@ function renderPlayers() {
     row.querySelector('.bs').innerHTML = `${ICO.sword} ${baseStr(p)}`;
     const rc = rcNames(p) || 'без раси й класу';
     { const bc = row.querySelector('.bcur'), n = (p.curses || []).length; bc.hidden = !n; if (n) { bc.textContent = `⛓${n}`; bc.title = curseTitle(p); } }
-    row.querySelector('.bmeta').innerHTML = `${ICO[p.sex === 'f' ? 'f' : 'm']} ${esc(rc)} · <span title="Карт у руці">🃏 ${p.hand.length}</span> · <span title="Золото">💰 ${p.gold}</span>`;
+    row.querySelector('.bmeta').innerHTML = `<span class="bm-rc"><span class="bm-sx">${ICO[p.sex === 'f' ? 'f' : 'm']} </span>${esc(rc)}</span><span class="bm-n"><span title="Карт у руці">🃏${p.hand.length}</span><span title="Золото">💰${p.gold}</span>${(p.bless || []).length ? `<span title="${esc(p.bless.map(b => b.name + ': ' + blessText(b)).join('; '))}">✨${p.bless.length}</span>` : ''}</span>`;
     { const pk = portraitKey(p); if (row._pk !== pk) { row._pk = pk; row.querySelector('.bport').innerHTML = portraitHTML(p); } }
     const pipsEl = row.querySelectorAll('.track i');
     pipsEl.forEach((pip, k) => pip.classList.toggle('on', k < p.level));
@@ -212,6 +218,7 @@ function statusText() {
   if (G.window && G.combat) {
     const mine = v && G.window.humans.includes(v) && !G.combat.passed.has(v.idx);
     const names = waitingOn().map(h => esc(h.name)).join(', ');
+    if (mine && G.window.playedBy && G.window.playedBy.has(v.idx)) { const s = sides(); return `Зараз <b>${s.hero}</b> проти <b>${s.mon}</b> — ${esc(fighter().name)} ${s.win ? 'перемагає' : 'програє'}. Можеш підкинути ще карти (скільки є) — а коли досить, натисни <b>«Готово»</b>.`; }
     return mine ? `<b>${esc(fighter().name)}</b> ось-ось переможе «${esc(monNames())}». Зіграй карту на монстра, підкинь мертвяка, приведи потвору чи перенаправ бій — або натисни <b>«Не втручаюсь»</b>. Без твого рішення бій не завершиться.` : `<b>${esc(fighter().name)}</b> ось-ось переможе. Чекаємо рішення: <b>${names}</b>.`;
   }
   switch (G.phase) {
@@ -248,7 +255,7 @@ function renderDock() {
   }
   if (privacy() && v !== cur()) { const c0 = cur(); if (!G.window && c0 && c0.type === 'human') $('#status').innerHTML += ` Потім сховай карти — хід за <b>${esc(c0.name)}</b>.`; const b = document.createElement('button'); b.type = 'button'; b.className = 'btn'; b.textContent = 'Сховати карти'; b.onclick = hideHand; box.appendChild(b); }
   $('#strText').innerHTML = `${esc(v.name)} · сила ${baseStr(v)}${(v.curses || []).length ? ` <span class="ccount" title="${esc(curseTitle(v))}">⛓ ${v.curses.length}</span>` : ''}`;
-  setHTML($('#equip'), dollHTML(v, false) + curseChips(v) + `<button class="btn small char-btn" type="button" data-sheet><span class="cb-l">Картка персонажа · </span><span class="cb-i" aria-hidden="true">👤 </span>сила ${baseStr(v)} · втеча ${sgn(fleeBonus(v))}</button>`);
+  setHTML($('#equip'), dollHTML(v, false) + curseChips(v) + blessChips(v) + `<button class="btn small char-btn" type="button" data-sheet><span class="cb-l">Картка персонажа · </span><span class="cb-i" aria-hidden="true">👤 </span>сила ${baseStr(v)} · втеча ${sgn(fleeBonus(v))}</button>`);
   { const lim = handLimit(v), n = v.hand.length; setHTML($('#handOwner'), `<span class="ho-n">${esc(v.name)} · </span><span class="hc${n > lim ? ' over' : ''}" title="Ліміт руки: ${lim}. Зайві карти доведеться віддати в кінці ходу.">${n} з ${lim}</span> <span class="ho-x">${plural(lim, 'карти', 'карт', 'карт')}${n > lim ? ' — забагато, зайві віддаси в кінці ходу' : ''}</span>`); }
   const nowT = performance.now(); G.fresh.forEach(u => { if (!freshT[u]) freshT[u] = nowT + 700; }); G.fresh.clear();
   setHTML($('#hand'), v.hand.map(c => cardHTML(c, (freshT[c.uid] > nowT ? 'fresh ' : '') + (cardActions(c, 'hand').some(a => !a.dis && !/^(Продати|Скинути|Віддати)/.test(a.label)) ? 'playable' : ''))).join('') || '<div class="empty">Рука порожня.</div>');
@@ -270,6 +277,7 @@ function combatBreakdown() {
     q.gear.forEach(g => { if (usable(q, g) && g.bonus) add(H, `${tag}${g.name}`, g.bonus); });
     if (hasCls(q, 'warrior')) add(H, `${tag}Воїн`, 1);
     if (curseStr(q)) add(H, `${tag}прокляття`, -curseStr(q));
+    add(H, `${tag}благословення`, blessN(q, 'str'));
     const a = typeAdj(q, ty); add(H, `${tag}вогонь проти дракона`, a.fireOff); add(H, `${tag}вогонь проти нежиті`, a.fireUndead); add(H, `${tag}драконобійна зброя`, a.slayer);
     if (hasCls(q, 'cleric') && ty.undead) add(H, `${tag}Жрець проти нежиті`, 3);
   };
@@ -293,6 +301,7 @@ function combatBreakdown() {
   add(M, 'прокляття «Магніт»', curseN(p, 'magnet') * 2);
   if (G.coop) { add(M, 'здібність Боса', cb.bossX || 0); add(M, 'Загроза', G.coop.threat >= Math.ceil(G.coop.max * 2 / 3) ? 4 : G.coop.threat >= Math.ceil(G.coop.max / 3) ? 2 : 0); }
   add(M, 'зваба Мавки', cb.charm ? -3 : 0);
+  add(M, 'благословення: монстри слабші', -blessN(p, 'tame'));
   if (hasCls(p, 'necro')) add(M, 'нежить знає Некроманта', -2 * cb.mons.filter(x => x.c.undead).length);
   // захист від розбіжностей: усе, що не потрапило в список, — окремим рядком
   const dh = s.hero - sum(H, x => x[1]), dm = s.mon - sum(M, x => x[1]);
@@ -331,6 +340,7 @@ function renderCombat() {
   if (epicFor(p)) mods.unshift(`<span class="tag m">Епічна зона: рівень монстрів ×2</span>`);
   // нові раси й класи
   if (cb.charm) mods.push('<span class="tag h">🌿 Зваба: монстр −3</span>');
+  if (blessN(p, 'tame')) mods.push(`<span class="tag h">✨ Благословення: монстри −${blessN(p, 'tame')}</span>`);
   if (cb.wolf != null) mods.push(`<span class="tag h">🐺 ${esc((G.players[cb.wolf] || {}).name || '')} у вовчій подобі +3 · втеча −2</span>`);
   if (cb.necroB) mods.push(`<span class="tag h">🦴 Слуги-нежить +${cb.necroB}</span>`);
   { const kb = cb.boss ? G.players.filter(q => hasCls(q, 'kobzar')).length : h && (hasCls(p, 'kobzar') || hasCls(h, 'kobzar')) ? 1 : 0; if (kb) mods.push(`<span class="tag h">🎻 Натхнення +${kb * 2}</span>`); }
@@ -350,7 +360,7 @@ function renderCombat() {
   const pct = Math.round(s.hero / (s.hero + s.mon) * 100);
   const bad = cb.mons.length > 1 ? `${cb.mons.length} монстри — тікати доведеться від кожного окремо` : cb.mons[0].c.bad.text;
   const heroPics = cb.boss ? '' : [p, h].filter(Boolean).map(q => `<span class="cpt" style="--pc:${q.color}">${portraitHTML(q)}</span>`).join('');
-  const monPics = cb.mons.slice(0, 3).map(x => `<span class="cmt${x.c.ab ? ' sp' : ''}">${artIcon(x.c, 'cmi')}</span>`).join('');
+  const monPics = cb.mons.slice(0, 1).map(x => `<span class="cmt${x.c.ab ? ' sp' : ''}${x.c.tyrant ? ' ty' : ''}">${artIcon(x.c, 'cmi')}${cb.mons.length > 1 ? `<em class="cmore">+${cb.mons.length - 1}</em>` : ''}</span>`).join('');
   el.innerHTML = `<div class="cside hero"><div class="cl">${cb.boss ? 'Увесь загін' : esc(p.name) + (h ? ' + ' + esc(h.name) : '')}</div><div class="cnum">${heroPics}<div class="big" data-n="${s.hero}">${s.hero}</div></div></div>
     <div class="vs">${s.win ? 'перемагає' : 'програє'}<b>${ICO.sword}</b><button class="cwhy" type="button" id="cbWhy" title="Звідки ці числа?">Чому так?</button></div>
     <div class="cside mon"><div class="cl">${esc(monNames())}</div><div class="cnum"><div class="big" data-n="${s.mon}">${s.mon}</div>${monPics}</div></div>

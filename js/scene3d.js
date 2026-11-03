@@ -161,10 +161,21 @@ function applySkin(id) {
   scene.traverse(o => { if (o.isMesh && Array.isArray(o.material)) o.material.forEach(m => { if (m.emissiveMap) m.emissiveIntensity = m.userData.back ? S.glow * .6 : S.glow; }); });
   buildExtras(S.extra);
 }
+/* тло панелей інтерфейсу: кілька порід дерева (лише CSS, на швидкість не впливає) */
+const PANELS = { oak: 'Дуб', walnut: 'Горіх', cherry: 'Вишня', ash: 'Ясен', ebony: 'Чорне дерево', plain: 'Без текстури' };
+let PANEL_ID = (() => { try { const p = localStorage.getItem('pdsv-panel'); return PANELS[p] ? p : 'oak'; } catch (e) { return 'oak'; } })();
+function applyPanel(id) {
+  if (!PANELS[id]) return; PANEL_ID = id;
+  document.documentElement.dataset.panel = id;
+  try { localStorage.setItem('pdsv-panel', id); } catch (e) { }
+}
+applyPanel(PANEL_ID);
 function openSkins(back) {
   const hex = n => '#' + n.toString(16).padStart(6, '0');
   showModal(`<h2>Стіл і графіка</h2><p>Вибір зберігається лише на цьому пристрої й не впливає на інших гравців.</p>
     <div class="skins">${Object.entries(SKINS).map(([id, S]) => `<button type="button" class="skin" data-skin="${id}" aria-pressed="${id === SKIN_ID}"><span class="sw" style="background:radial-gradient(circle at 50% 45%, ${S.felt[0]} 0 50%, ${S.felt[1]} 51% 60%, ${hex(S.ring)} 61% 66%, ${S.wood[0]} 67%)"></span><b>${S.name}</b><small>${S.desc}</small></button>`).join('')}</div>
+    <h3>Тло панелей</h3>
+    <div class="pskins">${Object.entries(PANELS).map(([id, n]) => `<button type="button" class="pskin" data-pn="${id}" aria-pressed="${id === PANEL_ID}"><span class="psw" data-panel="${id}"></span>${n}</button>`).join('')}</div>
     <h3>Якість графіки</h3>
     <div class="seg" role="group" aria-label="Якість графіки">${Object.entries(QUALITY).map(([id, q]) => `<button type="button" data-q="${id}" aria-pressed="${id === QUAL}">${q.name}</button>`).join('')}</div>
     <p class="hint" id="qDesc" style="margin-top:8px">${QUALITY[QUAL].desc}</p>
@@ -179,6 +190,7 @@ function openSkins(back) {
   $('#tpReset').onclick = () => { tipsReset(); $('#sheet').querySelectorAll('[data-tp]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.tp === 'on'))); toast('Підказки покажуться знову', 1800); };
   $('#sheet').querySelectorAll('[data-mo]').forEach(b => b.onclick = () => { setLessMotion(b.dataset.mo === 'less'); $('#sheet').querySelectorAll('[data-mo]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
   $('#sheet').querySelectorAll('[data-q]').forEach(b => b.onclick = () => { applyQuality(b.dataset.q); $('#sheet').querySelectorAll('[data-q]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); $('#qDesc').textContent = QUALITY[QUAL].desc; });
+  $('#sheet').querySelectorAll('[data-pn]').forEach(b => b.onclick = () => { applyPanel(b.dataset.pn); $('#sheet').querySelectorAll('[data-pn]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
   $('#sheet').querySelectorAll('[data-skin]').forEach(b => b.onclick = () => { applySkin(b.dataset.skin); $('#sheet').querySelectorAll('[data-skin]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
   $('#skDone').onclick = () => { closeModal(); if (back) back(); };
 }

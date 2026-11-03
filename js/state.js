@@ -27,8 +27,10 @@ const nameTag = p => `<b style="color:${p.color}">${esc(p.name)}</b>`;
 
 function usable(p, c) { if (!c.req) return true; if (c.req.sex) return p.sex === c.req.sex; if (c.req.race) return hasRace(p, c.req.race); if (c.req.cls) return hasCls(p, c.req.cls); return true; }
 const gearBonus = p => sum(p.gear, c => usable(p, c) ? c.bonus : 0);
-const baseStr = p => Math.max(0, p.level + gearBonus(p) + (hasCls(p, 'warrior') ? 1 : 0) - curseStr(p));
-const fleeBonus = p => (hasRace(p, 'elf') ? 1 : 0) + (hasRace(p, 'rusalka') ? 2 : 0) + sum(p.gear, c => usable(p, c) ? (c.flee || 0) : 0) - curseN(p, 'lead') - curseN(p, 'sneeze');
+// благословення від переможених босів: { k, n, name, icon, text }
+const blessN = (p, k) => sum((p && p.bless) || [], b => b.k === k ? b.n : 0);
+const baseStr = p => Math.max(0, p.level + gearBonus(p) + (hasCls(p, 'warrior') ? 1 : 0) + blessN(p, 'str') - curseStr(p));
+const fleeBonus = p => (hasRace(p, 'elf') ? 1 : 0) + (hasRace(p, 'rusalka') ? 2 : 0) + blessN(p, 'flee') + sum(p.gear, c => usable(p, c) ? (c.flee || 0) : 0) - curseN(p, 'lead') - curseN(p, 'sneeze');
 const EPIC_AT = 10;
 const epicFor = p => G.goal > 10 && p.level >= EPIC_AT;
 const monLvl = (m, p) => m.lvl * (epicFor(p) ? 2 : 1);
@@ -70,7 +72,7 @@ function forgetTick(p) {
   const k = Math.pow(.5, 1 / half);
   for (const i in p.mem) { p.mem[i] *= k; if (Math.abs(p.mem[i]) < .05) delete p.mem[i]; }
 }
-const handLimit = p => Math.max(1, (hasRace(p, 'dwarf') ? 6 : 5) - curseN(p, 'pocket'));
+const handLimit = p => Math.max(1, (hasRace(p, 'dwarf') ? 6 : 5) + blessN(p, 'hand') - curseN(p, 'pocket'));
 
 function draw(deck) {
   const k = deck === 'door' ? 'doorDeck' : 'treasureDeck', dk = deck === 'door' ? 'doorDiscard' : 'treasureDiscard';
@@ -82,7 +84,7 @@ function draw(deck) {
   }
   const c = G[k].pop(); syncDeck(deck); return c;
 }
-function discard(c) { (c.deck === 'door' ? G.doorDiscard : G.treasureDiscard).push(c); syncDiscardTop(c.deck); }
+function discard(c) { if (c.ephemeral) return; /* прокляття боса — не карта колоди */ (c.deck === 'door' ? G.doorDiscard : G.treasureDiscard).push(c); syncDiscardTop(c.deck); }
 function removeFromHand(p, c) { const i = p.hand.indexOf(c); if (i >= 0) p.hand.splice(i, 1); }
 function giveCard(p, c) { if (G.coop && (c.kind === 'key' || c.kind === 'alarm') && NET.role !== 'client') { coopSpecial(p, c); return; } p.hand.push(c); if (p.idx === G.viewer) G.fresh.add(c.uid); }
 
@@ -145,6 +147,7 @@ function heroPerks(cb, p, h, allies) {
 function monPerks(cb, p) {
   let m = 0;
   if (cb.charm) m += 3; // Мавка
+  m += blessN(p, 'tame'); // благословення «монстри слабші»
   if (hasCls(p, 'necro')) m += 2 * cb.mons.filter(x => x.c.undead).length;
   return m;
 }

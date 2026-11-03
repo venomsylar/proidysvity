@@ -76,7 +76,14 @@ async function runAct(pi, act) {
     try { await execAct(p, act); } finally { p._acting = false; renderUI(); }
     return;
   }
-  if (G.window && G.window.humans.includes(p)) { const w = G.window; G.window = null; closeModal(); renderUI(); await execAct(p, act); w.resolve('played'); return; }
+  // вікно втручання не закривається після першої карти: гравці докидають скільки завгодно, а тоді тиснуть «Готово»
+  if (G.window && G.window.humans.includes(p)) {
+    const w = G.window; w.played = true; (w.playedBy = w.playedBy || new Set()).add(p.idx); closeModal(); p._acting = true; renderUI();
+    try { await execAct(p, act); } finally { p._acting = false; }
+    if (G.window === w && G.combat) G.combat.passed.clear(); // хтось зіграв — решта може відповісти
+    if (G.window === w && !G.combat) { G.window = null; w.resolve('played'); }
+    renderUI(); return;
+  }
   if (G.busy) return;
   G.busy = true; renderUI();
   try { await execAct(p, act); } finally { if (G.phase !== 'next') G.busy = false; renderUI(); }
@@ -207,10 +214,11 @@ function dockActs(v) {
   if (!v || !p || G.over) return acts;
   if (G.window) {
     const wait = waitingOn();
-    if (NET.role === 'client') { if (wait.includes(v)) acts.push({ label: 'Не втручаюсь', act: { k: 'pass' }, cls: 'primary' }); return acts; }
+    const doneLbl = h => G.window.playedBy && G.window.playedBy.has(h.idx) ? 'Готово' : 'Не втручаюсь';
+    if (NET.role === 'client') { if (wait.includes(v)) acts.push({ label: doneLbl(v), act: { k: 'pass' }, cls: 'primary' }); return acts; }
     const locals = wait.filter(h => h.type === 'human');
     const many = locals.length > 1 || (locals.length === 1 && locals[0] !== v);
-    locals.forEach(h => acts.push({ label: many ? `${h.name}: не втручаюсь` : 'Не втручаюсь', act: { k: 'pass' }, as: h.idx, cls: 'primary' }));
+    locals.forEach(h => acts.push({ label: many ? `${h.name}: ${doneLbl(h).toLowerCase()}` : doneLbl(h), act: { k: 'pass' }, as: h.idx, cls: 'primary' }));
     if (privacy() && locals.length) acts.push({ label: 'Втрутитися…', fn: openInterfere });
     return acts;
   }
@@ -440,9 +448,9 @@ function storeSetup(s = setupState) {
   try { localStorage.setItem(SETUP_KEY, JSON.stringify({ rows: s.rows.filter(r => r.type !== 'remote').map(r => ({ name: r.name, type: r.type, sex: r.sex, diff: r.diff || 2, trait: r.trait || '', team: r.team | 0 })), teams: !!s.teams, mode: s.mode, coopDiff: s.coopDiff, goal: s.goal, speed: s.speed, anim: s.anim })); } catch (e) { }
 }
 loadSetup(setupState);
-function loadMonTypes() { try { const t = JSON.parse(localStorage.getItem('pdsv-montypes') || 'null'); if (t) return { undead: t.undead !== false, dragon: t.dragon !== false }; } catch (e) { } return { undead: true, dragon: true }; }
+function loadMonTypes() { try { const t = JSON.parse(localStorage.getItem('pdsv-montypes') || 'null'); if (t) return { undead: t.undead !== false, dragon: t.dragon !== false, boss: t.boss !== false }; } catch (e) { } return { undead: true, dragon: true, boss: true }; }
 function saveMonTypes(t) { try { localStorage.setItem('pdsv-montypes', JSON.stringify(t)); } catch (e) { } }
-const monTypesText = t => ['звичайні', t.undead && 'нежить', t.dragon && 'дракони'].filter(Boolean).join(', ');
+const monTypesText = t => ['звичайні', t.undead && 'нежить', t.dragon && 'дракони', t.boss !== false && 'боси'].filter(Boolean).join(', ');
 // командна гра: чи є щонайменше дві непорожні команди
 function setupTeamsValid(s = setupState) { return new Set(s.rows.map(r => r.team | 0)).size >= 2; }
 function setupTeamsText(s = setupState) {
@@ -500,8 +508,9 @@ function openSetup() {
       <label class="chk"><input type="checkbox" checked disabled> Звичайні</label>
       <label class="chk"><input type="checkbox" data-mt="undead" ${s.types.undead ? 'checked' : ''}> 💀 Нежить</label>
       <label class="chk"><input type="checkbox" data-mt="dragon" ${s.types.dragon ? 'checked' : ''}> 🐉 Дракони</label>
+      <label class="chk"><input type="checkbox" data-mt="boss" ${s.types.boss !== false ? 'checked' : ''}> 👑 Боси</label>
     </div>
-    <p class="hint" style="margin-top:8px">${s.types.undead || s.types.dragon ? `Граємо з такими монстрами: ${monTypesText(s.types)}.${s.types.dragon ? ' Дракони не бояться вогняних речей, зате є драконобійна зброя.' : ''}${s.types.undead ? ' Вогонь палить нежить: вогняні речі дають проти неї +2.' : ''}` : 'Лише звичайні монстри — без нежиті й драконів.'}</p>
+    <p class="hint" style="margin-top:8px">${s.types.undead || s.types.dragon || s.types.boss !== false ? `Граємо з такими монстрами: ${monTypesText(s.types)}.${s.types.dragon ? ' Дракони не бояться вогняних речей, зате є драконобійна зброя.' : ''}${s.types.undead ? ' Вогонь палить нежить: вогняні речі дають проти неї +2.' : ''}${s.types.boss !== false ? ' Боси (14–20 рівня): програв — тривале прокляття, переміг — благословення до кінця гри.' : ''}` : 'Лише звичайні монстри — без нежиті й драконів.'}</p>
     <h3>Темп ботів</h3>
     <div class="seg" role="group" aria-label="Темп ботів">${[[1.4, 'Спокійний'], [1, 'Звичайний'], [.45, 'Швидкий']].map(([v, l]) => `<button type="button" data-sp="${v}" aria-pressed="${s.speed === v}">${l}</button>`).join('')}</div>
     <h3>Вигляд столу</h3>

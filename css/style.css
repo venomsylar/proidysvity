@@ -837,3 +837,39 @@ html.less-motion .card.treasure::after{display:none}
 }
 /* телефон стоячи: у смужці гравців місця мало — портрет ховаємо, щоб читалося імʼя */
 @media (max-width:760px){ .brow .bport{display:none} .brow{grid-template-columns:auto minmax(0,1fr)} }
+
+/* панель бою: багато учасників — не вилазить */
+.cside{min-width:0}
+.cnum{min-width:0}
+.cpt + .cpt{margin-left:-12px}
+.cpt{box-shadow:0 2px 6px rgba(0,0,0,.45)}
+.cmt{position:relative}
+.cmt.ty{border-color:#a8741a;box-shadow:0 0 0 2px #ffd36b,0 0 14px rgba(255,211,107,.55)}
+.cmore{position:absolute;right:-8px;top:-8px;min-width:20px;height:20px;padding:0 4px;border-radius:10px;background:#8a2242;color:#fff;font:700 11px/20px var(--f-ui);font-style:normal;text-align:center;box-shadow:0 0 0 2px #000}
+.cside .cl{max-width:100%}
+/* табло: золото й карти завжди видно, назва раси/класу скорочується */
+.bmeta{display:flex;gap:6px;align-items:baseline;min-width:0}
+.bm-rc{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bm-n{flex:0 0 auto;display:flex;gap:6px;white-space:nowrap;color:var(--text)}
+/* благословення */
+.bchip{border-color:#5aa77a;background:rgba(60,140,90,.28);color:#d8ffe6}
+.bchip:hover{background:rgba(60,140,90,.45)}
+.kv.on-bless b{color:var(--good);font-weight:500;text-align:right;max-width:62%}
+
+/* типи тла панелей (налаштовуються в «Стіл і графіка») */
+[data-panel="oak"]{--grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cfilter id='g' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.006 .18' numOctaves='3' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .62 0 0 0 0 .42 0 0 0 0 .24 0 0 0 0.22 0'/%3E%3C/filter%3E%3Crect width='320' height='320' filter='url(%23g)'/%3E%3C/svg%3E");--panel-base:rgba(30,20,15,.92);--rivet:rgba(224,169,59,.6)}
+[data-panel="walnut"]{--grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cfilter id='g' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.005 .24' numOctaves='3' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .55 0 0 0 0 .28 0 0 0 0 .15 0 0 0 0.28 0'/%3E%3C/filter%3E%3Crect width='320' height='320' filter='url(%23g)'/%3E%3C/svg%3E");--panel-base:rgba(34,19,13,.93);--rivet:rgba(224,169,59,.6)}
+[data-panel="cherry"]{--grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cfilter id='g' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.007 .2' numOctaves='3' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .78 0 0 0 0 .33 0 0 0 0 .25 0 0 0 0.22 0'/%3E%3C/filter%3E%3Crect width='320' height='320' filter='url(%23g)'/%3E%3C/svg%3E");--panel-base:rgba(46,18,16,.92);--rivet:rgba(240,190,120,.6)}
+[data-panel="ash"]{--grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cfilter id='g' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.009 .14' numOctaves='3' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .66 0 0 0 0 .63 0 0 0 0 .58 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='320' height='320' filter='url(%23g)'/%3E%3C/svg%3E");--panel-base:rgba(33,31,29,.92);--rivet:rgba(210,200,180,.55)}
+[data-panel="ebony"]{--grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cfilter id='g' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.004 .3' numOctaves='3' seed='9' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .42 0 0 0 0 .34 0 0 0 0 .28 0 0 0 0.22 0'/%3E%3C/filter%3E%3Crect width='320' height='320' filter='url(%23g)'/%3E%3C/svg%3E");--panel-base:rgba(13,11,10,.95);--rivet:rgba(200,205,215,.55)}
+[data-panel="plain"]{--grain:none;--panel-base:rgba(24,17,14,.9);--rivet:rgba(224,169,59,.45)}
+.board,.combat,.dock,.log,.sheet,.chat,.tip{background-color:var(--panel-base,rgba(30,20,15,.92))}
+.pskins{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:10px}
+.pskin{display:flex;flex-direction:column;gap:6px;align-items:stretch;padding:6px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.03);cursor:pointer;font-size:13px;text-align:center}
+.pskin[aria-pressed="true"]{border-color:var(--brass);box-shadow:0 0 0 2px var(--brass)}
+.pskin .psw{height:46px;border-radius:8px;border:1px solid rgba(224,169,59,.42);background-color:var(--panel-base);background-image:radial-gradient(circle at 7px 7px,var(--rivet) 0 1.5px,transparent 2px),radial-gradient(circle at calc(100% - 7px) 7px,var(--rivet) 0 1.5px,transparent 2px),linear-gradient(180deg,rgba(255,214,150,.06),rgba(0,0,0,.18)),var(--grain);background-size:100% 100%,100% 100%,100% 100%,320px 320px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.55)}
+/* стать — маленьким значком на портреті (у рядку табло лишається місце для раси, карт і золота) */
+.bport .psx,.cpt .psx{position:absolute;left:-5px;top:-5px;width:15px;height:15px;border-radius:50%;display:grid;place-items:center;font:700 10px/1 var(--f-ui);color:#fff;box-shadow:0 0 0 1.5px #2b1d14}
+.psx.m{background:#4c8fe6}.psx.f{background:#d65a9a}
+.brow .bm-sx{display:none}
+@media (max-width:760px){ .brow .bm-sx{display:inline} }
