@@ -754,7 +754,7 @@ function floatLevel(p, d) {
 async function rollDie(q, forced = 0, info = null) {
   const v = forced || 1 + rnd(6);
   if (info === true) info = null;
-  playSfx('dice');
+  playSfx('dice'); clearTimeout(T.dieHideT); const tok = T.dieTok = (T.dieTok || 0) + 1; T.die.scale.setScalar(1);
   emitFx('die', { who: q.idx, v, info: info ? { need: info.need || 0, bonus: info.bonus || 0, what: info.what || '' } : null });
 
   const FACE = { 1: [0, 0, 0], 6: [Math.PI, 0, 0], 3: [0, 0, Math.PI / 2], 4: [0, 0, -Math.PI / 2], 2: [-Math.PI / 2, 0, 0], 5: [Math.PI / 2, 0, 0] }[v];
@@ -770,6 +770,8 @@ async function rollDie(q, forced = 0, info = null) {
   T.die.position.set(to.x, to.y, to.z); T.die.quaternion.copy(qFinal);
   ringFx(T.die.position, !info || !info.need ? 0xffd36b : v + (info.bonus || 0) >= info.need ? 0x7fd081 : 0xff4a3a, 700, true);
   await wait(450);
+  // кубик не лишається на столі: за кілька секунд тихо зникає
+  T.dieHideT = setTimeout(async () => { if (tok !== T.dieTok) return; await animate(260, (e) => { if (tok === T.dieTok) T.die.scale.setScalar(Math.max(.001, 1 - e)); }); if (tok !== T.dieTok) return; T.die.visible = false; T.die.scale.setScalar(1); T.shadowDirty = true; }, 1600);
   return v;
 }
 function confetti(color) {

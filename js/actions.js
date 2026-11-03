@@ -53,10 +53,19 @@ function openHeal() {
 function openSteal() {
   const v = viewerP(); if (!canSteal(v)) return;
   const rows = G.players.filter(q => q !== v && !sameTeam(v, q)).map(q => ({ q, items: q.gear.filter(c => stealable(q, c)) })).filter(r => r.items.length);
-  showModal(`<h2>Поцупити річ</h2><p>Раз за хід Злодюжка може спробувати поцупити невелику річ (не броню й не велику). Кидок кубика 4+ — річ твоя, інакше тебе ловлять: −1 рівень.</p>
-    ${rows.map(r => `<h3 style="color:${r.q.color}">${esc(r.q.name)}</h3><div class="ochips">${r.items.map(c => `<button type="button" class="ochip" data-st="${r.q.idx}:${c.uid}">${artIcon(c)} ${esc(c.name)}${c.bonus ? ' +' + c.bonus : ''} · ${c.value} зол.</button>`).join('')}</div>`).join('')}
-    <div class="row end"><button class="btn ghost" type="button" data-close>Передумав</button></div>`);
-  $('#sheet').querySelectorAll('[data-st]').forEach(b => b.onclick = () => { const [t, u] = b.dataset.st.split(':').map(Number); closeModal(); dispatch({ k: 'steal', target: t, item: u }); });
+  let pick = null; // { t, u }
+  const draw = () => `<h2>Поцупити річ</h2><p>Раз за хід Злодюжка може спробувати поцупити невелику річ (не броню й не велику). Кидок кубика 4+ — річ твоя, інакше тебе ловлять: −1 рівень.</p>
+    ${rows.map(r => `<h3 style="color:${r.q.color}">${esc(r.q.name)}</h3>${cardRow(r.items, { sel: new Set(pick && pick.t === r.q.idx ? [pick.u] : []), key: 'st', tag: c => { const d = gearScore(v, gearAfter(v, c)) - gearScore(v, v.gear); return d > 0 ? `тобі +${Math.round(d)}` : 'тобі не краще'; } })}`).join('')}
+    <div class="row end"><button class="btn ghost" type="button" data-close>Передумав</button><button class="btn primary" type="button" id="stGo" ${pick ? '' : 'disabled'}>${pick ? 'Поцупити (кубик 4+)' : 'Обери річ'}</button></div>`;
+  const close = () => { $('#sheet').onclick = null; closeModal(); };
+  showModal(draw(), 'wide'); $('#sheet').querySelectorAll('[data-close]').forEach(x => x.onclick = close);
+  $('#sheet').onclick = e => {
+    const el = e.target.closest('[data-st], #stGo'); if (!el) return;
+    if (el.id === 'stGo') { if (!pick) return; $('#sheet').onclick = null; closeModal(); dispatch({ k: 'steal', target: pick.t, item: pick.u }); return; }
+    const u = +el.dataset.st, r = rows.find(r => r.items.some(c => c.uid === u)); if (!r) return;
+    pick = pick && pick.u === u ? null : { t: r.q.idx, u };
+    $('#sheet').innerHTML = draw(); $('#sheet').querySelectorAll('[data-close]').forEach(x => x.onclick = close);
+  };
 }
 const SIDE_ACTS = new Set(['equip', 'unequip', 'rc', 'dual', 'rc2hand', 'droprc', 'gift', 'equipBest']);
 function dispatch(act, asIdx = G.viewer) {
@@ -301,7 +310,7 @@ function dockActs(v) {
     acts.push({ label: s.win ? 'Битися!' : `Битися! · бракує ${s.mon - s.hero + (s.tie ? 0 : 1)}`, act: { k: 'fight' }, cls: 'primary pulse', dis: !s.win });
     acts.push({ label: 'Покликати на поміч', fn: openHelp, dis: eventNoHelp() ? 'Туман: на поміч кликати не можна, поки триває подія.' : abOf(cb, 'nohelp') ? 'Цей монстр не терпить натовпу: кликати на поміч не можна.' : curseN(fp, 'lonely') ? 'Прокляття «Ніхто не любить»: допомагати тобі ніхто не може.' : cb.helper != null || G.players.every(q => q === fp || cb.asked.has(q.idx)) });
     { const ch = fleeChance(fp), n = cb.mons.length, all = Math.pow(ch, n); acts.push({ label: `Тікати · ${Math.round(all * 100)}%${n > 1 ? ` (${n} кидки)` : ''}`, act: { k: 'flee' }, cls: 'danger', title: n > 1 ? `Від кожного монстра окремо: ${Math.round(ch * 100)}%` : '' }); }
-    if (PERK.charm(v)) acts.push({ label: '🌿 Зваба: −3 монстру', act: { k: 'charm' } });
+    if (PERK.charm(v)) acts.push({ label: '🌿 Зваба: −1…−3 монстру', act: { k: 'charm' }, title: 'Кидаєш кубик: 1–2 → −1, 3–4 → −2, 5–6 → −3 монстру. Раз за бій.' });
     else if (fp === v && hasRace(v, 'mavka') && !cb.charm && !cb.boss && charmProof(cb)) acts.push({ label: '🌿 Зваба', act: { k: 'charm' }, dis: `${charmProof(cb).c.name} на звабу Мавки не піддається.` });
     if (PERK.wolf(v)) acts.push({ label: '🐺 Обернутися: +3', act: { k: 'wolf' } });
     if (PERK.vanish(v) && !s.win) acts.push({ label: '🌀 Зникнути (раз за гру)', act: { k: 'vanish' } });

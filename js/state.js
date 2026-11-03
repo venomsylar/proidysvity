@@ -171,7 +171,7 @@ function heroPerks(cb, p, h, allies) {
 const charmProof = cb => !!cb && cb.mons.find(x => x.c.vs && x.c.vs.mavka);
 function monPerks(cb, p) {
   let m = 0;
-  if (cb.charm && !charmProof(cb)) m += 3; // Мавка (на ворогів мавок зваба не діє)
+  if (cb.charm > 0 && !charmProof(cb)) m += cb.charm; // Мавка (на ворогів мавок зваба не діє)
   m += blessN(p, 'tame'); // благословення «монстри слабші»
   if (hasCls(p, 'necro')) m += 2 * cb.mons.filter(x => x.c.undead).length;
   return m;

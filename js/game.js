@@ -1075,7 +1075,11 @@ async function burnCards(p, cards) {
   for (const c of cards) { removeFromHand(p, c); const m = cardMesh(c); scene.add(m); await fly(m, fromHandOf(p), discardPose(c.deck), 450, 1.2, { owner: p.idx }); disposeMesh(m); discard(c); }
 }
 async function perkCharm(p) {
-  G.combat.charm = true; log(`${nameTag(p)} (Мавка) зачаровує монстра: −3 йому.`); say(`${p.name} зачаровує монстра!`, 1800);
+  G.combat.charm = -1; renderUI(); // уже використано, поки котиться кубик
+  const r = await rollDie(p, 0, { what: 'зваба: 1–2 → −1, 3–4 → −2, 5–6 → −3', res: v => `монстр <b>−${Math.ceil(v / 2)}</b>` });
+  if (!G.combat) return;
+  const n = Math.ceil(r / 2); G.combat.charm = n;
+  log(`${nameTag(p)} (Мавка) зачаровує монстра: −${n} йому (кубик ${r}).`); say(`${p.name} зачаровує монстра: −${n}!`, 1800);
   sfx('help'); burst(monCenter(), ['#9fe08a', '#e8ffd8', '#ffffff'], 70, 2.2, 1.1); renderUI();
 }
 async function perkWolf(p) {

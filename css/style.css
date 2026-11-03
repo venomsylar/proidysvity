@@ -943,3 +943,12 @@ html[data-ui="l"] #ui,html[data-ui="l"] .modal:not(.screen) .sheet,html[data-ui=
 .cpt + .cpt{margin-left:4px}
 .cpt .pc,.cpt .pr2,.bport .pc,.bport .pr2{font-size:10px;line-height:1;overflow:hidden}
 .menu-acts .btn{white-space:normal;text-wrap:balance;line-height:1.3;min-height:40px;height:auto;overflow-wrap:anywhere}
+/* благословення й прокляття в картці: довгий опис переноситься, не вилазить за край */
+.kv.on-bless,.kv.off-curse{align-items:flex-start}
+.kv.on-bless>span,.kv.off-curse>span{flex:1 1 40%;min-width:0}
+.kv.on-bless>b,.kv.off-curse>b{flex:1 1 60%;min-width:0;max-width:60%;white-space:normal;text-align:right;line-height:1.35;overflow-wrap:anywhere}
+.kv.on-bless>span img,.kv.off-curse>span img{width:18px;height:18px;vertical-align:-3px}
+/* картка персонажа: ліва колонка не ширша за ляльку, щоб багато дрібниць не стискали праву */
+.cs-grid{grid-template-columns:fit-content(340px) minmax(240px,1fr)}
+.cs-grid .misc-list{max-width:340px}
+@media (max-width:760px){ .cs-grid{grid-template-columns:minmax(0,1fr)} .cs-grid .misc-list{max-width:none} }
