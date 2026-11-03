@@ -533,6 +533,7 @@ async function botDrive() {
           continue;
         }
       }
+      if (PERK.spell(p) && (abOf(cb, 'noflee') || fleeChance(p) < .5 || ['death', 'gear', 'race', 'class'].includes(cb.mons[0].c.bad.t)) && sum(p.hand, c => keepScore(p, c)) / p.hand.length < 330) { await botDelay(400); await perkSpell(p); return; }
       const rd = p.hand.find(c => c.kind === 'redirect');
       if (rd) { const t = pickRedirectTarget(p); if (t) { await botDelay(400); await redirectCombat(p, rd, t); continue; } }
       if (PERK.vanish(p) && (abOf(cb, 'noflee') || cb.mons.some(x => ['death', 'gear', 'race', 'class'].includes(x.c.bad.t) || (x.c.bad.t === 'level' && x.c.bad.n >= 2)))) { await botDelay(300); await perkVanish(p); return; }
@@ -1067,6 +1068,8 @@ const PERK = {
   sniff: p => sniffReady(p) && G.doorDeck.length > 1,
   forge: p => !G.combat && cur() === p && ['start', 'afterKick', 'charity'].includes(G.phase) && hasCls(p, 'koval') && p.forgeTurn !== G.turnNo && p.hand.length >= 2 && p.gear.some(g => (g.forged || 0) < 3),
   heal: p => !G.combat && cur() === p && ['start', 'afterKick', 'charity'].includes(G.phase) && hasCls(p, 'znakhar') && p.healTurn !== G.turnNo && p.hand.length >= 2 && G.players.some(q => (q.curses || []).length),
+  spell: p => !!G.combat && G.phase === 'combat' && fighter() === p && hasCls(p, 'wizard') && !G.combat.boss && G.combat.helper == null && G.combat.mons.length === 1 && !G.combat.mons[0].c.tyrant && p.hand.length >= 3,
+  res: p => !G.combat && cur() === p && ['start', 'afterKick', 'charity'].includes(G.phase) && hasCls(p, 'cleric') && p.resTurn !== G.turnNo && p.hand.length >= 1 && G.treasureDiscard.length > 0,
   raise: (p, c) => !!G.combat && G.phase === 'combat' && fighter() === p && hasCls(p, 'necro') && !!c && c.kind === 'monster' && c.undead && (G.combat.necroN || 0) < 2
 };
 // дві найменш потрібні карти з руки (на гарт чи зілля)
@@ -1081,6 +1084,33 @@ async function perkCharm(p) {
   const n = Math.ceil(r / 2); G.combat.charm = n;
   log(`${nameTag(p)} (Мавка) зачаровує монстра: −${n} йому (кубик ${r}).`); say(`${p.name} зачаровує монстра: −${n}!`, 1800);
   sfx('help'); burst(monCenter(), ['#9fe08a', '#e8ffd8', '#ffffff'], 70, 2.2, 1.1); renderUI();
+}
+// Чари Мага: уся рука в скид — монстр іде геть, скарби Магові, рівня немає
+async function perkSpell(p) {
+  const cb = G.combat, mon = cb.mons[0], tr = Math.max(0, treasureCount() - curseN(p, 'sack'));
+  const n = p.hand.length;
+  log(`${nameTag(p)} (Маг) читає чари, скинувши всю руку (${n} ${plural(n, 'карту', 'карти', 'карт')}): «${esc(mon.c.name)}» іде геть і лишає скарби.`);
+  say(`${p.name} зачаровує «${mon.c.name}»!`, 2000); sfx('help');
+  await burnCards(p, [...p.hand]);
+  if (mon.m) burst(monCenter(), ['#b48cff', '#e6d6ff', '#ffffff'], 80, 2.4, 1.2);
+  const lootFrom = mon.m ? { ...poseOf(mon.m), s: .3 } : null;
+  if (tr) log(`Здобич: ${tr} ${plural(tr, 'скарб', 'скарби', 'скарбів')}, без рівня.`);
+  for (let i = 0; i < tr; i++) await drawTo(p, 'treasure', lootFrom);
+  hlAdd('flees', p);
+  await clearCombat(); G.phase = 'charity'; renderUI();
+}
+// Воскресіння Жерця: карта з руки в скид — верхня карта скиду скарбів у руку
+async function perkResurrect(p, c) {
+  const top = G.treasureDiscard[G.treasureDiscard.length - 1]; if (!top || !c) return;
+  p.resTurn = G.turnNo;
+  removeFromHand(p, c); const m1 = cardMesh(c); scene.add(m1);
+  await fly(m1, fromHandOf(p), discardPose(c.deck), 450, 1.2, { owner: p.idx }); disposeMesh(m1);
+  G.treasureDiscard.pop(); syncDiscardTop('treasure'); discard(c);
+  const m2 = cardMesh(top); scene.add(m2);
+  await fly(m2, discardPose('treasure'), toHandOf(p), 600, 1.4, { owner: p.idx }); disposeMesh(m2);
+  giveCard(p, top); sfx('help');
+  log(`${nameTag(p)} (Жрець) скидає «${esc(c.name)}» і воскрешає зі скиду «${esc(top.name)}».`);
+  renderUI();
 }
 async function perkWolf(p) {
   G.combat.wolf = p.idx; log(`${nameTag(p)} (Перевертень) обертається на вовка: +3 у бою. Тікати тепер важче: −2 до втечі.`); say(`${p.name} обертається на вовка!`, 1800);
@@ -1187,6 +1217,8 @@ async function botManage(p, setupOnly = false) {
     if (g) { await botDelay(350); await perkForge(p, g); }
   }
   for (const c of p.hand.filter(x => x.kind === 'levelup')) if (levelsToWin(p) > 1) { await botDelay(250); await doLevelUp(p, c); }
+  if (PERK.res(p)) { const top = G.treasureDiscard[G.treasureDiscard.length - 1], low = p.hand.slice().sort((a, b) => keepScore(p, a) - keepScore(p, b))[0];
+    if (top && low && keepScore(p, top) > keepScore(p, low) + 120) { await botDelay(350); await perkResurrect(p, low); } }
   { const mc = p.hand.find(x => x.kind === 'merchant'); if (mc && cur() === p && !G.combat && ['start', 'afterKick', 'charity'].includes(G.phase)) { await botDelay(300); await playMerchant(p, mc); if (G.over) return; } }
   if (cur() === p && G.phase !== 'combat' && levelsToWin(p) > 1) {
     const spare = p.hand.filter(c => c.kind === 'gear' && (canEquip(p, c) || gearScore(p, gearAfter(p, c)) <= gearScore(p, p.gear)));

@@ -363,7 +363,7 @@ function renderCombat() {
   const meddleLbl = others.length === 1 && others[0].idx === cb.helper ? `Карти помічника: ${esc(others[0].name)}` : others.some(q => q.idx === cb.helper) ? 'Помічник чи інші гравці тут: зіграти карту' : 'Втрутитися (інші гравці тут)';
   const pct = Math.round(s.hero / (s.hero + s.mon) * 100);
   const bad = cb.mons.length > 1 ? `${cb.mons.length} монстри — тікати доведеться від кожного окремо` : cb.mons[0].c.bad.text;
-  const heroPics = cb.boss ? '' : [p, h].filter(Boolean).map(q => `<span class="cpt" style="--pc:${q.color}">${portraitHTML(q)}</span>`).join('');
+  const heroPics = cb.boss ? '' : `<span class="cpts${h ? ' two' : ''}">${[p, h].filter(Boolean).map(q => `<span class="cpt" style="--pc:${q.color}" title="${esc(q.name)}">${portraitHTML(q)}</span>`).join('')}</span>`;
   const monPics = cb.mons.slice(0, 1).map(x => `<span class="cmt${x.c.ab ? ' sp' : ''}${x.c.tyrant ? ' ty' : ''}">${artIcon(x.c, 'cmi')}${cb.mons.length > 1 ? `<em class="cmore">+${cb.mons.length - 1}</em>` : ''}</span>`).join('');
   el.innerHTML = `<div class="cside hero"><div class="cl">${cb.boss ? 'Увесь загін' : esc(p.name) + (h ? ' + ' + esc(h.name) : '')}</div><div class="cnum">${heroPics}<div class="big" data-n="${s.hero}">${s.hero}</div></div></div>
     <div class="vs">${s.win ? 'перемагає' : 'програє'}<b>${ICO.sword}</b><button class="cwhy" type="button" id="cbWhy" title="Звідки ці числа?">Чому так?</button></div>

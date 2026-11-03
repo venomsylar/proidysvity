@@ -952,3 +952,13 @@ html[data-ui="l"] #ui,html[data-ui="l"] .modal:not(.screen) .sheet,html[data-ui=
 .cs-grid{grid-template-columns:fit-content(340px) minmax(240px,1fr)}
 .cs-grid .misc-list{max-width:340px}
 @media (max-width:760px){ .cs-grid{grid-template-columns:minmax(0,1fr)} .cs-grid .misc-list{max-width:none} }
+/* бій із помічником: два портрети накладаються, щоб число не налазило на центр */
+.cpts{display:inline-flex;align-items:center;flex:0 0 auto}
+.cpts.two .cpt{width:34px;height:34px;margin-left:6px}
+.cpts.two .cpt .pr{width:30px;height:30px}
+.cpts.two .cpt + .cpt{margin-left:-12px;margin-top:14px;z-index:1}
+.cpts.two .cpt + .cpt .psx{display:none}
+.cpts.two .cpt .pc{width:15px;height:15px;right:-5px;bottom:-4px}
+.cpts.two + .big{font-size:40px}
+.cside.hero .cnum{min-width:0}
+.cpts.two .cpt:first-child .pc,.cpts.two .cpt:first-child .pr2{display:none}

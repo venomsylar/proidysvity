@@ -11,7 +11,8 @@ function actAllowed(p, act) {
   if (!act || G.over) return false;
   if (act.k === 'pass') return waitingOn().includes(p);
   if (act.k === 'steal') { const t = G.players[act.target]; return canSteal(p) && !!t && !sameTeam(p, t) && t !== p && t.gear.some(c => c.uid === act.item && stealable(t, c)); }
-  if (['charm', 'wolf', 'vanish', 'sniff'].includes(act.k)) return !G.busy && PERK[act.k](p);
+  if (['charm', 'wolf', 'vanish', 'sniff', 'spell'].includes(act.k)) return !G.busy && PERK[act.k](p);
+  if (act.k === 'res') return !G.busy && PERK.res(p) && p.hand.some(c => c.uid === act.uid);
   if (act.k === 'forge') return !G.busy && PERK.forge(p) && p.gear.some(g => g.uid === act.g && (g.forged || 0) < 3);
   if (act.k === 'heal') { const t = G.players[act.target]; return !G.busy && PERK.heal(p) && !!t && (t.curses || []).some(k => k.uid === act.curse); }
   if (act.k === 'equipBest') return !G.over && !G.combat && !['setup', 'deal'].includes(G.phase) && !p._acting && bestGearPlan(p).plan.length > 0;
@@ -49,6 +50,23 @@ function openHeal() {
     <div class="list">${rows.map(({ q, k }) => `<button class="btn" type="button" data-hl="${q.idx}:${k.uid}"><b style="color:${q.color}">${q === v ? 'Із себе' : esc(q.name)}</b> · ${artIcon(k)} ${esc(k.name)}</button>`).join('')}</div>
     <div class="row end"><button class="btn ghost" type="button" data-close>Скасувати</button></div>`);
   $('#sheet').querySelectorAll('[data-hl]').forEach(b => b.onclick = () => { const [t, u] = b.dataset.hl.split(':').map(Number); closeModal(); dispatch({ k: 'heal', target: t, curse: u }); });
+}
+function openResurrect() {
+  const v = viewerP(); if (!PERK.res(v)) return;
+  const top = G.treasureDiscard[G.treasureDiscard.length - 1];
+  let sel = null;
+  const draw = () => `<h2>📿 Воскресіння</h2><p>Скинь одну карту з руки — і забери верхню карту зі скиду скарбів. Раз за свій хід.</p>
+    <h3>Зі скиду</h3>${cardRow([top])}
+    <h3>Яку карту віддаси</h3>${cardRow(v.hand, { sel: new Set(sel != null ? [sel] : []), key: 'rs' })}
+    <div class="row end"><button class="btn ghost" type="button" data-close>Скасувати</button><button class="btn primary" type="button" id="rsGo" ${sel != null ? '' : 'disabled'}>${sel != null ? 'Воскресити' : 'Обери карту'}</button></div>`;
+  const close = () => { $('#sheet').onclick = null; closeModal(); };
+  showModal(draw(), 'wide'); $('#sheet').querySelectorAll('[data-close]').forEach(x => x.onclick = close);
+  $('#sheet').onclick = e => {
+    const el = e.target.closest('[data-rs], #rsGo'); if (!el) return;
+    if (el.id === 'rsGo') { if (sel == null) return; const u = sel; close(); dispatch({ k: 'res', uid: u }); return; }
+    const u = +el.dataset.rs; sel = sel === u ? null : u;
+    $('#sheet').innerHTML = draw(); $('#sheet').querySelectorAll('[data-close]').forEach(x => x.onclick = close);
+  };
 }
 function openSteal() {
   const v = viewerP(); if (!canSteal(v)) return;
@@ -122,6 +140,8 @@ async function execAct(p, a) {
     case 'charm': return perkCharm(p);
     case 'wolf': return perkWolf(p);
     case 'vanish': return perkVanish(p);
+    case 'spell': return perkSpell(p);
+    case 'res': return perkResurrect(p, p.hand.find(x => x.uid === a.uid));
     case 'sniff': return perkSniff(p);
     case 'raise': return perkRaise(p, c);
     case 'forge': return perkForge(p, p.gear.find(g => g.uid === a.g));
@@ -313,6 +333,8 @@ function dockActs(v) {
     if (PERK.charm(v)) acts.push({ label: '🌿 Зваба: −1…−3 монстру', act: { k: 'charm' }, title: 'Кидаєш кубик: 1–2 → −1, 3–4 → −2, 5–6 → −3 монстру. Раз за бій.' });
     else if (fp === v && hasRace(v, 'mavka') && !cb.charm && !cb.boss && charmProof(cb)) acts.push({ label: '🌿 Зваба', act: { k: 'charm' }, dis: `${charmProof(cb).c.name} на звабу Мавки не піддається.` });
     if (PERK.wolf(v)) acts.push({ label: '🐺 Обернутися: +3', act: { k: 'wolf' } });
+    if (PERK.spell(v)) acts.push({ label: `🔮 Чари: скинути всю руку (${v.hand.length})`, act: { k: 'spell' }, title: `Монстр іде геть, ти забираєш ${treasureCount()} ${plural(treasureCount(), 'скарб', 'скарби', 'скарбів')}, але рівня не отримуєш.` });
+    else if (hasCls(v, 'wizard') && !cb.boss) acts.push({ label: '🔮 Чари', act: { k: 'spell' }, dis: cb.helper != null ? 'Чари — лише без помічника.' : cb.mons.length > 1 ? 'Чари діють лише на одного монстра.' : cb.mons[0].c.tyrant ? 'Боса чарами не взяти.' : `Потрібно щонайменше 3 карти в руці (зараз ${v.hand.length}).` });
     if (PERK.vanish(v) && !s.win) acts.push({ label: '🌀 Зникнути (раз за гру)', act: { k: 'vanish' } });
     return acts;
   }
@@ -327,6 +349,7 @@ function dockActs(v) {
   else if (sniffWait(v)) acts.push({ label: '🐺 Нюх', act: { k: 'sniff' }, dis: 'Нюх — раз на два твої ходи. Наступного ходу знову зможеш.' });
   if (PERK.forge(v)) acts.push({ label: '🔥 Кувати…', fn: openForge });
   if (PERK.heal(v)) acts.push({ label: '🌱 Зілля…', fn: openHeal });
+  if (PERK.res(v)) acts.push({ label: `📿 Воскресити «${G.treasureDiscard[G.treasureDiscard.length - 1].name}»…`, fn: openResurrect });
   return acts;
 }
 function hintFor(c) {
