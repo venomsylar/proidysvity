@@ -258,6 +258,7 @@ function dockActs(v) {
   if (canTrade(v)) acts.push({ label: 'Обмін…', fn: openTrade });
   if (canSteal(v)) acts.push({ label: 'Поцупити…', fn: openSteal });
   if (PERK.sniff(v)) acts.push({ label: '🐺 Нюх: глянути двері', act: { k: 'sniff' } });
+  else if (sniffWait(v)) acts.push({ label: '🐺 Нюх', act: { k: 'sniff' }, dis: 'Нюх — раз на два твої ходи. Наступного ходу знову зможеш.' });
   if (PERK.forge(v)) acts.push({ label: '🔥 Кувати…', fn: openForge });
   if (PERK.heal(v)) acts.push({ label: '🌱 Зілля…', fn: openHeal });
   return acts;

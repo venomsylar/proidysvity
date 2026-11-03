@@ -28,7 +28,7 @@ async function startTurn() {
   if (G.pendingSetup) { G.pendingSetup = false; openSetup(); return; }
   applyReclaims();
   saveGame(); histTurn();
-  const p = cur(); G.phase = 'start'; G.combat = null; forgetTick(p); G.turnNo = (G.turnNo || 0) + 1;
+  const p = cur(); G.phase = 'start'; G.combat = null; forgetTick(p); G.turnNo = (G.turnNo || 0) + 1; p.ownTurns = (p.ownTurns || 0) + 1;
   G.players.forEach(plateDraw);
   log(`Хід: ${nameTag(p)} · рівень ${p.level}`, 'turn');
   banner(`Хід: ${p.name}`, p.color); sfx('turn'); netAll({ t: 'fx', type: 'banner', a: { text: `Хід: ${p.name}`, color: p.color } });
@@ -495,7 +495,10 @@ async function botDrive() {
         if (mate) { const ok = await askHelp(mate.idx, { tr: 0, cards: [] }); if (ok) await assistWindow(mate); continue; }
       }
       // здібності: Перевертень обертається, Мавка зачаровує
-      if (PERK.wolf(p)) { await botDelay(300); await perkWolf(p); continue; }
+      if (PERK.wolf(p)) {
+        const ty0 = combatTypes(cb), pot0 = sum(p.hand.filter(c => c.kind === 'oneshot' && shotVal(c, ty0, c.bonus > 0) > 0), c => shotVal(c, ty0, true));
+        if (need <= 3 + pot0 || abOf(cb, 'noflee')) { await botDelay(300); await perkWolf(p); continue; }
+      }
       if (PERK.charm(p)) { await botDelay(300); await perkCharm(p); continue; }
       const ty = combatTypes(cb), sv = c => Math.abs(shotVal(c, ty, c.bonus > 0));
       const servants = p.hand.filter(c => PERK.raise(p, c)).sort((x, y) => y.lvl - x.lvl).slice(0, 2 - (cb.necroN || 0));
@@ -604,7 +607,7 @@ async function fleeCombat() {
   hlAdd('flees', G.players[cb.fighter]);
   const many = cb.mons.length > 1;
   for (const i of ids) {
-    const q = G.players[i]; const fb = fleeBonus(q) - (cb.wolf === q.idx ? 1 : 0);
+    const q = G.players[i]; const fb = fleeBonus(q) - (cb.wolf === q.idx ? 2 : 0);
     for (const x of cb.mons) {
       const mon = x.c;
       const sayRoll = (r, ok, again) => {
@@ -1017,11 +1020,14 @@ async function doUncurse(p, c, target, curseUid) {
   syncSeat(target); renderUI();
 }
 /* --- здібності нових рас і класів --- */
+// Нюх Перевертня — раз на два власні ходи
+const sniffReady = p => !!p && !G.combat && G.phase === 'start' && cur() === p && hasRace(p, 'werewolf') && (p.ownTurns || 0) - (p.sniffAt ?? -9) >= 2;
+const sniffWait = p => !!p && !G.combat && G.phase === 'start' && cur() === p && hasRace(p, 'werewolf') && (p.ownTurns || 0) - (p.sniffAt ?? -9) < 2;
 const PERK = {
   charm: p => !!G.combat && G.phase === 'combat' && fighter() === p && hasRace(p, 'mavka') && !G.combat.charm && !G.combat.boss,
   wolf: p => !!G.combat && G.phase === 'combat' && fighter() === p && hasRace(p, 'werewolf') && G.combat.wolf == null,
   vanish: p => !!G.combat && G.phase === 'combat' && fighter() === p && hasCls(p, 'kharakternyk') && !p.vanished && !G.combat.boss,
-  sniff: p => !G.combat && G.phase === 'start' && cur() === p && hasRace(p, 'werewolf') && p.sniffTurn !== G.turnNo && G.doorDeck.length > 1,
+  sniff: p => sniffReady(p) && G.doorDeck.length > 1,
   forge: p => !G.combat && cur() === p && ['start', 'afterKick', 'charity'].includes(G.phase) && hasCls(p, 'koval') && p.forgeTurn !== G.turnNo && p.hand.length >= 2 && p.gear.some(g => (g.forged || 0) < 3),
   heal: p => !G.combat && cur() === p && ['start', 'afterKick', 'charity'].includes(G.phase) && hasCls(p, 'znakhar') && p.healTurn !== G.turnNo && p.hand.length >= 2 && G.players.some(q => (q.curses || []).length),
   raise: (p, c) => !!G.combat && G.phase === 'combat' && fighter() === p && hasCls(p, 'necro') && !!c && c.kind === 'monster' && c.undead && (G.combat.necroN || 0) < 2
@@ -1036,7 +1042,7 @@ async function perkCharm(p) {
   sfx('help'); burst(monCenter(), ['#9fe08a', '#e8ffd8', '#ffffff'], 70, 2.2, 1.1); renderUI();
 }
 async function perkWolf(p) {
-  G.combat.wolf = p.idx; log(`${nameTag(p)} (Перевертень) обертається на вовка: +3 у бою. Тікати тепер важче: −1 до втечі.`); say(`${p.name} обертається на вовка!`, 1800);
+  G.combat.wolf = p.idx; log(`${nameTag(p)} (Перевертень) обертається на вовка: +3 у бою. Тікати тепер важче: −2 до втечі.`); say(`${p.name} обертається на вовка!`, 1800);
   sfx('roar'); ringFx(p.seat.anchor, 0x9a7b5a); camShake(.25, 300); renderUI();
 }
 async function perkVanish(p) {
@@ -1054,7 +1060,7 @@ async function perkRaise(p, c) {
   sfx('guard'); renderUI();
 }
 async function perkSniff(p) {
-  p.sniffTurn = G.turnNo; const top = G.doorDeck[G.doorDeck.length - 1]; if (!top) return;
+  p.sniffAt = p.ownTurns || 0; const top = G.doorDeck[G.doorDeck.length - 1]; if (!top) return;
   let bury;
   if (p.type === 'bot') bury = top.kind === 'curse' || (top.kind === 'monster' && monLvl(top, p) + vsBonus(top, p) + 1 >= baseStr(p) + (p.hand.filter(c => c.kind === 'oneshot').length ? 3 : 0));
   else bury = await confirmFor(p, `Нюх: «${top.name}»`, `Наверху колоди дверей — ${top.kind === 'monster' ? `монстр «${top.name}» (рівень ${top.lvl})` : `«${top.name}»`}.\nСховати його під низ колоди?`, 'Під низ', 'Лишити');

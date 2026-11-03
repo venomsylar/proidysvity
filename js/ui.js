@@ -190,7 +190,7 @@ function renderDock() {
   $('#status').innerHTML = statusText();
   const box = $('#actions'); box.innerHTML = '';
   const acts = G.over && NET.role !== 'client' ? [{ label: 'Нова гра', fn: openSetup, cls: 'primary' }] : dockActs(v);
-  acts.forEach(a => { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn ' + (a.cls || ''); b.textContent = a.label; b.disabled = !!a.dis; b.onclick = () => (a.pick && v && v.hand.length > handLimit(v)) ? openCharityPick(v, a.act) : a.act ? dispatch(a.act, a.as != null ? a.as : G.viewer) : a.fn(); box.appendChild(b); });
+  acts.forEach(a => { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn ' + (a.cls || ''); b.textContent = a.label; b.disabled = !!a.dis; if (typeof a.dis === 'string') b.title = a.dis; b.onclick = () => (a.pick && v && v.hand.length > handLimit(v)) ? openCharityPick(v, a.act) : a.act ? dispatch(a.act, a.as != null ? a.as : G.viewer) : a.fn(); box.appendChild(b); });
   if (!v) { $('#strText').textContent = NET.role === 'client' ? '' : 'режим глядача'; setHTML($('#equip'), `<div class="empty">${G.players.length ? 'Усі гравці за цим пристроєм — боти. Спостерігай.' : ''}</div>`); setHTML($('#hand'), ''); setHTML($('#handOwner'), ''); return; }
   document.querySelector('.dock .lbl [data-sheet]').hidden = !handVisible();
   if (!handVisible()) {
@@ -230,7 +230,7 @@ function renderCombat() {
   if (epicFor(p)) mods.unshift(`<span class="tag m">Епічна зона: рівень монстрів ×2</span>`);
   // нові раси й класи
   if (cb.charm) mods.push('<span class="tag h">🌿 Зваба: монстр −3</span>');
-  if (cb.wolf != null) mods.push(`<span class="tag h">🐺 ${esc((G.players[cb.wolf] || {}).name || '')} у вовчій подобі +3 · втеча −1</span>`);
+  if (cb.wolf != null) mods.push(`<span class="tag h">🐺 ${esc((G.players[cb.wolf] || {}).name || '')} у вовчій подобі +3 · втеча −2</span>`);
   if (cb.necroB) mods.push(`<span class="tag h">🦴 Слуги-нежить +${cb.necroB}</span>`);
   { const kb = cb.boss ? G.players.filter(q => hasCls(q, 'kobzar')).length : h && (hasCls(p, 'kobzar') || hasCls(h, 'kobzar')) ? 1 : 0; if (kb) mods.push(`<span class="tag h">🎻 Натхнення +${kb * 2}</span>`); }
   { const zn = cb.pShots.filter(c => c.bonus > 0 && c._by != null && hasCls(G.players[c._by], 'znakhar')).length; if (zn) mods.push(`<span class="tag h">🌱 Відвар +${zn}</span>`); }
