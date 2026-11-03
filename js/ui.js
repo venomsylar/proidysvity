@@ -242,7 +242,7 @@ function renderDock() {
   $('#status').innerHTML = statusText();
   const box = $('#actions'); box.innerHTML = '';
   const acts = G.over && NET.role !== 'client' ? [{ label: 'Нова гра', fn: openSetup, cls: 'primary' }] : dockActs(v);
-  acts.forEach(a => { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn ' + (a.cls || ''); b.textContent = a.label; b.disabled = !!a.dis; if (typeof a.dis === 'string') b.title = a.dis; b.onclick = () => (a.pick && v && v.hand.length > handLimit(v)) ? openCharityPick(v, a.act) : a.act ? dispatch(a.act, a.as != null ? a.as : G.viewer) : a.fn(); box.appendChild(b); });
+  acts.forEach(a => { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn ' + (a.cls || ''); b.textContent = a.label; b.disabled = !!a.dis; if (typeof a.dis === 'string') b.title = a.dis; else if (a.title) b.title = a.title; b.onclick = () => (a.pick && v && v.hand.length > handLimit(v)) ? openCharityPick(v, a.act) : a.act ? dispatch(a.act, a.as != null ? a.as : G.viewer) : a.fn(); box.appendChild(b); });
   if (!v) { $('#strText').textContent = NET.role === 'client' ? '' : 'режим глядача'; setHTML($('#equip'), `<div class="empty">${G.players.length ? 'Усі гравці за цим пристроєм — боти. Спостерігай.' : ''}</div>`); setHTML($('#hand'), ''); setHTML($('#handOwner'), ''); return; }
   document.querySelector('.dock .lbl [data-sheet]').hidden = !handVisible();
   if (!handVisible()) {
@@ -290,6 +290,8 @@ function combatBreakdown() {
   Object.entries(cb.stab || {}).forEach(([i, n]) => add(H, `удар у спину: ${(G.players[i] || {}).name || ''}`, -2 * n));
   add(H, 'вовча подоба', cb.wolf === p.idx ? 3 : 0); add(H, 'слуги Некроманта', cb.necroB || 0);
   { const kb = cb.boss ? [p, ...G.players.filter(q => q !== p)].filter(q => hasCls(q, 'kobzar')).length : h && (hasCls(p, 'kobzar') || hasCls(h, 'kobzar')) ? 1 : 0; add(H, 'натхнення Кобзаря', kb * 2); }
+  if (G.event) { const al = cb.boss ? G.players.filter(q => q !== p) : [], heroes = [p, h, ...al].filter(Boolean);
+    add(H, `${G.event.icon} Тренування`, evOn('training') ? heroes.length : 0); add(H, `${G.event.icon} Повний місяць: перевертні`, evOn('moon') ? 2 * heroes.filter(q => hasRace(q, 'werewolf')).length : 0); }
   add(H, 'відвар Знахаря', cb.pShots.filter(c => c.bonus > 0 && c._by != null && hasCls(G.players[c._by], 'znakhar')).length);
   cb.mons.forEach(x => {
     add(M, `${x.c.name}${epicFor(p) ? ' (епік ×2)' : ''}`, monLvl(x.c, p));
@@ -300,6 +302,8 @@ function combatBreakdown() {
   cb.mShots.forEach(c => add(M, `«${c.name}»`, shotVal(c, ty, false)));
   add(M, 'прокляття «Магніт»', curseN(p, 'magnet') * 2);
   if (G.coop) { add(M, 'здібність Боса', cb.bossX || 0); add(M, 'Загроза', G.coop.threat >= Math.ceil(G.coop.max * 2 / 3) ? 4 : G.coop.threat >= Math.ceil(G.coop.max / 3) ? 2 : 0); }
+  if (G.event) { add(M, `${G.event.icon} Повний місяць: нежить`, evOn('moon') ? 3 * cb.mons.filter(x => x.c.undead).length : 0); add(M, `${G.event.icon} Сезон драконів`, evOn('dragons') ? 3 * cb.mons.filter(x => x.c.dragon).length : 0);
+    add(M, `${G.event.icon} Чорна кішка: лідер`, evOn('blackcat') && p.level >= Math.max(...G.players.map(q => q.level)) ? 2 : 0); }
   add(M, 'зваба Мавки', cb.charm ? -3 : 0);
   add(M, 'благословення: монстри слабші', -blessN(p, 'tame'));
   if (hasCls(p, 'necro')) add(M, 'нежить знає Некроманта', -2 * cb.mons.filter(x => x.c.undead).length);
@@ -377,7 +381,7 @@ function renderCombat() {
   if (prev.key === key) [['.cside.hero .big', prev.hero, s.hero], ['.cside.mon .big', prev.mon, s.mon]].forEach(([q, a, b]) => { if (a != null && a !== b) rollNum(el.querySelector(q), a, b); });
   renderCombat.prev = { key, hero: s.hero, mon: s.mon };
 }
-function renderUI() { renderPlayers(); renderDock(); dockTgLabel(); renderCombat(); queueSnap(); chatSync(); reactSync(); tipCheck(); }
+function renderUI() { renderEvent(); renderPlayers(); renderDock(); dockTgLabel(); renderCombat(); queueSnap(); chatSync(); reactSync(); tipCheck(); }
 
 /* --- делеговані обробники --- */
 $('#hand').addEventListener('click', e => { const el = e.target.closest('.card'); if (!el || !handVisible()) return; const v = viewerP(); const c = v && v.hand.find(x => x.uid === +el.dataset.uid); if (c) openCardMenu(c, 'hand'); });

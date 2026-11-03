@@ -22,7 +22,8 @@ const clsShield = p => !!p.dualCls && !p.clsCard2;
 const curseN = (p, k) => (p.curses || []).filter(c => c.bad && c.bad.p === k).length;
 const curseStr = p => curseN(p, 'monday') * 2 + curseN(p, 'sneeze');
 const halflingDouble = p => hasRace(p, 'halfling') && p.dblTurn !== G.turnNo;
-const sellPrice = (p, c) => (curseN(p, 'inflation') ? Math.floor((c.value || 0) / 2 / 50) * 50 : (c.value || 0)) * (halflingDouble(p) ? 2 : 1);
+const sellPrice0 = (p, c) => (curseN(p, 'inflation') ? Math.floor((c.value || 0) / 2 / 50) * 50 : (c.value || 0)) * (halflingDouble(p) ? 2 : 1);
+const sellPrice = (p, c) => typeof eventSell === 'function' ? eventSell(sellPrice0(p, c)) : sellPrice0(p, c);
 const nameTag = p => `<b style="color:${p.color}">${esc(p.name)}</b>`;
 
 function usable(p, c) { if (!c.req) return true; if (c.req.sex) return p.sex === c.req.sex; if (c.req.race) return hasRace(p, c.req.race); if (c.req.cls) return hasCls(p, c.req.cls); return true; }
@@ -30,7 +31,7 @@ const gearBonus = p => sum(p.gear, c => usable(p, c) ? c.bonus : 0);
 // благословення від переможених босів: { k, n, name, icon, text }
 const blessN = (p, k) => sum((p && p.bless) || [], b => b.k === k ? b.n : 0);
 const baseStr = p => Math.max(0, p.level + gearBonus(p) + (hasCls(p, 'warrior') ? 1 : 0) + blessN(p, 'str') - curseStr(p));
-const fleeBonus = p => (hasRace(p, 'elf') ? 1 : 0) + (hasRace(p, 'rusalka') ? 2 : 0) + blessN(p, 'flee') + sum(p.gear, c => usable(p, c) ? (c.flee || 0) : 0) - curseN(p, 'lead') - curseN(p, 'sneeze');
+const fleeBonus = p => (G.event && G.event.id === 'rain' ? 1 : 0) + (hasRace(p, 'elf') ? 1 : 0) + (hasRace(p, 'rusalka') ? 2 : 0) + blessN(p, 'flee') + sum(p.gear, c => usable(p, c) ? (c.flee || 0) : 0) - curseN(p, 'lead') - curseN(p, 'sneeze');
 const EPIC_AT = 10;
 const epicFor = p => G.goal > 10 && p.level >= EPIC_AT;
 const monLvl = (m, p) => m.lvl * (epicFor(p) ? 2 : 1);
@@ -105,6 +106,28 @@ function equip(p, c) {
   removeFromHand(p, c); p.gear.push(c);
   return rem;
 }
+// план «спорядитися найкраще»: які речі з руки вдягнути (жадібно, як боти) і на скільки зросте сила
+function bestGearPlan(p) {
+  const orig = p.gear, before = baseStr(p); let gear = orig.slice(); const plan = [];
+  try {
+    for (let g = 0; g < 8; g++) {
+      p.gear = gear; const cur = gearScore(p, gear);
+      const best = p.hand.filter(c => c.kind === 'gear' && !plan.includes(c) && !canEquip(p, c)).map(c => ({ c, s: gearScore(p, gearAfter(p, c)) })).sort((a, b) => b.s - a.s)[0];
+      if (!best || best.s <= cur + .01) break;
+      gear = gearAfter(p, best.c); plan.push(best.c);
+    }
+    p.gear = gear; const after = baseStr(p), flee = fleeBonus(p); p.gear = orig;
+    return { plan, delta: after - before, flee: flee - fleeBonus(p) };
+  } finally { p.gear = orig; }
+}
+// шанс утекти від одного монстра (з бонусами, перекиданням напіврослика й благословенням)
+function fleeChance(q, cb = G.combat) {
+  if (cb && cb.mons.some(x => x.c.ab === 'noflee')) return 0;
+  const fb = fleeBonus(q) - (cb && cb.wolf === q.idx ? 2 : 0), need = Math.max(1, 5 - fb);
+  let c = Math.max(0, Math.min(6, 7 - need)) / 6; if (hasRace(q, 'halfling')) c = 1 - Math.pow(1 - c, 2);
+  if (blessN(q, 'reroll')) c = 1 - Math.pow(1 - c, 2);
+  return c;
+}
 function gearScore(p, gear) { const tmp = p.gear; p.gear = gear; const s = baseStr(p) + fleeBonus(p) * 0.3; p.gear = tmp; return s; }
 function gearAfter(p, c) { const rem = equipConflicts(p, c); return p.gear.filter(g => !rem.includes(g)).concat([c]); }
 
@@ -163,11 +186,11 @@ function sides() {
   const allies = cb.boss ? G.players.filter(q => q !== p) : [];
   allies.forEach(q => { hero += baseStr(q) + adjSum(typeAdj(q, ty)) + (hasCls(q, 'cleric') && undead ? 3 : 0); });
   hero -= 2 * sum(Object.values(cb.stab || {}), n => n); // удари в спину від злодюжок
-  hero += heroPerks(cb, p, h, allies);
+  hero += heroPerks(cb, p, h, allies) + (typeof eventHero === 'function' ? eventHero(cb, p, h, allies) : 0);
   hero = Math.max(0, hero);
   let mon = curseN(p, 'magnet') * 2 + sum(cb.mons, x => monLvl(x.c, p) + vsBonus(x.c, p) + monExtra(cb, x, p, h)) + sum(cb.mods, c => c.bonus) + sum(cb.mShots, c => shotVal(c, ty, false));
   if (G.coop) mon += (cb.bossX || 0) + (G.coop.threat >= Math.ceil(G.coop.max * 2 / 3) ? 4 : G.coop.threat >= Math.ceil(G.coop.max / 3) ? 2 : 0);
-  mon -= monPerks(cb, p);
+  mon -= monPerks(cb, p); if (typeof eventMon === 'function') mon += eventMon(cb, p);
   mon = Math.max(1, mon);
   const tie = hasCls(p, 'warrior') || (h && hasCls(h, 'warrior')) || allies.some(q => hasCls(q, 'warrior'));
   return { hero, mon, tie, win: hero > mon || (hero === mon && tie) };
@@ -188,6 +211,7 @@ function keepScore(p, c) {
     case 'wander': return 270;
     case 'redirect': return 550;
     case 'monster': return 100 + (baseStr(p) > monLvl(c, p) + 2 ? 180 : 0);
+    case 'merchant': return 250;
   }
   return 100;
 }

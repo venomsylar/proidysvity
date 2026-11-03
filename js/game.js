@@ -19,7 +19,6 @@ function meddleTalk(p, f) {
   if (!p || !f || p === f || sameTeam(p, f)) return;
   if (traitOf(p)) botSay(p, 'meddle', { n: f.name }, .55);
   if (traitOf(f)) setTimeout(() => botSay(f, 'meddled', { n: p.name }, .85), 1500);
-  avatarReact(f, 'angry');
 }
 function memo(a, b, d) { if (!a || !b || a === b) return; if (d < 0) d *= TT(a, 'neg', 1); a.mem = a.mem || {}; a.mem[b.idx] = (a.mem[b.idx] || 0) + d; }
 function confirmFor(p, title, text, yes, no) { return p.type === 'remote' ? askRemote(p, title, text, yes, no) : confirmModal(title, text, yes, no); }
@@ -34,6 +33,7 @@ async function startTurn() {
   log(`Хід: ${nameTag(p)} · рівень ${p.level}`, 'turn');
   banner(`Хід: ${p.name}`, p.color); sfx('turn'); netAll({ t: 'fx', type: 'banner', a: { text: `Хід: ${p.name}`, color: p.color } });
   if (G.coop) { G.busy = true; try { await dungeonPester(p); } finally { G.busy = false; } if (G.over) return; }
+  G.busy = true; try { await eventsTurn(p); } finally { G.busy = false; } if (G.over) return;
   if (hasRace(p, 'domovyk') && p.hand.length < 3) { G.busy = true; try { log(`${nameTag(p)} (Домовик) по-господарськи нишпорить у коморі: +1 карта скарбів.`); await drawTo(p, 'treasure'); } finally { G.busy = false; } }
   if (p.type === 'human') {
     G.busy = true; renderUI();
@@ -64,6 +64,7 @@ async function kickDoor() {
   const m = cardMesh(c); scene.add(m);
   await fly(m, deckPose('door'), centerPose(0, 1), 800, 2.4);
   if (c.kind === 'monster') { await beginCombat(c, m); return; }
+  if (c.kind === 'merchant') { say('Мандрівний торговець розкладає крам!', 2000); await wait(700 * ANIM); await merchantVisit(p, c, m); G.phase = 'afterKick'; return; }
   if (G.coop && (c.kind === 'key' || c.kind === 'alarm')) {
     if (c.kind === 'alarm') { say(`Тривога! «${c.name}»: Загроза +${c.n || 1}`, 2400); sfx('curse'); }
     await wait(1000 * ANIM); disposeMesh(m); await coopSpecial(p, c); G.phase = 'afterKick'; return;
@@ -74,7 +75,7 @@ async function kickDoor() {
     say(`Прокляття «${c.name}»: ${c.bad.text}${c.persist ? ' (діє, поки не знімеш)' : ''}`, 2600); sfx('curse');
     await fly(m, poseOf(m), seatPose(p.idx, true), 600, 1); hitFx(p);
     disposeMesh(m);
-    if (wardBlocks(p, c)) discard(c); else if (c.persist) attachCurse(p, c); else { discard(c); await applyBad(p, c.bad); }
+    if (holidayBlocks(p, c) || wardBlocks(p, c)) discard(c); else if (c.persist) attachCurse(p, c); else { discard(c); await applyBad(p, c.bad); }
   } else {
     await fly(m, poseOf(m), toHandOf(p), 600, 1, { owner: p.idx });
     disposeMesh(m); giveCard(p, c);
@@ -262,7 +263,7 @@ function meddleOptions(b) {
   return opts;
 }
 async function botsInterfere() {
-  const p = fighter(); if (!G.combat) return false; let any = false;
+  const p = fighter(); if (!G.combat || eventNoMeddle()) return false; let any = false;
   if (G.coop && !G.combat.boss) { const n = await dungeonMeddle(false); if (n) any = true; if (!G.combat) return any; }
   const leader = Math.max(...G.players.filter(q => q !== p).map(q => q.level));
   /* що вищий рівень героя, то охочіше йому шкодять: плавно, до +0.2 біля фінішу */
@@ -295,7 +296,7 @@ async function botsInterfere() {
 }
 function canMeddleCards(h) { const und = G.combat && G.combat.mons.some(x => x.c.undead); if (G.combat && hasCls(h, 'thief') && ((G.combat.stab || {})[h.idx] || 0) < 3 && h.hand.some(c => !['oneshot', 'flee'].includes(c.kind))) return true; return h.hand.some(c => ['mod', 'oneshot', 'wander', 'redirect'].includes(c.kind) || (c.kind === 'monster' && c.undead && und)); }
 async function interferenceWindow() {
-  const cb = G.combat, p = fighter();
+  const cb = G.combat, p = fighter(); if (eventNoMeddle()) return false;
   const humans = G.players.filter(h => isPerson(h) && !h.offline && h !== p && !sameTeam(h, p) && h.idx !== cb.helper && !cb.passed.has(h.idx) && canMeddleCards(h));
   if (!humans.length) return false;
   humans.filter(h => h.type === 'remote').forEach(h => tell(h, `${p.name} ось-ось переможе! Зіграй карту або натисни «Не втручаюсь».`, 2800));
@@ -425,7 +426,7 @@ function helpForecast(i) {
   return `Зараз: ${p.name} ${now.hero} проти монстрів ${now.mon}. Твоя сила в цьому бою: +${mine}.\n${verdict} Суперники ще можуть втрутитися.`;
 }
 async function askHelp(i, offer) {
-  const cb = G.combat, p = fighter(), h = G.players[i]; if (!cb || !h || curseN(p, 'lonely') || abOf(cb, 'nohelp')) return false;
+  const cb = G.combat, p = fighter(), h = G.players[i]; if (!cb || !h || curseN(p, 'lonely') || abOf(cb, 'nohelp') || eventNoHelp()) return false;
   if (isMe(p)) statFlag('asked');
   cb.asked.add(i);
   const T = treasureCount();
@@ -491,7 +492,7 @@ async function botDrive() {
       }
       const need = s.mon - s.hero + (s.tie ? 0 : 1);
       // командна гра: напарник допомагає безплатно — спершу кличемо його, а свої карти бережемо
-      if (G.teams && cb.helper == null && !curseN(p, 'lonely') && !abOf(cb, 'nohelp')) {
+      if (G.teams && cb.helper == null && !curseN(p, 'lonely') && !abOf(cb, 'nohelp') && !eventNoHelp()) {
         const mate = teamMates(p).filter(q => !cb.asked.has(q.idx) && !q.offline && helpGap(q, p) === 0).sort((x, y) => togetherWith(y.idx).win - togetherWith(x.idx).win || baseStr(y) - baseStr(x))[0];
         if (mate) { const ok = await askHelp(mate.idx, { tr: 0, cards: [] }); if (ok) await assistWindow(mate); continue; }
       }
@@ -522,7 +523,7 @@ async function botDrive() {
       // помічник-людина вже в бою: даємо йому докинути карти, щойно ситуація змінилась (монстра підсилили тощо)
       { const h = cb.helper != null ? G.players[cb.helper] : null, sig = s.hero + ':' + s.mon;
         if (h && isPerson(h) && !h.offline && cb.assistSig !== sig) { cb.assistSig = sig; await assistWindow(h); continue; } }
-      if (cb.helper == null && !curseN(p, 'lonely') && !abOf(cb, 'nohelp')) {
+      if (cb.helper == null && !curseN(p, 'lonely') && !abOf(cb, 'nohelp') && !eventNoHelp()) {
         const like = q => affN(p, q) * 5;
         const cand = G.players.filter(q => q !== p && !cb.asked.has(q.idx) && helpGap(q, p) === 0).sort((x, y) => (sameTeam(p, y) - sameTeam(p, x)) * 100 + (baseStr(y) + like(y) * .7) - (baseStr(x) + like(x) * .7));
         if (cand.length) {
@@ -580,14 +581,14 @@ function combatEnded() { if (G.assist && G.assist.resolve) G.assist.resolve('end
 async function waitCombatEnd() { while (G.combat && !G.over) { G.busy = false; renderUI(); await new Promise(r => combatWaiters.push(r)); await wait(80); } G.busy = true; renderUI(); }
 
 async function winCombat() {
-  const cb = G.combat, p = fighter(); const kob = cb.helper != null && hasCls(p, 'kobzar') && !cb.boss ? 1 : 0; const tr = Math.max(0, treasureCount() + kob + blessN(p, 'loot') - curseN(p, 'sack'));
+  const cb = G.combat, p = fighter(); const kob = cb.helper != null && hasCls(p, 'kobzar') && !cb.boss ? 1 : 0; const tr = Math.max(0, treasureCount() + kob + blessN(p, 'loot') + (evOn('hero') ? 1 : 0) + (evOn('generous') && cb.helper != null ? 1 : 0) - curseN(p, 'sack'));
   if (blessN(p, 'loot')) log(`${nameTag(p)} (благословення): +${blessN(p, 'loot')} скарб.`);
   if (kob) log(`${nameTag(p)} (Кобзар) співає про перемогу: +1 скарб.`);
   const s0 = sides(), orcBonus = hasRace(p, 'orc') && s0.hero - s0.mon >= 10 ? 1 : 0, gain = levelsGain() + orcBonus;
   if (orcBonus) log(`${nameTag(p)} (Орк) розносить монстра з перевагою ${s0.hero - s0.mon}: +1 рівень зверху!`);
   if (curseN(p, 'sack') && treasureCount()) log(`Прокляття «Дірявий мішок»: ${nameTag(p)} отримує на ${Math.min(treasureCount(), curseN(p, 'sack'))} скарб менше.`);
   const helper = cb.helper != null ? G.players[cb.helper] : null;
-  statOnKill(p, helper, cb); hlKill(p, cb); botSay(p, 'win', {}, .7); avatarReact(p, 'win'); if (helper) setTimeout(() => avatarReact(helper, 'joy'), 300);
+  statOnKill(p, helper, cb); hlKill(p, cb); botSay(p, 'win', {}, .7);
   { // велика перемога — окремий банер
     const top = Math.max(...cb.mons.map(x => monLvl(x.c, p)));
     if (!cb.boss && (top >= 14 || cb.mons.length >= 3)) { const t = cb.mons.length >= 3 ? 'Три в одному!' : 'Велика перемога!'; banner(t, '#ffd23a'); netAll({ t: 'fx', type: 'banner', a: { text: t, color: '#ffd23a' } }); }
@@ -603,7 +604,7 @@ async function winCombat() {
   if (blessN(p, 'gold')) { p.gold += blessN(p, 'gold'); log(`${nameTag(p)} (благословення): +${blessN(p, 'gold')} золотих.`); }
   await changeLevel(p, gain, true);
   if (G.over) return;
-  const hs = helper ? Math.min(tr, cb.offer ? cb.offer.tr : Math.floor(tr / 2)) : 0;
+  const hs = helper ? Math.min(tr, (cb.offer ? cb.offer.tr : Math.floor(tr / 2)) + (evOn('generous') ? 1 : 0)) : 0;
   if (tr) log(`Здобич: ${tr} ${plural(tr, 'скарб', 'скарби', 'скарбів')}${hs ? ` (${hs} — помічникові)` : ''}.`);
   for (let i = 0; i < tr - hs; i++) await drawTo(p, 'treasure', lootFrom);
   for (let i = 0; i < hs; i++) await drawTo(helper, 'treasure', lootFrom);
@@ -674,6 +675,7 @@ function immuneSlot(q, slot) {
 // який бос наслав цю халепу (халепа боса посилається на свою карту)
 const cb0Mon = bad => bad && bad.mon ? bad.mon : null;
 // оберіг (благословення) гасить одне прокляття
+function holidayBlocks(q, c) { if (!evOn('holiday')) return false; log(`🎉 Свято: прокляття «${esc(c.name)}» на ${nameTag(q)} не діє.`); return true; }
 function wardBlocks(q, c) {
   const w = (q.bless || []).find(b => b.k === 'ward' && b.n > 0); if (!w) return false;
   w.n--; if (w.n <= 0) q.bless.splice(q.bless.indexOf(w), 1);
@@ -707,7 +709,7 @@ async function applyBad(q, bad) {
       const mon = cb0Mon(bad); if (!mon) break;
       const t = mon.tyrant.curse;
       const k = mk({ deck: 'door', kind: 'curse', persist: true, ephemeral: true, name: t.name, art: t.art, artOf: mon.name, bad: BAD.persist(t.p, t.text), flavor: `Залишив ${mon.name}.` });
-      if (wardBlocks(q, k)) break;
+      if (holidayBlocks(q, k) || wardBlocks(q, k)) break;
       attachCurse(q, k); break;
     }
     case 'sex': {
@@ -1026,11 +1028,11 @@ async function doCurse(from, c, target) {
   if (!target) return;
   removeFromHand(from, c);
   log(`${nameTag(from)} насилає «${esc(c.name)}» на ${nameTag(target)}!`); hlAdd('curses', from);
-  memo(target, from, -3); sfx('curse'); avatarReact(target, 'angry'); if (target !== from) setTimeout(() => botSay(target, 'cursed', { n: from.name }, .8), 900);
+  memo(target, from, -3); sfx('curse'); if (target !== from) setTimeout(() => botSay(target, 'cursed', { n: from.name }, .8), 900);
   const m = cardMesh(c); scene.add(m); renderUI();
   await fly(m, fromHandOf(from), seatPose(target.idx, true), 750, 2.2);
   hitFx(target); disposeMesh(m);
-  if (wardBlocks(target, c)) discard(c); else if (c.persist) attachCurse(target, c); else { discard(c); await applyBad(target, c.bad); }
+  if (holidayBlocks(target, c) || wardBlocks(target, c)) discard(c); else if (c.persist) attachCurse(target, c); else { discard(c); await applyBad(target, c.bad); }
 }
 /* --- тривалі прокляття --- */
 function attachCurse(q, c) {
@@ -1181,6 +1183,7 @@ async function botManage(p, setupOnly = false) {
     if (g) { await botDelay(350); await perkForge(p, g); }
   }
   for (const c of p.hand.filter(x => x.kind === 'levelup')) if (levelsToWin(p) > 1) { await botDelay(250); await doLevelUp(p, c); }
+  { const mc = p.hand.find(x => x.kind === 'merchant'); if (mc && cur() === p && !G.combat && ['start', 'afterKick', 'charity'].includes(G.phase)) { await botDelay(300); await playMerchant(p, mc); if (G.over) return; } }
   if (cur() === p && G.phase !== 'combat' && levelsToWin(p) > 1) {
     const spare = p.hand.filter(c => c.kind === 'gear' && (canEquip(p, c) || gearScore(p, gearAfter(p, c)) <= gearScore(p, p.gear)));
     if (p.gold + sum(spare, c => sellPrice(p, c)) >= 1000) for (const c of spare) { if (levelsToWin(p) <= 1) break; await botDelay(200); await doSell(p, c); }
@@ -1227,7 +1230,7 @@ async function gameOver(p) {
   clearSave(); statGameEnd(isMe(p) || sameTeam(p, statMe()));
   G.over = true; G.phase = 'over'; G.busy = false; G.window = null;
   log(G.teams ? `${nameTag(p)} здобуває переможний рівень — команда ${teamTag(p.team)} перемагає (${teamScore(p.team)} з ${teamTarget(p.team)})!` : `${nameTag(p)} досягає ${G.goal}-го рівня і перемагає!`, 'turn');
-  confetti(G.teams ? TEAMS[p.team].color : p.color); renderUI(); sfx('win'); avatarReact(p, 'win'); G.players.filter(q => q !== p && !sameTeam(p, q)).forEach((q, k) => setTimeout(() => avatarReact(q, 'sad'), 400 + k * 200)); botSay(p, 'gameWin', {}, 1);
+  confetti(G.teams ? TEAMS[p.team].color : p.color); renderUI(); sfx('win');
   const sumD = summaryData(); G._sum = sumD;
   emitFx('win', { idx: p.idx, sum: sumD });
   await wait(900);

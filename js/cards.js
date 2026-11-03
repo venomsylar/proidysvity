@@ -199,6 +199,7 @@ function buildDoorDeck(epic = false, types = { undead: true, dragon: true }) {
 
   for (const r of Object.keys(RACES)) for (let i = 0; i < 2; i++) d.push(mk({ deck: 'door', kind: 'race', race: r, name: RACES[r].name, art: RACES[r].art }));
   for (const c of Object.keys(CLASSES)) for (let i = 0; i < 2; i++) d.push(mk({ deck: 'door', kind: 'class', cls: c, name: CLASSES[c].name, art: CLASSES[c].art }));
+  for (let i = 0; i < 2; i++) d.push(mk({ deck: 'door', kind: 'merchant', name: 'Мандрівний торговець', art: '🧳', flavor: 'Усе по сто! Ну, майже все.' }));
   return d.filter(c => c.kind !== 'monster' || ((!c.undead || types.undead) && (!c.dragon || types.dragon) && (!c.tyrant || types.boss !== false)));
 }
 
@@ -346,7 +347,7 @@ const MON_AB = {
   glutton: 'Ненажера: твої разові карти на героя діють удвічі слабше.'
 };
 const AB_SHORT = { noflee: 'не втекти', firefear: 'боїться вогню', kin: 'кличе родича', grow: 'росте від карт', nohelp: 'без помічників', mirror: 'дзеркальний', sleepy: 'соня', hoard: 'скарбник', schrodinger: 'рівень з кубика', glutton: 'ненажера' };
-const KIND_FIND = { dual: 'Особлива карта', race: 'Нова раса', class: 'Новий клас', mod: 'Підсилювач монстрів', wander: 'Приблудна потвора' };
+const KIND_FIND = { dual: 'Особлива карта', race: 'Нова раса', class: 'Новий клас', mod: 'Підсилювач монстрів', wander: 'Приблудна потвора', merchant: 'Торговець' };
 const reqName = r => r ? (r.sex ? (r.sex === 'f' ? 'жінок' : 'чоловіків') : r.race ? RACES[r.race].name : CLASSES[r.cls].name) : '';
 const sgn = n => n > 0 ? '+' + n : n < 0 ? '−' + Math.abs(n) : String(n);
 
@@ -386,6 +387,7 @@ function cardInfo(c) {
     case 'redirect': return { type: 'Разова', corner: '', text: 'Зіграй у будь-якому бою: бій з усіма монстрами переходить до іншого гравця на твій вибір.', flavor: c.flavor, foot: [`${c.value} зол.`, ''] };
     case 'flee': return { type: 'Разова', corner: '', text: 'Зіграй у бою: ти автоматично втікаєш.', flavor: c.flavor, foot: [`${c.value} зол.`, ''] };
     case 'wander': return { type: 'Особлива', corner: '', text: 'Зіграй у будь-якому бою разом із монстром з руки: він приєднується до бою.', flavor: c.flavor, foot: ['У бою', ''] };
+    case 'merchant': return { type: 'Особлива', corner: '🧳', text: 'Вибив двері — торговець пропонує 3 скарби: один можна купити за золото або виміняти на 2 карти з руки. З руки — у свій хід поза боєм.', flavor: c.flavor, foot: ['Торгівля', ''] };
     case 'levelup': return { type: 'Рівень', corner: '+1', text: 'Отримай 1 рівень. Переможний рівень так не взяти.', flavor: c.flavor, foot: ['Поза боєм', ''] };
   }
   return { type: '', corner: '', text: '', foot: ['', ''] };

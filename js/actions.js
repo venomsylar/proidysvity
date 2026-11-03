@@ -14,13 +14,15 @@ function actAllowed(p, act) {
   if (['charm', 'wolf', 'vanish', 'sniff'].includes(act.k)) return !G.busy && PERK[act.k](p);
   if (act.k === 'forge') return !G.busy && PERK.forge(p) && p.gear.some(g => g.uid === act.g && (g.forged || 0) < 3);
   if (act.k === 'heal') { const t = G.players[act.target]; return !G.busy && PERK.heal(p) && !!t && (t.curses || []).some(k => k.uid === act.curse); }
+  if (act.k === 'equipBest') return !G.over && !G.combat && !['setup', 'deal'].includes(G.phase) && !p._acting && bestGearPlan(p).plan.length > 0;
+  if (act.k === 'sellMany') { const v = p, ok = !G.busy && !G.over && !G.combat && cur() === v && ['start', 'afterKick', 'charity'].includes(G.phase); return ok && Array.isArray(act.uids) && act.uids.length > 0 && act.uids.every(u => { const f = findOwnCard(v, u); return f && f.c.value > 0 && f.c.kind !== 'race' && f.c.kind !== 'class'; }); }
   if (act.k === 'assault') return !!G.coop && G.coop.lair && !G.busy && !G.combat && G.phase === 'start' && cur() === p;
   if (act.k === 'bossReady') return !!G.bossWait && G.bossWait.waiting.includes(p.idx);
   if (act.k === 'assistDone') return !!G.assist && G.assist.who === p.idx;
   if (act.k === 'ready') return G.phase === 'prep' && (G.prepWait || []).includes(p.idx);
   if (act.k === 'gift') { const f = findOwnCard(p, act.uid), t = G.players[act.target]; return !!f && !!t && sameTeam(p, t) && !G.over && !G.combat && !['setup', 'deal'].includes(G.phase) && !p._acting; }
   if (act.k === 'trade') return canTrade(p) && !!G.players[act.target] && act.target !== p.idx;
-  if (act.k === 'help') { const cb = G.combat; return !G.busy && G.phase === 'combat' && !!cb && p === fighter() && !curseN(p, 'lonely') && !abOf(cb, 'nohelp') && cb.helper == null && !!G.players[act.target] && act.target !== p.idx && !cb.asked.has(act.target); }
+  if (act.k === 'help') { const cb = G.combat; return !G.busy && G.phase === 'combat' && !!cb && p === fighter() && !curseN(p, 'lonely') && !abOf(cb, 'nohelp') && !eventNoHelp() && cb.helper == null && !!G.players[act.target] && act.target !== p.idx && !cb.asked.has(act.target); }
   if (act.uid) { const f = findOwnCard(p, act.uid); return !!f && flatActs(cardActions(f.c, f.where, p)).some(a => !a.dis && sameAct(a.act, act)); }
   return dockActs(p).some(a => a.act && !a.dis && sameAct(a.act, act));
 }
@@ -56,7 +58,7 @@ function openSteal() {
     <div class="row end"><button class="btn ghost" type="button" data-close>Передумав</button></div>`);
   $('#sheet').querySelectorAll('[data-st]').forEach(b => b.onclick = () => { const [t, u] = b.dataset.st.split(':').map(Number); closeModal(); dispatch({ k: 'steal', target: t, item: u }); });
 }
-const SIDE_ACTS = new Set(['equip', 'unequip', 'rc', 'dual', 'rc2hand', 'droprc', 'gift']);
+const SIDE_ACTS = new Set(['equip', 'unequip', 'rc', 'dual', 'rc2hand', 'droprc', 'gift', 'equipBest']);
 function dispatch(act, asIdx = G.viewer) {
   closeMenu();
   if (NET.role === 'client') { netSendHost({ t: 'act', act }); return; }
@@ -106,6 +108,8 @@ async function execAct(p, a) {
     case 'rc': return doPlayRC(p, c, a.side === 'second');
     case 'dual': return doPlayDual(p, c);
     case 'uncurse': return doUncurse(p, c, G.players[a.target], a.mon);
+    case 'equipBest': { const { plan } = bestGearPlan(p); for (const g of plan) { if (canEquip(p, g)) continue; await doEquip(p, g); } return; }
+    case 'sellMany': { for (const u of a.uids) { const f = findOwnCard(p, u); if (f) await doSell(p, f.c); } return; }
     case 'charm': return perkCharm(p);
     case 'wolf': return perkWolf(p);
     case 'vanish': return perkVanish(p);
@@ -129,6 +133,7 @@ async function execAct(p, a) {
     case 'horn': return coopHorn(p, c);
     case 'curseMon': return coopCurseMon(p, c);
     case 'gift': return doGift(p, c, G.players[a.target]);
+    case 'merchant': return playMerchant(p, c);
     case 'trade': return doTrade(p, G.players[a.target], (a.give || []).map(u => findTradeItem(p, u)).filter(Boolean));
   }
 }
@@ -140,7 +145,7 @@ function cardActions(c, where, v = viewerP()) {
   const isFighter = inCombat && v === fighter(), isHelper = inCombat && (cb.helper === v.idx || !!cb.boss);
   const assist = !!G.assist && G.assist.who === v.idx && !v._acting && inCombat && cb.helper === v.idx;
   const bossW = !!G.bossWait && G.bossWait.waiting.includes(v.idx) && !v._acting;
-  const combatOk = inCombat && (free || win || assist || bossW);
+  const combatOk = inCombat && (free || win || assist || bossW) && !(eventNoMeddle() && !isFighter && !isHelper);
   const sideOk = !G.over && !inCombat && G.phase !== 'setup' && !v._acting; // спорядження, раса, клас — коли завгодно поза боєм, навіть не на своєму ході
   const acts = [];
   const A = (label, act, extra = {}) => acts.push({ label, act, ...extra });
@@ -188,6 +193,7 @@ function cardActions(c, where, v = viewerP()) {
       }
       sell(); break;
     case 'horn': if (G.coop && free && !inCombat) A(`Затрубити: Загроза −2 (зараз ${G.coop.threat})`, { k: 'horn', uid: c.uid }, { dis: G.coop.threat ? null : 'Загрози й так немає.' }); sell(); break;
+    case 'merchant': if (free && myTurn && !inCombat && ['start', 'afterKick', 'charity'].includes(G.phase)) A('Покликати торговця', { k: 'merchant', uid: c.uid }); break;
     case 'flee': if (inCombat && free && (isFighter || isHelper) && !cb.boss) A('Втекти з бою', { k: 'smoke', uid: c.uid }); sell(); break;
     case 'mod': if (combatOk && !(friend && c.bonus > 0)) A(`Зіграти на монстра (${sgn(c.bonus)})`, { k: 'mod', uid: c.uid }); break;
     case 'monster':
@@ -209,9 +215,45 @@ function cardActions(c, where, v = viewerP()) {
   if (inCombat && hasCls(v, 'wizard') && !['oneshot', 'flee'].includes(c.kind) && where === 'hand' && wizUsed(v) < 3 && ((isFighter && free) || (cb.boss && bossW))) A(`Спалити заради +2 (Маг, ${wizUsed(v)}/3)`, { k: 'wizard', uid: c.uid });
   return acts;
 }
+function equipBestBtn(v) {
+  if (!v || G.over || G.combat || ['setup', 'deal'].includes(G.phase) || v._acting || (NET.role !== 'client' && v.type !== 'human')) return null;
+  const { plan, delta, flee } = bestGearPlan(v); if (!plan.length) return null;
+  return { label: `🎒 Спорядитися найкраще${delta > 0 ? ` (+${delta})` : flee > 0 ? ` (втеча +${flee})` : ''}`, act: { k: 'equipBest' }, title: 'Вдягне: ' + plan.map(c => c.name).join(', ') };
+}
+/* «Продати мотлох»: усе, що можна продати з руки (і з себе), з позначеним непотрібним */
+function sellJunkList(v) {
+  if (!v || G.busy || G.over || G.combat || cur() !== v || !['start', 'afterKick', 'charity'].includes(G.phase) || (NET.role !== 'client' && v.type !== 'human')) return [];
+  return [...v.hand.filter(c => c.value > 0 && !['race', 'class', 'dual'].includes(c.kind)).map(c => ({ c, where: 'hand' })), ...v.gear.filter(c => c.value > 0).map(c => ({ c, where: 'gear' }))];
+}
+function isJunk(v, c, where) {
+  if (where === 'gear') return !usable(v, c);
+  if (c.kind !== 'gear') return false;
+  if (!usable(v, c)) return true;
+  return gearScore(v, gearAfter(v, c)) <= gearScore(v, v.gear) + .01 && !bestGearPlan(v).plan.includes(c);
+}
+function openSellJunk() {
+  const v = viewerP(); const list = sellJunkList(v); if (!list.length) return;
+  const sel = new Set(list.filter(x => isJunk(v, x.c, x.where)).map(x => x.c.uid));
+  const draw = () => {
+    const total = sum(list.filter(x => sel.has(x.c.uid)), x => sellPrice(v, x.c)) + (halflingDouble(v) && sel.size ? 0 : 0);
+    const cap = Math.max(0, levelsToWin(v) - 1), gold = v.gold + total, lv = Math.min(cap, Math.floor(gold / 1000)), rest = gold - lv * 1000;
+    const row = x => `<button type="button" class="sj-row" data-sj="${x.c.uid}" aria-pressed="${sel.has(x.c.uid)}"><span class="sj-ck">${sel.has(x.c.uid) ? '✓' : ''}</span>${artIcon(x.c)} <span class="sj-n">${esc(x.c.name)}${x.where === 'gear' ? ' <em>вдягнуто</em>' : ''}${isJunk(v, x.c, x.where) ? ' <em class="jk">мотлох</em>' : ''}</span><b>${sellPrice(v, x.c)}</b></button>`;
+    return `<h2>Продати мотлох</h2><p class="hint">Позначено те, що тобі не допомагає: речі не для тебе й слабші за вдягнуті. Познач або зніми що завгодно.${halflingDouble(v) ? ' Напіврослик: перша річ піде вдвічі дорожче.' : ''}</p>
+      <div class="sj-list">${list.map(row).join('')}</div>
+      <div class="sj-sum">Разом <b>${total}</b> зол. · золота стане ${gold}${lv ? ` → <b class="up">+${lv} ${plural(lv, 'рівень', 'рівні', 'рівнів')}</b>, лишиться ${rest}` : ` (до рівня бракує ${Math.max(0, 1000 - gold % 1000)})`}${cap === 0 && gold >= 1000 ? ' · переможний рівень за золото не купиш' : ''}</div>
+      <div class="row end"><button class="btn ghost" type="button" data-close>Скасувати</button><button class="btn primary" type="button" id="sjGo" ${sel.size ? '' : 'disabled'}>Продати (${sel.size})</button></div>`;
+  };
+  const bind = () => {
+    $('#sheet').querySelectorAll('[data-sj]').forEach(b => b.onclick = () => { const u = +b.dataset.sj; sel.has(u) ? sel.delete(u) : sel.add(u); $('#sheet').innerHTML = draw(); bind(); });
+    $('#sheet').querySelectorAll('[data-close]').forEach(x => x.onclick = closeModal);
+    const go = $('#sjGo'); if (go) go.onclick = () => { closeModal(); dispatch({ k: 'sellMany', uids: [...sel] }); };
+  };
+  showModal(draw(), 'wide'); bind();
+}
 function dockActs(v) {
   const acts = [], p = cur();
   if (!v || !p || G.over) return acts;
+  { const eb = !G.combat && G.phase !== 'prep' && !G.busy ? equipBestBtn(v) : null; if (eb) acts.push(eb); }
   if (G.window) {
     const wait = waitingOn();
     const doneLbl = h => G.window.playedBy && G.window.playedBy.has(h.idx) ? 'Готово' : 'Не втручаюсь';
@@ -237,9 +279,10 @@ function dockActs(v) {
   }
   if (G.phase === 'prep') {
     const wait = (G.prepWait || []).map(i => G.players[i]).filter(Boolean);
-    if (NET.role === 'client') { if (wait.includes(v)) acts.push({ label: 'Я спорядився', act: { k: 'ready' }, cls: 'primary pulse' }); return acts; }
+    if (NET.role === 'client') { if (wait.includes(v)) { const eb = equipBestBtn(v); if (eb) acts.push(eb); acts.push({ label: 'Я спорядився', act: { k: 'ready' }, cls: 'primary pulse' }); } return acts; }
     const locals = wait.filter(h => h.type === 'human');
     locals.forEach(h => acts.push({ label: locals.length > 1 || h !== v ? `${h.name}: я спорядився` : 'Я спорядився', act: { k: 'ready' }, as: h.idx, cls: 'primary pulse' }));
+    { const eb = equipBestBtn(v); if (eb) acts.unshift(eb); }
     return acts;
   }
   if (G.busy) return acts;
@@ -251,9 +294,9 @@ function dockActs(v) {
   if (G.phase === 'combat' && G.combat) {
     const fp = fighter(); if (v !== fp) return acts;
     const s = sides(), cb = G.combat;
-    acts.push({ label: 'Битися!', act: { k: 'fight' }, cls: 'primary pulse', dis: !s.win });
-    acts.push({ label: 'Покликати на поміч', fn: openHelp, dis: abOf(cb, 'nohelp') ? 'Цей монстр не терпить натовпу: кликати на поміч не можна.' : curseN(fp, 'lonely') ? 'Прокляття «Ніхто не любить»: допомагати тобі ніхто не може.' : cb.helper != null || G.players.every(q => q === fp || cb.asked.has(q.idx)) });
-    acts.push({ label: 'Тікати', act: { k: 'flee' }, cls: 'danger' });
+    acts.push({ label: s.win ? 'Битися!' : `Битися! · бракує ${s.mon - s.hero + (s.tie ? 0 : 1)}`, act: { k: 'fight' }, cls: 'primary pulse', dis: !s.win });
+    acts.push({ label: 'Покликати на поміч', fn: openHelp, dis: eventNoHelp() ? 'Туман: на поміч кликати не можна, поки триває подія.' : abOf(cb, 'nohelp') ? 'Цей монстр не терпить натовпу: кликати на поміч не можна.' : curseN(fp, 'lonely') ? 'Прокляття «Ніхто не любить»: допомагати тобі ніхто не може.' : cb.helper != null || G.players.every(q => q === fp || cb.asked.has(q.idx)) });
+    { const ch = fleeChance(fp), n = cb.mons.length, all = Math.pow(ch, n); acts.push({ label: `Тікати · ${Math.round(all * 100)}%${n > 1 ? ` (${n} кидки)` : ''}`, act: { k: 'flee' }, cls: 'danger', title: n > 1 ? `Від кожного монстра окремо: ${Math.round(ch * 100)}%` : '' }); }
     if (PERK.charm(v)) acts.push({ label: '🌿 Зваба: −3 монстру', act: { k: 'charm' } });
     if (PERK.wolf(v)) acts.push({ label: '🐺 Обернутися: +3', act: { k: 'wolf' } });
     if (PERK.vanish(v) && !s.win) acts.push({ label: '🌀 Зникнути (раз за гру)', act: { k: 'vanish' } });
@@ -265,6 +308,7 @@ function dockActs(v) {
   if (G.phase === 'charity') acts.push({ label: v.hand.length > handLimit(v) ? 'Завершити хід…' : 'Завершити хід', act: { k: 'end' }, pick: true, cls: 'primary' });
   if (canTrade(v)) acts.push({ label: 'Обмін…', fn: openTrade });
   if (canSteal(v)) acts.push({ label: 'Поцупити…', fn: openSteal });
+  if (sellJunkList(v).length) acts.push({ label: '💰 Продати мотлох…', fn: openSellJunk });
   if (PERK.sniff(v)) acts.push({ label: '🐺 Нюх: глянути двері', act: { k: 'sniff' } });
   else if (sniffWait(v)) acts.push({ label: '🐺 Нюх', act: { k: 'sniff' }, dis: 'Нюх — раз на два твої ходи. Наступного ходу знову зможеш.' });
   if (PERK.forge(v)) acts.push({ label: '🔥 Кувати…', fn: openForge });
@@ -440,12 +484,13 @@ function loadSetup(s) {
     if (['easy', 'normal', 'hard'].includes(d.coopDiff)) s.coopDiff = d.coopDiff;
     if (rows.length >= 2) s.rows = rows;
     if ([10, 20].includes(d.goal)) s.goal = d.goal;
+    if (d.events === false) s.events = false;
     if ([1.4, 1, .45].includes(d.speed)) s.speed = d.speed;
     if ([2.1, 1.5, .9].includes(d.anim)) s.anim = d.anim;
   } catch (e) { /* без збережених налаштувань */ }
 }
 function storeSetup(s = setupState) {
-  try { localStorage.setItem(SETUP_KEY, JSON.stringify({ rows: s.rows.filter(r => r.type !== 'remote').map(r => ({ name: r.name, type: r.type, sex: r.sex, diff: r.diff || 2, trait: r.trait || '', team: r.team | 0 })), teams: !!s.teams, mode: s.mode, coopDiff: s.coopDiff, goal: s.goal, speed: s.speed, anim: s.anim })); } catch (e) { }
+  try { localStorage.setItem(SETUP_KEY, JSON.stringify({ rows: s.rows.filter(r => r.type !== 'remote').map(r => ({ name: r.name, type: r.type, sex: r.sex, diff: r.diff || 2, trait: r.trait || '', team: r.team | 0 })), teams: !!s.teams, mode: s.mode, coopDiff: s.coopDiff, goal: s.goal, speed: s.speed, anim: s.anim, events: s.events !== false })); } catch (e) { }
 }
 loadSetup(setupState);
 function loadMonTypes() { try { const t = JSON.parse(localStorage.getItem('pdsv-montypes') || 'null'); if (t) return { undead: t.undead !== false, dragon: t.dragon !== false, boss: t.boss !== false }; } catch (e) { } return { undead: true, dragon: true, boss: true }; }
@@ -510,6 +555,8 @@ function openSetup() {
       <label class="chk"><input type="checkbox" data-mt="dragon" ${s.types.dragon ? 'checked' : ''}> 🐉 Дракони</label>
       <label class="chk"><input type="checkbox" data-mt="boss" ${s.types.boss !== false ? 'checked' : ''}> 👑 Боси</label>
     </div>
+    <div class="checks" style="margin-top:8px" role="group" aria-label="Події"><label class="chk"><input type="checkbox" data-ev ${s.events !== false ? 'checked' : ''}> 🎲 Події на столі</label></div>
+    <p class="hint" style="margin-top:6px">${s.events !== false ? 'Раз на три кола відкривається подія — на одне коло змінює правила для всіх: «Повний місяць», «Ярмарок», «Туман», «Свято» тощо.' : 'Подій не буде — звичайні правила всю гру.'}</p>
     <p class="hint" style="margin-top:8px">${s.types.undead || s.types.dragon || s.types.boss !== false ? `Граємо з такими монстрами: ${monTypesText(s.types)}.${s.types.dragon ? ' Дракони не бояться вогняних речей, зате є драконобійна зброя.' : ''}${s.types.undead ? ' Вогонь палить нежить: вогняні речі дають проти неї +2.' : ''}${s.types.boss !== false ? ' Боси (14–20 рівня): програв — тривале прокляття, переміг — благословення до кінця гри.' : ''}` : 'Лише звичайні монстри — без нежиті й драконів.'}</p>
     <h3>Темп ботів</h3>
     <div class="seg" role="group" aria-label="Темп ботів">${[[1.4, 'Спокійний'], [1, 'Звичайний'], [.45, 'Швидкий']].map(([v, l]) => `<button type="button" data-sp="${v}" aria-pressed="${s.speed === v}">${l}</button>`).join('')}</div>
@@ -520,7 +567,7 @@ function openSetup() {
     <div class="row end">${MENU.open ? '<button class="btn ghost" type="button" id="setupBack">Назад</button>' : ''}<button class="btn ghost" type="button" id="rulesB">Правила</button><button class="btn primary" type="button" id="startB">Почати гру</button></div>`;
   const save = () => s.rows.forEach((r, i) => { const el = $('#pname-' + i); if (el && r.type !== 'remote') r.name = el.value.trim() || (r.type === 'bot' ? BOT_NAMES[i] : `Гравець ${i + 1}`); });
   const bind = () => {
-    $('#sheet').onchange = e => { const sel = e.target.closest('[data-diff]'); if (sel) { save(); s.rows[+sel.dataset.diff].diff = +sel.value; storeSetup(); } const st = e.target.closest('[data-trait]'); if (st) { save(); s.rows[+st.dataset.trait].trait = TRAITS[st.value] ? st.value : ''; storeSetup(); } const mt = e.target.closest('[data-mt]'); if (mt) { save(); s.types[mt.dataset.mt] = mt.checked; saveMonTypes(s.types); rerender(); } };
+    $('#sheet').onchange = e => { const sel = e.target.closest('[data-diff]'); if (sel) { save(); s.rows[+sel.dataset.diff].diff = +sel.value; storeSetup(); } const st = e.target.closest('[data-trait]'); if (st) { save(); s.rows[+st.dataset.trait].trait = TRAITS[st.value] ? st.value : ''; storeSetup(); } const mt = e.target.closest('[data-mt]'); if (mt) { save(); s.types[mt.dataset.mt] = mt.checked; saveMonTypes(s.types); rerender(); } const ev = e.target.closest('[data-ev]'); if (ev) { save(); s.events = ev.checked; storeSetup(); rerender(); } };
     $('#sheet').oninput = e => { if (e.target.id && e.target.id.startsWith('pname-')) { save(); storeSetup(); } };
     $('#sheet').onclick = e => {
       const b = e.target.closest('button'); if (!b) return;
@@ -559,7 +606,7 @@ function saveGame() {
   try {
     const data = { v: APP_VERSION, t: Date.now(), goal: G.goal, teams: G.teams, types: G.types, cur: G.cur, turnNo: G.turnNo || 0, gid: G.gid,
       players: G.players, doorDeck: G.doorDeck, treasureDeck: G.treasureDeck, doorDiscard: G.doorDiscard, treasureDiscard: G.treasureDiscard,
-      log: G.log.slice(-60), coop: G.coop, hist: G.hist, hl: G.hl, setup: { speed: setupState.speed, anim: setupState.anim, mode: setupState.mode } };
+      log: G.log.slice(-60), coop: G.coop, event: G.event || null, events: !!G.events, lastEvent: G.lastEvent || null, hist: G.hist, hl: G.hl, setup: { speed: setupState.speed, anim: setupState.anim, mode: setupState.mode } };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data, (k, v) => (k && saveSkip(k)) ? undefined : v));
   } catch (e) { /* місця немає чи приватний режим — гра працює й без збереження */ }
 }
@@ -572,7 +619,7 @@ function resumeGame() {
   if (G.combat) { G.combat.mons.forEach(x => disposeMesh(x.m)); G.combat.meshes.forEach(disposeMesh); }
   T.die.visible = false;
   botSpeed = d.setup.speed || 1; ANIM = d.setup.anim || 1.5;
-  Object.assign(G, { reveal: -1, gid: G.gid + 1, goal: d.goal, teams: !!d.teams, types: d.types, players: d.players, doorDeck: d.doorDeck, treasureDeck: d.treasureDeck, doorDiscard: d.doorDiscard, treasureDiscard: d.treasureDiscard,
+  Object.assign(G, { reveal: -1, gid: G.gid + 1, goal: d.goal, teams: !!d.teams, types: d.types, event: d.event || null, events: !!d.events, lastEvent: d.lastEvent || null, players: d.players, doorDeck: d.doorDeck, treasureDeck: d.treasureDeck, doorDiscard: d.doorDiscard, treasureDiscard: d.treasureDiscard,
     cur: d.cur, turnNo: d.turnNo, viewer: -1, phase: 'next', combat: null, busy: true, over: false, window: null, assist: null, bossWait: null, prepWait: [], log: d.log || [], fresh: new Set(), pendingSetup: false, coop: d.coop || null, stat: {}, hist: d.hist || null, hl: d.hl || null });
   if (G.coop) { DUNGEON.hand = G.coop.hand; DUNGEON.mem = {}; }
   // лічильник карт — вище за всі збережені, щоб нові карти не збіглися номерами
@@ -592,7 +639,7 @@ function resumeGame() {
 }
 async function newGame() {
   hideMainMenu(); clearSave();
-  const s = setupState; botSpeed = s.speed; ANIM = s.anim || 1.5; G.goal = s.goal;
+  const s = setupState; botSpeed = s.speed; ANIM = s.anim || 1.5; G.goal = s.goal; G.events = s.events !== false; G.event = null; G.lastEvent = null;
   G.players.forEach(destroySeat);
   if (G.combat) { G.combat.mons.forEach(x => disposeMesh(x.m)); G.combat.meshes.forEach(disposeMesh); }
   T.die.visible = false;

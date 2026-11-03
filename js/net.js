@@ -83,7 +83,7 @@ function queueSnap() {
 function snapFor(i) {
   const cb = G.combat;
   return {
-    gid: G.gid, turnNo: G.turnNo || 0, goal: G.goal, teams: !!G.teams, bossWait: G.bossWait ? G.bossWait.waiting : null,
+    gid: G.gid, turnNo: G.turnNo || 0, goal: G.goal, teams: !!G.teams, ev: G.event || null, bossWait: G.bossWait ? G.bossWait.waiting : null,
     coop: G.coop ? { threat: G.coop.threat, max: G.coop.max, keys: G.coop.keys, need: G.coop.need, lair: G.coop.lair, round: G.coop.round, diff: G.coop.diff, handN: G.coop.hand.length, boss: G.coop.boss ? { id: G.coop.boss.id, name: G.coop.boss.name, art: G.coop.boss.art, ability: G.coop.boss.ability } : null, guards: G.coop.guards ? G.coop.guards.map(g => ({ name: g.name, lvl: g.lvl, art: g.art })) : null, guardsDone: G.coop.guardsDone | 0, fc: G.coop.lair ? bossForecast() : null } : null, cur: G.cur, phase: G.phase, busy: G.busy, over: G.over, log: G.log.slice(-60), prepWait: G.prepWait || [],
     dN: G.doorDeck.length, tN: G.treasureDeck.length, dTop: G.doorDiscard[G.doorDiscard.length - 1] || null, tTop: G.treasureDiscard[G.treasureDiscard.length - 1] || null,
     players: G.players.map(p => ({ idx: p.idx, dblTurn: p.dblTurn, stoleTurn: p.stoleTurn, team: p.team, name: p.name, type: p.type, off: offLeft(p), sub: !!p.wasRemote, color: p.color, sex: p.sex, diff: p.diff, trait: p.trait, vanished: !!p.vanished, ownTurns: p.ownTurns || 0, sniffAt: p.sniffAt ?? null, forgeTurn: p.forgeTurn, healTurn: p.healTurn, level: p.level, gold: p.gold, gear: p.gear, raceCard: p.raceCard, clsCard: p.clsCard, raceCard2: p.raceCard2, clsCard2: p.clsCard2, dualRace: p.dualRace, dualCls: p.dualCls, curses: p.curses || [], bless: p.bless || [], died: p.died, mem: p.type === 'bot' ? p.mem : null, hand: p.idx === i ? p.hand : p.hand.length })),
@@ -384,7 +384,7 @@ function leaveRoom() {
   if (NET.rejoining && NET.rejoining.waitT) clearTimeout(NET.rejoining.waitT);
   Object.assign(NET, { role: 'local', conn: null, peer: null, me: -1, gid: -1, tok: null, rejoining: null });
   NET.mirror.forEach(disposeMesh); NET.mirror.clear();
-  G.players.forEach(destroySeat); G.players = []; G.combat = null; G.window = null; G.coop = null; G.bossWait = null; G.assist = null; G.log = []; G.over = false; G.phase = 'setup'; G.viewer = -1;
+  G.players.forEach(destroySeat); G.players = []; G.combat = null; G.window = null; G.coop = null; G.bossWait = null; G.assist = null; G.event = null; G.log = []; G.over = false; G.phase = 'setup'; G.viewer = -1;
   G.doorDeck = []; G.treasureDeck = []; G.doorDiscard = []; G.treasureDiscard = [];
   syncDeck('door'); syncDeck('treasure'); syncDiscardTop('door'); syncDiscardTop('treasure'); T.die.visible = false;
   boardFor = null; renderUI(); renderLog(); chatSync();
@@ -415,6 +415,7 @@ function clientOnData(d) {
     case 'helpAsk': { NET.curAsk = d.id; playSfx('alert'); helpAskModal(d.title, d.text, d.tr | 0, d.T | 0, d.cards || []).then(r => { if (NET.curAsk !== d.id) return; NET.curAsk = 0; netSendHost({ t: 'answer', id: d.id, ok: r.ok, pick: r.counter == null ? null : r.counter }); }); break; }
     case 'cardsAsk': NET.curAsk = d.id; cardsModal(d.title, d.text, d.groups || [], d.yes, d.no).then(ok => { if (NET.curAsk !== d.id) return; NET.curAsk = 0; netSendHost({ t: 'answer', id: d.id, ok }); }); break;
     case 'tradeAsk': { const me = viewerP(); if (!me) { netSendHost({ t: 'answer', id: d.id, ok: false }); break; } NET.curAsk = d.id; playSfx('alert'); tradePickModal(me, d.from, d.give || []).then(pick => { if (NET.curAsk !== d.id) return; NET.curAsk = 0; netSendHost({ t: 'answer', id: d.id, ok: !!pick, pick: pick || [] }); }); break; }
+    case 'shopAsk': { const me = viewerP(); if (!me) { netSendHost({ t: 'answer', id: d.id, ok: false }); break; } NET.curAsk = d.id; shopModal(me, d.offers || [], d.gold | 0, me.hand.filter(c => !c.hidden)).then(pick => { if (NET.curAsk !== d.id) return; NET.curAsk = 0; netSendHost({ t: 'answer', id: d.id, ok: !!pick, pick }); }); break; }
     case 'askEnd': if (NET.curAsk === d.id) { NET.curAsk = 0; closeModal(); } break;
   }
 }
@@ -428,7 +429,7 @@ function applySnap(s) {
     G.players.forEach(destroySeat); NET.mirror.forEach(disposeMesh); NET.mirror.clear(); G.players = []; boardFor = null;
   }
   if (s.over) saveRejoin(null);
-  Object.assign(G, { turnNo: s.turnNo, coop: s.coop || null, bossWait: s.bossWait ? { waiting: s.bossWait } : null, goal: s.goal, teams: !!s.teams, cur: s.cur, phase: s.phase, busy: s.busy, over: s.over, log: s.log, prepWait: s.prepWait || [] });
+  Object.assign(G, { turnNo: s.turnNo, coop: s.coop || null, bossWait: s.bossWait ? { waiting: s.bossWait } : null, goal: s.goal, teams: !!s.teams, event: s.ev || null, cur: s.cur, phase: s.phase, busy: s.busy, over: s.over, log: s.log, prepWait: s.prepWait || [] });
   G.doorDeck = new Array(s.dN).fill(0); G.treasureDeck = new Array(s.tN).fill(0);
   G.doorDiscard = s.dTop ? [s.dTop] : []; G.treasureDiscard = s.tTop ? [s.tTop] : [];
   const me = G.players[NET.me]; const prev = new Set(me ? me.hand.map(c => c.uid) : []);
@@ -502,7 +503,6 @@ function onNetFx(d) {
     case 'lvl': { const q = G.players[a.who]; if (q) floatLevel(q, a.d); break; }
     case 'defeat': { const m = NET.mirror.get(a.uid); if (m) { NET.mirror.delete(a.uid); defeatAnim(m); } break; }
     case 'die': { const q = G.players[a.who]; if (q) rollDie(q, a.v, a.info || null); break; }
-    case 'emo': { const q = G.players[a.who]; if (q) avatarReact(q, a.kind); break; }
     case 'banner': banner(a.text, a.color); break;
     case 'confetti': for (let i = 0; i < 4; i++) setTimeout(() => burst(new THREE.Vector3((Math.random() - .5) * 8, 9, (Math.random() - .5) * 8), [a.color, '#ffd36b', '#ffffff', '#ef6b5d', '#5aa9e2', '#86cf6e'], 260, 5, 4.5, -2.6, .22, false, 6, true), i * 450); break;
     case 'sfx': playSfx(a.n); break;

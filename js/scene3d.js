@@ -39,8 +39,18 @@ const SKINS = {
   newyear: { name: 'Новорічний', desc: 'Червоне сукно, сніжинки, гірлянда й сніг.', felt: ['#8c1b2a', '#5a0e19'], line: '255,236,190', pat: 'snow', ring: 0xe8c46a, wood: ['#2f4a33', '#1b2e20'], floor: 0x0e1626, bg: 0x0a1020, hemi: [0xdce8ff, 0x1a1020, .58], amb: .05, spot: [0xfff0d8, 1.5, 4.3, .6], warm: [0xff5a3a, .35], rim: [0x9fc4ff, .38], exp: 1, dust: { c: 0xffffff, o: .9, s: .14, mode: 'snow' }, glow: .1, extra: 'garland' },
   lamp: { name: 'Лампова ніч', desc: 'Навколо темно — світить лише лампа над столом.', felt: ['#1b4436', '#0f2a20'], line: '224,169,59', pat: 'rosette', ring: 0xb8862b, wood: ['#4a2a18', '#2a170b'], floor: 0x040302, bg: 0x020101, hemi: [0xffe4c0, 0x000000, .06], amb: 0, spot: [0xffdcaa, 3.2, 4.0, .45], warm: [0xff9244, 0], rim: [0x86a8ff, .03], exp: 1, dust: { c: 0xffe2b0, o: .75, s: .06, mode: 'cone' }, glow: .06, extra: null },
   dungeon: { name: 'Підземелля', desc: 'Камінь, смолоскипи й фіолетовий оксамит.', felt: ['#37284f', '#211633'], line: '205,190,255', pat: 'runes', ring: 0x8d8f9c, wood: ['#55555c', '#2c2c32'], stone: true, floor: 0x0d0c10, bg: 0x07060a, hemi: [0xcfc6ff, 0x100c14, .34], amb: .04, spot: [0xffe6c8, 1.15, 4.4, .6], warm: [0xff7a2a, 0], rim: [0x8070ff, .2], exp: 1, dust: { c: 0xffa860, o: .55, s: .06, mode: 'rise' }, glow: .1, extra: 'torches' },
-  space: { name: 'Космос', desc: 'Зоряне сукно, неонове кільце й тиша.', felt: ['#15214f', '#090f2c'], line: '90,225,255', pat: 'stars', ring: 0x46e0ff, ringGlow: .6, wood: ['#1d2134', '#0c0e18'], floor: 0x03040a, bg: 0x02030a, hemi: [0xb0ccff, 0x0a0a20, .5], amb: .05, spot: [0xd6e8ff, 1.45, 4.4, .6], warm: [0xb36bff, .45], rim: [0x46e0ff, .32], exp: 1, dust: { c: 0x9fd8ff, o: .6, s: .07, mode: 'float' }, glow: .1, extra: 'stars' }
+  space: { name: 'Космос', desc: 'Зоряне сукно, неонове кільце й тиша.', felt: ['#15214f', '#090f2c'], line: '90,225,255', pat: 'stars', ring: 0x46e0ff, ringGlow: .6, wood: ['#1d2134', '#0c0e18'], floor: 0x03040a, bg: 0x02030a, hemi: [0xb0ccff, 0x0a0a20, .5], amb: .05, spot: [0xd6e8ff, 1.45, 4.4, .6], warm: [0xb36bff, .45], rim: [0x46e0ff, .32], exp: 1, dust: { c: 0x9fd8ff, o: .6, s: .07, mode: 'float' }, glow: .1, extra: 'stars' },
+  // ↓ відкриваються досягненнями
+  forest: { ach: 'ten_games', name: 'Лісова галявина', desc: 'Мох, листя, березові дошки й світлячки.', felt: ['#3c5a24', '#22361a'], line: '214,236,150', pat: 'leaves', ring: 0x9a7a4a, wood: ['#cdbf9e', '#8f8167'], floor: 0x0f1a0c, bg: 0x081006, hemi: [0xeaffd0, 0x14200c, .55], amb: .05, spot: [0xfff4cc, 1.5, 4.4, .6], warm: [0xc8ff6a, .25], rim: [0x9fe0ff, .26], exp: 1, dust: { c: 0xd8ff6a, o: .85, s: .09, mode: 'float' }, glow: .1, extra: null },
+  sich: { ach: 'first_win', name: 'Козацька Січ', desc: 'Червоне сукно з вишитим орнаментом і дубовий стіл.', felt: ['#641816', '#360b0a'], line: '245,220,170', pat: 'ornament', ring: 0xd4a23a, wood: ['#5e3a1e', '#3a2210'], floor: 0x18100a, bg: 0x0c0806, hemi: [0xffe8c8, 0x2a140a, .58], amb: .05, spot: [0xffd9a0, 1.55, 4.4, .6], warm: [0xff8a3a, .4], rim: [0x8ab0ff, .22], exp: 1, dust: { c: 0xffd9a0, o: .4, s: .07, mode: 'rise' }, glow: .1, extra: null },
+  treasury: { ach: 'rich', name: 'Скарбниця', desc: 'Бордовий оксамит, розсип монет і золоте кільце.', felt: ['#4a1030', '#2a0818'], line: '255,210,90', pat: 'coins', ring: 0xffc83a, ringGlow: .35, wood: ['#3a2410', '#1f1208'], floor: 0x120a06, bg: 0x0a0604, hemi: [0xffe6b0, 0x1a0a06, .55], amb: .05, spot: [0xffe0a0, 1.6, 4.4, .6], warm: [0xffb03a, .45], rim: [0xffd36b, .22], exp: 1, dust: { c: 0xffd36b, o: .8, s: .08, mode: 'cone' }, glow: .12, extra: null },
+  lair: { ach: 'dragon', name: 'Лігво дракона', desc: 'Луска, жар і смолоскипи. Пахне смаженим лицарем.', felt: ['#3a1612', '#1c0a08'], line: '255,140,60', pat: 'scales', ring: 0xff6a1e, ringGlow: .45, wood: ['#3c3634', '#1e1a19'], stone: true, floor: 0x0e0806, bg: 0x080403, hemi: [0xffc8a0, 0x140604, .36], amb: .04, spot: [0xffc89a, 1.25, 4.4, .6], warm: [0xff4a1a, .5], rim: [0xff7a3a, .2], exp: 1, dust: { c: 0xff8a2a, o: .85, s: .07, mode: 'rise' }, glow: .1, extra: 'torches' },
+  ice: { ach: 'coop_win', name: 'Крижаний замок', desc: 'Блакитний лід, іній на сукні й тихий сніг.', felt: ['#2a5a7a', '#14304a'], line: '220,245,255', pat: 'frost', ring: 0xbfe8ff, ringGlow: .3, wood: ['#9fb8cc', '#5a7488'], stone: true, floor: 0x0a1420, bg: 0x060c16, hemi: [0xdff3ff, 0x0a1420, .6], amb: .06, spot: [0xeaf6ff, 1.5, 4.4, .6], warm: [0x7fd0ff, .3], rim: [0xbfe8ff, .4], exp: 1, dust: { c: 0xffffff, o: .9, s: .12, mode: 'snow' }, glow: .1, extra: null },
+  royal: { ach: 'epic_win', name: 'Тронна зала', desc: 'Пурпур, корони й позолота — для справжніх королів підземелля.', felt: ['#4a1e6a', '#2a0e40'], line: '255,214,110', pat: 'crowns', ring: 0xffd36b, ringGlow: .3, wood: ['#4a1a1a', '#2a0c0c'], floor: 0x100a14, bg: 0x08050c, hemi: [0xf0dcff, 0x140a1a, .55], amb: .05, spot: [0xffe8c0, 1.6, 4.4, .6], warm: [0xc86aff, .35], rim: [0xffd36b, .25], exp: 1, dust: { c: 0xffe08a, o: .6, s: .07, mode: 'float' }, glow: .12, extra: 'garland' }
 };
+const achName = id => { const a = typeof ACH !== 'undefined' && ACH.find(x => x[0] === id); return a ? `${a[1]} «${a[2]}»` : id; };
+const achHave = id => !id || (typeof STATS !== 'undefined' && !!STATS.ach[id]);
+const skinLocked = id => !!SKINS[id] && !achHave(SKINS[id].ach);
 let SKIN_ID = 'tavern'; try { const sv = localStorage.getItem('pdsv-skin'); if (sv && SKINS[sv]) SKIN_ID = sv; } catch (e) { /* сховище недоступне */ }
 let SKIN = SKINS[SKIN_ID];
 function woodTex(S = SKIN) {
@@ -87,6 +97,40 @@ function feltTex(S = SKIN) {
       }
       g.beginPath(); for (let i = 0; i <= 5; i++) { const a = -Math.PI / 2 + i * 4 * Math.PI / 5; const x = c + Math.cos(a) * 230, y = c + Math.sin(a) * 230; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke();
       g.beginPath(); g.arc(c, c, 250, 0, Math.PI * 2); g.stroke();
+    } else if (S.pat === 'leaves') {
+      const leaf = (x, y, r, a, al) => { g.save(); g.translate(x, y); g.rotate(a); g.strokeStyle = L(al); g.lineWidth = Math.max(2, r / 10); g.beginPath(); g.moveTo(0, -r); g.quadraticCurveTo(r * .7, 0, 0, r); g.quadraticCurveTo(-r * .7, 0, 0, -r); g.moveTo(0, -r * .8); g.lineTo(0, r * 1.2); g.stroke(); g.restore(); };
+      for (let i = 0; i < 80; i++) { const a = Math.random() * 6.28, r = 320 + Math.random() * 640; leaf(c + Math.cos(a) * r, c + Math.sin(a) * r, 20 + Math.random() * 30, Math.random() * 6.28, .1 + Math.random() * .14); }
+      for (let i = 0; i < 8; i++) leaf(c + Math.cos(i * Math.PI / 4) * 120, c + Math.sin(i * Math.PI / 4) * 120, 70, i * Math.PI / 4 + Math.PI / 2, .3);
+      g.strokeStyle = L(.28); g.lineWidth = 3; g.beginPath(); g.arc(c, c, 250, 0, Math.PI * 2); g.stroke();
+    } else if (S.pat === 'ornament') {
+      // вишитий пояс із ромбів по колу та восьмикутна зірка в центрі
+      g.strokeStyle = L(.4); g.lineWidth = 5;
+      const R0 = 5.3 * k, N = 40;
+      for (let i = 0; i < N; i++) { const a = i / N * Math.PI * 2; g.save(); g.translate(c + Math.cos(a) * R0, c + Math.sin(a) * R0); g.rotate(a); g.beginPath(); g.moveTo(0, -30); g.lineTo(22, 0); g.lineTo(0, 30); g.lineTo(-22, 0); g.closePath(); g.stroke(); g.beginPath(); g.moveTo(0, -12); g.lineTo(9, 0); g.lineTo(0, 12); g.lineTo(-9, 0); g.closePath(); g.fillStyle = L(.35); g.fill(); g.restore(); }
+      g.beginPath(); g.arc(c, c, R0 - 44, 0, Math.PI * 2); g.stroke(); g.beginPath(); g.arc(c, c, R0 + 44, 0, Math.PI * 2); g.stroke();
+      g.lineWidth = 6; g.strokeStyle = L(.42);
+      for (let r = 0; r < 2; r++) { g.save(); g.translate(c, c); g.rotate(r * Math.PI / 4); g.strokeRect(-150, -150, 300, 300); g.restore(); }
+      g.beginPath(); g.arc(c, c, 70, 0, Math.PI * 2); g.stroke();
+    } else if (S.pat === 'coins') {
+      for (let i = 0; i < 55; i++) { const a = Math.random() * 6.28, r = 300 + Math.random() * 680, x = c + Math.cos(a) * r, y = c + Math.sin(a) * r, cr = 16 + Math.random() * 22, al = .12 + Math.random() * .18; g.strokeStyle = L(al); g.lineWidth = 4; g.beginPath(); g.arc(x, y, cr, 0, 6.28); g.stroke(); g.lineWidth = 2; g.beginPath(); g.arc(x, y, cr * .62, 0, 6.28); g.stroke(); }
+      g.strokeStyle = L(.4); g.lineWidth = 8; g.beginPath(); g.arc(c, c, 200, 0, 6.28); g.stroke(); g.lineWidth = 3; g.beginPath(); g.arc(c, c, 150, 0, 6.28); g.stroke();
+      g.fillStyle = L(.3); g.font = '200px Underdog, cursive'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('₴', c, c + 10);
+    } else if (S.pat === 'scales') {
+      g.strokeStyle = L(.16); g.lineWidth = 3;
+      for (let row = 0, y = 0; y < SZ + 60; y += 44, row++) for (let x = (row % 2) * 40; x < SZ + 80; x += 80) { g.beginPath(); g.arc(x, y, 40, 0, Math.PI); g.stroke(); }
+      g.strokeStyle = L(.45); g.lineWidth = 6; g.beginPath(); g.arc(c, c, 250, 0, 6.28); g.stroke();
+      g.beginPath(); g.ellipse(c, c, 50, 160, 0, 0, 6.28); g.stroke(); g.fillStyle = L(.35); g.beginPath(); g.ellipse(c, c, 14, 120, 0, 0, 6.28); g.fill();
+    } else if (S.pat === 'frost') {
+      const fr = (x, y, len, a, d) => { if (d > 4 || len < 8) return; const ex = x + Math.cos(a) * len, ey = y + Math.sin(a) * len; g.beginPath(); g.moveTo(x, y); g.lineTo(ex, ey); g.stroke(); fr(ex, ey, len * .72, a - .5, d + 1); fr(ex, ey, len * .72, a + .5, d + 1); };
+      g.lineWidth = 2;
+      for (let i = 0; i < 26; i++) { const a = Math.random() * 6.28, r = 900 + Math.random() * 80; g.strokeStyle = L(.12 + Math.random() * .12); fr(c + Math.cos(a) * r, c + Math.sin(a) * r, 60 + Math.random() * 60, a + Math.PI + (Math.random() - .5) * .6, 0); }
+      g.strokeStyle = L(.4); g.lineWidth = 4; for (let i = 0; i < 6; i++) { g.save(); g.translate(c, c); g.rotate(i * Math.PI / 3); fr(0, 0, 110, -Math.PI / 2, 1); g.restore(); }
+      g.beginPath(); g.arc(c, c, 250, 0, 6.28); g.stroke();
+    } else if (S.pat === 'crowns') {
+      const crownAt = (x, y, s, a, al) => { g.save(); g.translate(x, y); g.rotate(a); g.scale(s, s); g.strokeStyle = L(al); g.lineWidth = 4 / s; g.beginPath(); g.moveTo(-30, 18); g.lineTo(-30, -14); g.lineTo(-15, 2); g.lineTo(0, -22); g.lineTo(15, 2); g.lineTo(30, -14); g.lineTo(30, 18); g.closePath(); g.stroke(); g.restore(); };
+      for (let i = 0; i < 26; i++) { const a = i / 26 * Math.PI * 2; crownAt(c + Math.cos(a) * 5.3 * k, c + Math.sin(a) * 5.3 * k, .9, a + Math.PI / 2, .32); }
+      for (let i = 0; i < 40; i++) { const a = Math.random() * 6.28, r = 300 + Math.random() * 380; crownAt(c + Math.cos(a) * r, c + Math.sin(a) * r, .6 + Math.random() * .4, Math.random() * .6 - .3, .1 + Math.random() * .1); }
+      crownAt(c, c, 4, 0, .4); g.strokeStyle = L(.3); g.lineWidth = 3; g.beginPath(); g.arc(c, c, 250, 0, 6.28); g.stroke();
     } else if (S.pat === 'stars') {
       for (let i = 0; i < 3; i++) { const x = Math.random() * SZ, y = Math.random() * SZ, r = 300 + Math.random() * 400; const ng = g.createRadialGradient(x, y, 0, x, y, r); ng.addColorStop(0, i % 2 ? 'rgba(180,90,255,.16)' : 'rgba(60,200,255,.13)'); ng.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = ng; g.fillRect(0, 0, SZ, SZ); }
       for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(255,255,255,${.2 + Math.random() * .6})`; const r = Math.random() < .93 ? 1.5 : 3; g.beginPath(); g.arc(Math.random() * SZ, Math.random() * SZ, r, 0, 6.28); g.fill(); }
@@ -141,7 +185,7 @@ function buildExtras(type) {
   }
 }
 function applySkin(id) {
-  SKIN_ID = SKINS[id] ? id : 'tavern'; SKIN = SKINS[SKIN_ID]; const S = SKIN;
+  SKIN_ID = SKINS[id] && !skinLocked(id) ? id : 'tavern'; SKIN = SKINS[SKIN_ID]; const S = SKIN;
   try { localStorage.setItem('pdsv-skin', SKIN_ID); } catch (e) { /* сховище недоступне */ }
   if (!renderer || !T.feltMat) return;
   const oldF = T.feltMat.map, oldW = T.woodMat.map;
@@ -162,23 +206,31 @@ function applySkin(id) {
   buildExtras(S.extra);
 }
 /* тло панелей інтерфейсу: кілька порід дерева (лише CSS, на швидкість не впливає) */
-const PANELS = { oak: 'Дуб', walnut: 'Горіх', cherry: 'Вишня', ash: 'Ясен', ebony: 'Чорне дерево', plain: 'Без текстури' };
+const PANELS = { oak: 'Дуб', walnut: 'Горіх', cherry: 'Вишня', ash: 'Ясен', ebony: 'Чорне дерево', plain: 'Без текстури', mahogany: 'Червоне дерево', bog: 'Морений дуб', leather: 'Шкіра', slate: 'Сланець', gilded: 'Позолота' };
+// нові тла відкриваються досягненнями
+const PANEL_ACH = { mahogany: 'big_kill', bog: 'team_win', leather: 'helper', slate: 'coop_hard', gilded: 'flawless' };
+const panelLocked = id => !achHave(PANEL_ACH[id]);
 let PANEL_ID = (() => { try { const p = localStorage.getItem('pdsv-panel'); return PANELS[p] ? p : 'oak'; } catch (e) { return 'oak'; } })();
 function applyPanel(id) {
-  if (!PANELS[id]) return; PANEL_ID = id;
+  if (!PANELS[id] || panelLocked(id)) return; PANEL_ID = id;
   document.documentElement.dataset.panel = id;
   try { localStorage.setItem('pdsv-panel', id); } catch (e) { }
 }
 applyPanel(PANEL_ID);
+/* розмір інтерфейсу (панелі, карти, вікна — стіл не змінюється) */
+const UI_SIZES = { s: 'Малий', m: 'Середній', l: 'Великий' };
+let UI_SIZE = (() => { try { const v = localStorage.getItem('pdsv-uisize'); return UI_SIZES[v] ? v : 'm'; } catch (e) { return 'm'; } })();
+function applyUiSize(v) { if (!UI_SIZES[v]) return; UI_SIZE = v; document.documentElement.dataset.ui = v; try { localStorage.setItem('pdsv-uisize', v); } catch (e) { } if (typeof resize === 'function' && renderer) { viewW = 0; resize(); } }
+applyUiSize(UI_SIZE);
 function openSkins(back) {
   const hex = n => '#' + n.toString(16).padStart(6, '0');
-  showModal(`<h2>Стіл і графіка</h2><p>Вибір зберігається лише на цьому пристрої й не впливає на інших гравців.</p>
-    <div class="skins">${Object.entries(SKINS).map(([id, S]) => `<button type="button" class="skin" data-skin="${id}" aria-pressed="${id === SKIN_ID}"><span class="sw" style="background:radial-gradient(circle at 50% 45%, ${S.felt[0]} 0 50%, ${S.felt[1]} 51% 60%, ${hex(S.ring)} 61% 66%, ${S.wood[0]} 67%)"></span><b>${S.name}</b><small>${S.desc}</small></button>`).join('')}</div>
+  showModal(`<h2>Стіл і графіка</h2><p>Вибір зберігається лише на цьому пристрої й не впливає на інших гравців. Нові столи й тла відкриваються досягненнями.</p>
+    <div class="skins">${Object.entries(SKINS).map(([id, S]) => `${skinLocked(id) ? `<button type="button" class="skin locked" disabled title="Відкривається досягненням ${esc(achName(S.ach))}"><span class="sw" style="background:radial-gradient(circle at 50% 45%, ${S.felt[0]} 0 50%, ${S.felt[1]} 51% 60%, ${hex(S.ring)} 61% 66%, ${S.wood[0]} 67%)"><i>🔒</i></span><b>${S.name}</b><small>Відкриється за досягнення ${esc(achName(S.ach))}</small></button>` : `<button type="button" class="skin${S.ach ? ' earned' : ''}" data-skin="${id}" aria-pressed="${id === SKIN_ID}"><span class="sw" style="background:radial-gradient(circle at 50% 45%, ${S.felt[0]} 0 50%, ${S.felt[1]} 51% 60%, ${hex(S.ring)} 61% 66%, ${S.wood[0]} 67%)"></span><b>${S.name}</b><small>${S.desc}</small></button>`}`).join('')}</div>
+    <h3>Розмір інтерфейсу</h3>
+    <div class="seg" role="group" aria-label="Розмір інтерфейсу">${Object.entries(UI_SIZES).map(([k, n]) => `<button type="button" data-ui="${k}" aria-pressed="${k === UI_SIZE}">${n}</button>`).join('')}</div>
+    <p class="hint" style="margin-top:8px">Більші чи менші панелі, карти й написи — під твій екран. Стіл не змінюється.</p>
     <h3>Тло панелей</h3>
-    <div class="pskins">${Object.entries(PANELS).map(([id, n]) => `<button type="button" class="pskin" data-pn="${id}" aria-pressed="${id === PANEL_ID}"><span class="psw" data-panel="${id}"></span>${n}</button>`).join('')}</div>
-    <h3>Гравці за столом</h3>
-    <div class="seg" role="group" aria-label="Гравці за столом"><button type="button" data-av="on" aria-pressed="${AVATARS}">Показувати</button><button type="button" data-av="off" aria-pressed="${!AVATARS}">Сховати</button></div>
-    <p class="hint" style="margin-top:8px">Фігурки суперників за столом радіють перемогам, злостяться від прокльонів і сумують, коли втрачають рівень.</p>
+    <div class="pskins">${Object.entries(PANELS).map(([id, n]) => `${panelLocked(id) ? `<button type="button" class="pskin locked" disabled title="Відкривається досягненням ${esc(achName(PANEL_ACH[id]))}"><span class="psw" data-panel="${id}"><i>🔒</i></span>${n}<small>${esc(achName(PANEL_ACH[id]))}</small></button>` : `<button type="button" class="pskin" data-pn="${id}" aria-pressed="${id === PANEL_ID}"><span class="psw" data-panel="${id}"></span>${n}</button>`}`).join('')}</div>
     <h3>Якість графіки</h3>
     <div class="seg" role="group" aria-label="Якість графіки">${Object.entries(QUALITY).map(([id, q]) => `<button type="button" data-q="${id}" aria-pressed="${id === QUAL}">${q.name}</button>`).join('')}</div>
     <p class="hint" id="qDesc" style="margin-top:8px">${QUALITY[QUAL].desc}</p>
@@ -193,7 +245,7 @@ function openSkins(back) {
   $('#tpReset').onclick = () => { tipsReset(); $('#sheet').querySelectorAll('[data-tp]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.tp === 'on'))); toast('Підказки покажуться знову', 1800); };
   $('#sheet').querySelectorAll('[data-mo]').forEach(b => b.onclick = () => { setLessMotion(b.dataset.mo === 'less'); $('#sheet').querySelectorAll('[data-mo]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
   $('#sheet').querySelectorAll('[data-q]').forEach(b => b.onclick = () => { applyQuality(b.dataset.q); $('#sheet').querySelectorAll('[data-q]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); $('#qDesc').textContent = QUALITY[QUAL].desc; });
-  $('#sheet').querySelectorAll('[data-av]').forEach(b => b.onclick = () => { setAvatars(b.dataset.av === 'on'); $('#sheet').querySelectorAll('[data-av]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
+  $('#sheet').querySelectorAll('[data-ui]').forEach(b => b.onclick = () => { applyUiSize(b.dataset.ui); $('#sheet').querySelectorAll('[data-ui]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
   $('#sheet').querySelectorAll('[data-pn]').forEach(b => b.onclick = () => { applyPanel(b.dataset.pn); $('#sheet').querySelectorAll('[data-pn]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
   $('#sheet').querySelectorAll('[data-skin]').forEach(b => b.onclick = () => { applySkin(b.dataset.skin); $('#sheet').querySelectorAll('[data-skin]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
   $('#skDone').onclick = () => { closeModal(); if (back) back(); };
@@ -521,79 +573,13 @@ function buildSeat(p) {
   const arc = new THREE.Mesh(new THREE.RingGeometry(7.95, 8.18, 40, 1, -Math.PI / 2 - .38, .76), arcMat);
   arc.rotation.x = -Math.PI / 2; arc.position.y = TABLE_Y + .006; grp.add(arc);
   p.seat = { grp, equipG, plateTex, sprite, arc, arcMat, anchor: seatAnchor(p.idx) };
-  avatarBuild(p);
   plateDraw(p); syncSeat(p);
 }
-/* ---------- гравці за столом: фігурки біля свого краю столу, що радіють, злостяться й сумують ----------
-   Малюються поверх 3D-сцени (під панелями) у вільній частині екрана — найближче до місця гравця,
-   тож їх видно і на ноутбуці, і на телефоні, навіть коли саме місце за краєм екрана. */
-let AVATARS = (() => { try { return localStorage.getItem('pdsv-avatars') !== 'off'; } catch (e) { return true; } })();
-function setAvatars(on) { AVATARS = !!on; try { localStorage.setItem('pdsv-avatars', on ? 'on' : 'off'); } catch (e) { } layoutAvatars(true); }
-const avatarKey = p => [p.color, p.sex, p.raceCard && p.raceCard.name, p.clsCard && p.clsCard.name, p.name].join('|');
-function avatarLayer() { let L = $('#avatars'); if (!L) { L = document.createElement('div'); L.id = 'avatars'; L.setAttribute('aria-hidden', 'true'); $('#ui').before(L); } return L; }
-function avatarDraw(p) {
-  const av = p.seat && p.seat.av; if (!av) return;
-  const key = avatarKey(p); if (av.key === key) return; av.key = key;
-  const head = p.raceCard ? artIcon(p.raceCard, 'avh') : `<span class="avh ave">${p.sex === 'f' ? '👩' : '🧑'}</span>`;
-  av.el.style.setProperty('--pc', p.color);
-  av.el.innerHTML = `<div class="av-fig"><div class="av-body"></div><div class="av-head">${head}${p.clsCard ? `<span class="av-cls">${artIcon(p.clsCard, 'avc')}</span>` : ''}</div></div><div class="av-name">${esc(p.name)}</div><div class="av-emo"></div>`;
-}
-function avatarBuild(p) {
-  const el = document.createElement('div'); el.className = 'seat-av'; el.dataset.p = p.idx;
-  el.onclick = () => openCharSheet(p.idx);
-  avatarLayer().appendChild(el);
-  p.seat.av = { el, key: '', t0: 0 };
-  avatarDraw(p); layoutAvatars(true);
-}
-const viewerIdx = () => NET.role === 'client' ? NET.me : G.viewer;
-// вільна частина екрана, де видно стіл (між панелями)
-function freeRect() {
-  const W = innerWidth, H = innerHeight, r = el => el && !el.hidden && el.offsetParent !== null ? el.getBoundingClientRect() : null;
-  const top = r($('#topbar')), brd = r($('#players')), dock = r($('#dock')), log = r($('#log')), cbt = r($('#combat'));
-  let x0 = 0, x1 = W, y0 = top ? top.bottom : 0, y1 = dock ? dock.top : H;
-  const strip = brd && brd.width > W * .6;
-  if (brd) { if (strip) y0 = Math.max(y0, brd.bottom); else x0 = Math.max(x0, brd.right); }
-  if (log && log.left > W * .5) x1 = Math.min(x1, log.left);
-  if (cbt && cbt.left > W * .5) x1 = Math.min(x1, cbt.left);
-  if (cbt && strip) y1 = Math.min(y1, cbt.top);
-  return { x0, x1, y0, y1 };
-}
-let avSig = '';
-function layoutAvatars(force = false) {
-  if (!G.players.length || typeof camera === 'undefined' || !camera) return;
-  const now = performance.now(); if (!force && now - (layoutAvatars.t || 0) < 250) return; layoutAvatars.t = now;
-  const fr = freeRect(), sig = [camera.position.x.toFixed(2), camera.position.z.toFixed(2), Math.round(cam.offK || 0), fr.x0 | 0, fr.x1 | 0, fr.y0 | 0, fr.y1 | 0, G.players.length, viewerIdx(), AVATARS].join('|');
-  if (!force && sig === avSig) return; avSig = sig;
-  const sz = innerWidth < 760 ? 46 : 64, m = sz * .6;
-  for (const p of G.players) {
-    const av = p.seat && p.seat.av; if (!av) continue;
-    let pos = null;
-    if (AVATARS && p.idx !== viewerIdx()) for (let rr = 9.2; rr >= 3.2; rr -= .2) {
-      const w = rotY(0, TABLE_Y + .2, rr, seatAngle(p.idx)), s = screenOf(new THREE.Vector3(w.x, w.y, w.z));
-      if (s.x > fr.x0 + m && s.x < fr.x1 - m && s.y > fr.y0 + sz * 1.1 && s.y < fr.y1 - 14) { pos = s; break; }
-    }
-    av.el.hidden = !pos;
-    if (pos) { av.el.style.left = Math.round(pos.x) + 'px'; av.el.style.top = Math.round(pos.y) + 'px'; }
-  }
-}
-const EMO = { joy: '😄', win: '🤩', angry: '😡', sad: '😢', hurt: '😵' };
-// реакція: joy/win — підстрибує, angry/hurt — трясеться й червоніє, sad — осідає й сіріє
-function avatarReact(p, kind) {
-  const av = p && p.seat && p.seat.av; if (!av) return;
-  if (NET.role === 'host') emitFx('emo', { who: p.idx, kind });
-  const now = performance.now(); if (now - av.t0 < 700) return; av.t0 = now;
-  if (!AVATARS || av.el.hidden) return;
-  av.el.querySelector('.av-emo').textContent = EMO[kind] || '😄';
-  av.el.classList.remove('r-joy', 'r-win', 'r-angry', 'r-hurt', 'r-sad'); void av.el.offsetWidth; av.el.classList.add('r-' + kind);
-  clearTimeout(av.tm); av.tm = setTimeout(() => av.el.classList.remove('r-' + kind), kind === 'win' ? 1900 : 1400);
-}
-function avatarsIdle() { layoutAvatars(); G.players.forEach(p => { const av = p.seat && p.seat.av; if (av) av.el.classList.toggle('cur', p.idx === G.cur && !G.over); }); }
 function destroySeat(p) {
   if (!p.seat) return;
   [...p.seat.equipG.children].forEach(disposeMesh);
   scene.remove(p.seat.grp);
   p.seat.plateTex.dispose(); p.seat.arcMat.dispose();
-  if (p.seat.av) p.seat.av.el.remove();
 }
 function syncSeat(p) {
   if (!p.seat) return;
@@ -604,7 +590,7 @@ function syncSeat(p) {
     const m = cardMesh(c); m.scale.setScalar(.62);
     m.position.set((i - (n - 1) / 2) * gap, TABLE_Y + .03 + i * .003, 6.4); m.rotation.set(-.06, 0, 0); grp.add(m);
   });
-  plateDraw(p); avatarDraw(p);
+  plateDraw(p);
 }
 function levelFx(p, up) {
   const a = p.seat.anchor; sfx(up ? 'levelUp' : 'levelDown');
@@ -618,7 +604,7 @@ async function changeLevel(p, delta, allowWin = false) {
   p.level = clamp(before + delta, 1, cap);
   if (p.level !== before) {
     log(`${nameTag(p)} ${p.level > before ? 'піднімається' : 'падає'} на ${p.level}-й рівень.`);
-    levelFx(p, p.level > before); floatLevel(p, p.level - before); avatarReact(p, p.level > before ? 'joy' : 'sad'); renderUI(); if (p.level > before) botLeadCheck(p); await wait(550);
+    levelFx(p, p.level > before); floatLevel(p, p.level - before); renderUI(); if (p.level > before) botLeadCheck(p); await wait(550);
   } else if (delta > 0 && !allowWin && (G.teams ? levelsToWin(p) <= 1 : before >= G.goal - 1)) log(G.teams ? `${nameTag(p)} не може так здобути переможний рівень команди — лише перемогою над монстром.` : `${nameTag(p)} не може отримати ${G.goal}-й рівень так — лише перемогою над монстром.`);
   plateDraw(p);
   if (G.teams ? levelsToWin(p) <= 0 : p.level >= G.goal) await gameOver(p);
@@ -732,7 +718,6 @@ async function monsterStrike(m, q, word = null) {
   playSfx('smack'); camShake(.5, 480); ringFx(tgt, 0xff4a3a, 800, true); flashAt(tgt.clone().setY(1.5), 3.5, 500, 0xff3020, true);
   if (hereHuman(q)) vignette();
   const sp = screenOf(tgt.clone().setY(1.4)); domPop('comic', esc(word), sp.x, sp.y, 1300);
-  avatarReact(q, 'hurt');
   q._claw = performance.now() + 3500; plateDraw(q); setTimeout(() => { if (q.seat) plateDraw(q); }, 3600);
   await wait(240);
   const b = poseOf(m);
@@ -766,39 +751,17 @@ function floatLevel(p, d) {
   const sp = screenOf(p.seat.anchor.clone().setY(2));
   domPop('lvfloat ' + (d > 0 ? 'up' : 'down'), `${d > 0 ? '+' : '−'}${Math.abs(d)} ${plural(Math.abs(d), 'рівень', 'рівні', 'рівнів')}`, sp.x + 150, sp.y - 30, 1600);
 }
-/* великий кубик поверх інтерфейсу: видно навіть тоді, коли кубик на столі закрила панель */
-const PIPS = { 1: [[50, 50]], 2: [[28, 28], [72, 72]], 3: [[28, 28], [50, 50], [72, 72]], 4: [[28, 28], [72, 28], [28, 72], [72, 72]], 5: [[28, 28], [72, 28], [50, 50], [28, 72], [72, 72]], 6: [[28, 25], [72, 25], [28, 50], [72, 50], [28, 75], [72, 75]] };
-const dieSVG = v => `<svg viewBox="0 0 100 100" aria-hidden="true"><defs><radialGradient id="dg" cx="40%" cy="35%" r="75%"><stop offset="0" stop-color="#fffaf0"/><stop offset=".7" stop-color="#efe2c8"/><stop offset="1" stop-color="#cdb894"/></radialGradient></defs><rect x="4" y="4" width="92" height="92" rx="20" fill="url(#dg)" stroke="#5a4632" stroke-width="3"/>${PIPS[v].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${v === 1 ? 13 : 9}" fill="${v === 1 ? '#b8202f' : '#1b1512'}"/>`).join('')}</svg>`;
-function diePop(q, v, info) {
-  document.querySelectorAll('.diepop').forEach(e => e.remove());
-  const el = document.createElement('div'); el.className = 'diepop'; el.style.setProperty('--pc', q.color);
-  const need = info && info.need, bonus = (info && info.bonus) || 0, total = v + bonus, ok = need ? total >= need : null;
-  el.innerHTML = `<div class="dp-who" style="color:${q.color}">${esc(q.name)}${info && info.what ? ` · ${esc(info.what)}` : ''}</div><div class="dp-die">${dieSVG(1 + rnd(6))}</div><div class="dp-res" hidden></div>`;
-  document.body.appendChild(el);
-  const dieEl = el.querySelector('.dp-die'), res = el.querySelector('.dp-res');
-  const less = document.documentElement.classList.contains('less-motion');
-  let k = 0; const spin = less ? 0 : 9;
-  const tick = () => {
-    if (k < spin) { dieEl.innerHTML = dieSVG(1 + rnd(6)); dieEl.style.transform = `rotate(${(Math.random() - .5) * 70}deg) scale(${.9 + Math.random() * .2})`; k++; setTimeout(tick, 70 + k * 8); return; }
-    dieEl.innerHTML = dieSVG(v); dieEl.style.transform = ''; dieEl.classList.add('land');
-    res.hidden = false;
-    res.innerHTML = need ? `${v}${bonus ? ` ${bonus > 0 ? '+' : '−'} ${Math.abs(bonus)} = <b>${total}</b>` : ''} · треба ${need}+ <span class="${ok ? 'ok' : 'no'}">${ok ? '✔ вдалося' : '✘ ні'}</span>` : (info && info.res ? info.res(v) : `<b>${v}</b>`);
-    if (need) el.classList.add(ok ? 'good' : 'bad');
-    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 400); }, 1700);
-  };
-  tick();
-}
 async function rollDie(q, forced = 0, info = null) {
   const v = forced || 1 + rnd(6);
   if (info === true) info = null;
   playSfx('dice');
   emitFx('die', { who: q.idx, v, info: info ? { need: info.need || 0, bonus: info.bonus || 0, what: info.what || '' } : null });
-  diePop(q, v, info);
+
   const FACE = { 1: [0, 0, 0], 6: [Math.PI, 0, 0], 3: [0, 0, Math.PI / 2], 4: [0, 0, -Math.PI / 2], 2: [-Math.PI / 2, 0, 0], 5: [Math.PI / 2, 0, 0] }[v];
   const qFinal = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * 6.28).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(FACE[0], FACE[1], FACE[2])));
   const axis = new THREE.Vector3(Math.random() - .5, Math.random() - .5, Math.random() - .5).normalize();
   const spins = Math.PI * 2 * (3 + Math.random() * 2);
-  const from = rotY(0, 3, 6.4, seatAngle(q.idx)); const to = rotY((Math.random() - .5) * 1.2, TABLE_Y + .28, 2.3, cam.az);
+  const from = rotY(0, 3, 6.4, seatAngle(q.idx)); const to = rotY((Math.random() - .5) * 1.4, TABLE_Y + .41, .9, cam.az);
   T.die.visible = true;
   await animate(1150, (e, t) => {
     T.die.position.set(from.x + (to.x - from.x) * e, to.y + (from.y - to.y) * Math.pow(1 - e, 2) + Math.pow(1 - t, 1.5) * Math.abs(Math.sin(t * Math.PI * 3)) * 1.4, from.z + (to.z - from.z) * e);
@@ -869,7 +832,6 @@ function loop(now) {
     if (T.torches) T.torches.forEach((t, i) => { const f = .85 + Math.sin(s * 9 + i) * .1 + Math.sin(s * 23 + i * 2) * .07; t.light.intensity = 1.1 * f; t.flame.scale.setScalar(1.15 * f); });
     if (T.stars) T.stars.material.opacity = .7 + Math.sin(s * 1.3) * .2;
   }
-  avatarsIdle();
   // маркер ходу + підсвітка колоди
   const p = cur();
   if (p && p.seat && !G.over) {

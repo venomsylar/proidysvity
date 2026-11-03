@@ -32,12 +32,14 @@ function statsSave() { try { localStorage.setItem(STATS_KEY, JSON.stringify(STAT
 function statMe() { if (!G.players.length) return null; if (NET.role === 'client') return G.players[NET.me] || null; return G.players.find(q => q.type === 'human') || null; }
 const isMe = p => !!p && p === statMe();
 const gameMode = () => G.coop ? 'coop' : G.teams ? 'teams' : 'ffa';
+const achUnlocks = id => [...Object.values(SKINS).filter(S => S.ach === id).map(S => `стіл «${S.name}»`), ...Object.keys(PANEL_ACH).filter(k => PANEL_ACH[k] === id).map(k => `тло «${PANELS[k]}»`)].join(', ');
 function achieve(id) {
   if (STATS.ach[id]) return;
   const a = ACH.find(x => x[0] === id); if (!a) return;
   STATS.ach[id] = Date.now(); statsSave();
   const el = document.createElement('div'); el.className = 'achv';
-  el.innerHTML = `<span class="ae">${a[1]}</span><span><small>Досягнення</small><b>${esc(a[2])}</b></span>`;
+  const un = achUnlocks(id);
+  el.innerHTML = `<span class="ae">${a[1]}</span><span><small>Досягнення</small><b>${esc(a[2])}</b>${un ? `<small class="unl">🔓 Відкрито ${esc(un)} — у «Стіл»</small>` : ''}</span>`;
   document.body.appendChild(el); setTimeout(() => el.remove(), 4200);
   playSfx('levelUp');
 }
@@ -83,7 +85,11 @@ function openStats() {
     <table class="cstats"><tr><th>Режим</th><th>Партій</th><th>Перемог</th><th>Відсоток</th></tr>${rows}</table>
     <div class="st-line">Переможено монстрів: <b>${STATS.kills}</b> · допомог іншим: <b>${STATS.helps}</b>${STATS.best ? ` · найсильніший переможений: <b>${esc(STATS.best.name)}</b> (${STATS.best.lvl})` : ''}</div>
     <h3>Досягнення · ${got} / ${ACH.length}</h3>
-    <div class="ach-grid">${ACH.map(([id, e, n, d]) => { const t = STATS.ach[id]; return `<div class="ach${t ? ' on' : ''}"><span class="ae">${t ? e : '🔒'}</span><span><b>${esc(n)}</b><small>${esc(d)}${t ? ` · ${new Date(t).toLocaleDateString('uk-UA')}` : ''}</small></span></div>`; }).join('')}</div>
+    <div class="ach-grid">${ACH.map(([id, e, n, d]) => { const t = STATS.ach[id]; return `<div class="ach${t ? ' on' : ''}"><span class="ae">${t ? e : '🔒'}</span><span><b>${esc(n)}</b><small>${esc(d)}${t ? ` · ${new Date(t).toLocaleDateString('uk-UA')}` : ''}</small>${achUnlocks(id) ? `<small class="unl">${t ? '🔓' : '🎁'} ${esc(achUnlocks(id))}</small>` : ''}</span></div>`; }).join('')}</div>
     <div class="row end"><button class="btn ghost small" type="button" id="stReset">Скинути статистику</button><button class="btn primary" type="button" data-close>Назад</button></div>`, 'wide');
   $('#stReset').onclick = async () => { if (await confirmModal('Скинути статистику?', 'Усі партії й досягнення на цьому пристрої буде стерто.', 'Скинути', 'Ні')) { localStorage.removeItem(STATS_KEY); STATS = statsLoad(); } openStats(); };
 }
+
+// стіл чи тло, відкриті досягненням, могли зачинитися (скинули статистику) — повертаємо звичайні
+if (skinLocked(SKIN_ID)) applySkin('tavern');
+if (panelLocked(PANEL_ID)) applyPanel('oak');
