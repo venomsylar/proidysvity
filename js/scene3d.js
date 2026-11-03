@@ -176,6 +176,9 @@ function openSkins(back) {
     <div class="skins">${Object.entries(SKINS).map(([id, S]) => `<button type="button" class="skin" data-skin="${id}" aria-pressed="${id === SKIN_ID}"><span class="sw" style="background:radial-gradient(circle at 50% 45%, ${S.felt[0]} 0 50%, ${S.felt[1]} 51% 60%, ${hex(S.ring)} 61% 66%, ${S.wood[0]} 67%)"></span><b>${S.name}</b><small>${S.desc}</small></button>`).join('')}</div>
     <h3>Тло панелей</h3>
     <div class="pskins">${Object.entries(PANELS).map(([id, n]) => `<button type="button" class="pskin" data-pn="${id}" aria-pressed="${id === PANEL_ID}"><span class="psw" data-panel="${id}"></span>${n}</button>`).join('')}</div>
+    <h3>Гравці за столом</h3>
+    <div class="seg" role="group" aria-label="Гравці за столом"><button type="button" data-av="on" aria-pressed="${AVATARS}">Показувати</button><button type="button" data-av="off" aria-pressed="${!AVATARS}">Сховати</button></div>
+    <p class="hint" style="margin-top:8px">Фігурки суперників за столом радіють перемогам, злостяться від прокльонів і сумують, коли втрачають рівень.</p>
     <h3>Якість графіки</h3>
     <div class="seg" role="group" aria-label="Якість графіки">${Object.entries(QUALITY).map(([id, q]) => `<button type="button" data-q="${id}" aria-pressed="${id === QUAL}">${q.name}</button>`).join('')}</div>
     <p class="hint" id="qDesc" style="margin-top:8px">${QUALITY[QUAL].desc}</p>
@@ -190,6 +193,7 @@ function openSkins(back) {
   $('#tpReset').onclick = () => { tipsReset(); $('#sheet').querySelectorAll('[data-tp]').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.tp === 'on'))); toast('Підказки покажуться знову', 1800); };
   $('#sheet').querySelectorAll('[data-mo]').forEach(b => b.onclick = () => { setLessMotion(b.dataset.mo === 'less'); $('#sheet').querySelectorAll('[data-mo]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
   $('#sheet').querySelectorAll('[data-q]').forEach(b => b.onclick = () => { applyQuality(b.dataset.q); $('#sheet').querySelectorAll('[data-q]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); $('#qDesc').textContent = QUALITY[QUAL].desc; });
+  $('#sheet').querySelectorAll('[data-av]').forEach(b => b.onclick = () => { setAvatars(b.dataset.av === 'on'); $('#sheet').querySelectorAll('[data-av]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
   $('#sheet').querySelectorAll('[data-pn]').forEach(b => b.onclick = () => { applyPanel(b.dataset.pn); $('#sheet').querySelectorAll('[data-pn]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
   $('#sheet').querySelectorAll('[data-skin]').forEach(b => b.onclick = () => { applySkin(b.dataset.skin); $('#sheet').querySelectorAll('[data-skin]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
   $('#skDone').onclick = () => { closeModal(); if (back) back(); };
@@ -286,13 +290,31 @@ function drawCardFace(g, c, W, H) {
   g.textAlign = 'right'; g.fillText(i.foot[1], W - 34, H - 36);
 }
 function dieFaceTex(v) {
-  return canvasTex(128, 128, (g, w) => {
-    g.fillStyle = '#f2ead9'; g.fillRect(0, 0, w, w);
-    g.strokeStyle = 'rgba(0,0,0,.18)'; g.lineWidth = 6; rr(g, 4, 4, w - 8, w - 8, 18); g.stroke();
+  return canvasTex(256, 256, (g, w) => {
+    // кістяна грань з легким жовтуватим відливом і темнішим краєм
+    const gr = g.createRadialGradient(w * .4, w * .35, w * .1, w / 2, w / 2, w * .75);
+    gr.addColorStop(0, '#fffaf0'); gr.addColorStop(.7, '#efe2c8'); gr.addColorStop(1, '#cdb894');
+    g.fillStyle = gr; g.fillRect(0, 0, w, w);
     const P = { 1: [[.5, .5]], 2: [[.27, .27], [.73, .73]], 3: [[.27, .27], [.5, .5], [.73, .73]], 4: [[.27, .27], [.73, .27], [.27, .73], [.73, .73]], 5: [[.27, .27], [.73, .27], [.5, .5], [.27, .73], [.73, .73]], 6: [[.27, .25], [.73, .25], [.27, .5], [.73, .5], [.27, .75], [.73, .75]] }[v];
-    g.fillStyle = v === 1 ? '#a3202f' : '#1b1512';
-    P.forEach(([x, y]) => { g.beginPath(); g.arc(x * w, y * w, v === 1 ? 15 : 11, 0, Math.PI * 2); g.fill(); });
+    P.forEach(([x, y]) => {
+      const r = v === 1 ? 34 : 23, cx = x * w, cy = y * w;
+      g.fillStyle = 'rgba(255,255,255,.75)'; g.beginPath(); g.arc(cx + 2, cy + 3, r, 0, Math.PI * 2); g.fill(); // світлий край заглибини
+      const pg = g.createRadialGradient(cx - r * .3, cy - r * .3, r * .1, cx, cy, r);
+      if (v === 1) { pg.addColorStop(0, '#e0443a'); pg.addColorStop(1, '#7a1020'); } else { pg.addColorStop(0, '#4a3a2e'); pg.addColorStop(1, '#120d0a'); }
+      g.fillStyle = pg; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+    });
   });
+}
+// кубик із заокругленими гранями
+function roundedBoxGeo(size, r, seg = 6) {
+  const geo = new THREE.BoxGeometry(size, size, size, seg, seg, seg), pos = geo.attributes.position, h = size / 2 - r, v = new THREE.Vector3(), inner = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    inner.set(clamp(v.x, -h, h), clamp(v.y, -h, h), clamp(v.z, -h, h));
+    v.sub(inner); if (v.lengthSq() > 0) v.setLength(r); v.add(inner);
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  geo.computeVertexNormals(); return geo;
 }
 function dotTex() { return canvasTex(64, 64, (g) => { const r = g.createRadialGradient(32, 32, 0, 32, 32, 32); r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(.4, 'rgba(255,255,255,.6)'); r.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = r; g.fillRect(0, 0, 64, 64); }); }
 
@@ -426,8 +448,8 @@ function init3D() {
   }
 
   // кубик
-  const dmats = [3, 4, 1, 6, 2, 5].map(v => new THREE.MeshStandardMaterial({ map: dieFaceTex(v), roughness: .35 }));
-  T.die = new THREE.Mesh(new THREE.BoxGeometry(.56, .56, .56), dmats); T.die.castShadow = true; T.die.visible = false; scene.add(T.die);
+  const dmats = [3, 4, 1, 6, 2, 5].map(v => new THREE.MeshStandardMaterial({ map: dieFaceTex(v), roughness: .28, metalness: .02 }));
+  T.die = new THREE.Mesh(roundedBoxGeo(.82, .12), dmats); T.die.castShadow = true; T.die.visible = false; scene.add(T.die);
 
   // маркер ходу
   T.marker = new THREE.Mesh(new THREE.TorusGeometry(.62, .09, 12, 56), new THREE.MeshBasicMaterial({ color: 0xffd36b, transparent: true, opacity: .95 }));
@@ -499,13 +521,79 @@ function buildSeat(p) {
   const arc = new THREE.Mesh(new THREE.RingGeometry(7.95, 8.18, 40, 1, -Math.PI / 2 - .38, .76), arcMat);
   arc.rotation.x = -Math.PI / 2; arc.position.y = TABLE_Y + .006; grp.add(arc);
   p.seat = { grp, equipG, plateTex, sprite, arc, arcMat, anchor: seatAnchor(p.idx) };
+  avatarBuild(p);
   plateDraw(p); syncSeat(p);
 }
+/* ---------- гравці за столом: фігурки біля свого краю столу, що радіють, злостяться й сумують ----------
+   Малюються поверх 3D-сцени (під панелями) у вільній частині екрана — найближче до місця гравця,
+   тож їх видно і на ноутбуці, і на телефоні, навіть коли саме місце за краєм екрана. */
+let AVATARS = (() => { try { return localStorage.getItem('pdsv-avatars') !== 'off'; } catch (e) { return true; } })();
+function setAvatars(on) { AVATARS = !!on; try { localStorage.setItem('pdsv-avatars', on ? 'on' : 'off'); } catch (e) { } layoutAvatars(true); }
+const avatarKey = p => [p.color, p.sex, p.raceCard && p.raceCard.name, p.clsCard && p.clsCard.name, p.name].join('|');
+function avatarLayer() { let L = $('#avatars'); if (!L) { L = document.createElement('div'); L.id = 'avatars'; L.setAttribute('aria-hidden', 'true'); $('#ui').before(L); } return L; }
+function avatarDraw(p) {
+  const av = p.seat && p.seat.av; if (!av) return;
+  const key = avatarKey(p); if (av.key === key) return; av.key = key;
+  const head = p.raceCard ? artIcon(p.raceCard, 'avh') : `<span class="avh ave">${p.sex === 'f' ? '👩' : '🧑'}</span>`;
+  av.el.style.setProperty('--pc', p.color);
+  av.el.innerHTML = `<div class="av-fig"><div class="av-body"></div><div class="av-head">${head}${p.clsCard ? `<span class="av-cls">${artIcon(p.clsCard, 'avc')}</span>` : ''}</div></div><div class="av-name">${esc(p.name)}</div><div class="av-emo"></div>`;
+}
+function avatarBuild(p) {
+  const el = document.createElement('div'); el.className = 'seat-av'; el.dataset.p = p.idx;
+  el.onclick = () => openCharSheet(p.idx);
+  avatarLayer().appendChild(el);
+  p.seat.av = { el, key: '', t0: 0 };
+  avatarDraw(p); layoutAvatars(true);
+}
+const viewerIdx = () => NET.role === 'client' ? NET.me : G.viewer;
+// вільна частина екрана, де видно стіл (між панелями)
+function freeRect() {
+  const W = innerWidth, H = innerHeight, r = el => el && !el.hidden && el.offsetParent !== null ? el.getBoundingClientRect() : null;
+  const top = r($('#topbar')), brd = r($('#players')), dock = r($('#dock')), log = r($('#log')), cbt = r($('#combat'));
+  let x0 = 0, x1 = W, y0 = top ? top.bottom : 0, y1 = dock ? dock.top : H;
+  const strip = brd && brd.width > W * .6;
+  if (brd) { if (strip) y0 = Math.max(y0, brd.bottom); else x0 = Math.max(x0, brd.right); }
+  if (log && log.left > W * .5) x1 = Math.min(x1, log.left);
+  if (cbt && cbt.left > W * .5) x1 = Math.min(x1, cbt.left);
+  if (cbt && strip) y1 = Math.min(y1, cbt.top);
+  return { x0, x1, y0, y1 };
+}
+let avSig = '';
+function layoutAvatars(force = false) {
+  if (!G.players.length || typeof camera === 'undefined' || !camera) return;
+  const now = performance.now(); if (!force && now - (layoutAvatars.t || 0) < 250) return; layoutAvatars.t = now;
+  const fr = freeRect(), sig = [camera.position.x.toFixed(2), camera.position.z.toFixed(2), Math.round(cam.offK || 0), fr.x0 | 0, fr.x1 | 0, fr.y0 | 0, fr.y1 | 0, G.players.length, viewerIdx(), AVATARS].join('|');
+  if (!force && sig === avSig) return; avSig = sig;
+  const sz = innerWidth < 760 ? 46 : 64, m = sz * .6;
+  for (const p of G.players) {
+    const av = p.seat && p.seat.av; if (!av) continue;
+    let pos = null;
+    if (AVATARS && p.idx !== viewerIdx()) for (let rr = 9.2; rr >= 3.2; rr -= .2) {
+      const w = rotY(0, TABLE_Y + .2, rr, seatAngle(p.idx)), s = screenOf(new THREE.Vector3(w.x, w.y, w.z));
+      if (s.x > fr.x0 + m && s.x < fr.x1 - m && s.y > fr.y0 + sz * 1.1 && s.y < fr.y1 - 14) { pos = s; break; }
+    }
+    av.el.hidden = !pos;
+    if (pos) { av.el.style.left = Math.round(pos.x) + 'px'; av.el.style.top = Math.round(pos.y) + 'px'; }
+  }
+}
+const EMO = { joy: '😄', win: '🤩', angry: '😡', sad: '😢', hurt: '😵' };
+// реакція: joy/win — підстрибує, angry/hurt — трясеться й червоніє, sad — осідає й сіріє
+function avatarReact(p, kind) {
+  const av = p && p.seat && p.seat.av; if (!av) return;
+  if (NET.role === 'host') emitFx('emo', { who: p.idx, kind });
+  const now = performance.now(); if (now - av.t0 < 700) return; av.t0 = now;
+  if (!AVATARS || av.el.hidden) return;
+  av.el.querySelector('.av-emo').textContent = EMO[kind] || '😄';
+  av.el.classList.remove('r-joy', 'r-win', 'r-angry', 'r-hurt', 'r-sad'); void av.el.offsetWidth; av.el.classList.add('r-' + kind);
+  clearTimeout(av.tm); av.tm = setTimeout(() => av.el.classList.remove('r-' + kind), kind === 'win' ? 1900 : 1400);
+}
+function avatarsIdle() { layoutAvatars(); G.players.forEach(p => { const av = p.seat && p.seat.av; if (av) av.el.classList.toggle('cur', p.idx === G.cur && !G.over); }); }
 function destroySeat(p) {
   if (!p.seat) return;
   [...p.seat.equipG.children].forEach(disposeMesh);
   scene.remove(p.seat.grp);
   p.seat.plateTex.dispose(); p.seat.arcMat.dispose();
+  if (p.seat.av) p.seat.av.el.remove();
 }
 function syncSeat(p) {
   if (!p.seat) return;
@@ -516,7 +604,7 @@ function syncSeat(p) {
     const m = cardMesh(c); m.scale.setScalar(.62);
     m.position.set((i - (n - 1) / 2) * gap, TABLE_Y + .03 + i * .003, 6.4); m.rotation.set(-.06, 0, 0); grp.add(m);
   });
-  plateDraw(p);
+  plateDraw(p); avatarDraw(p);
 }
 function levelFx(p, up) {
   const a = p.seat.anchor; sfx(up ? 'levelUp' : 'levelDown');
@@ -530,7 +618,7 @@ async function changeLevel(p, delta, allowWin = false) {
   p.level = clamp(before + delta, 1, cap);
   if (p.level !== before) {
     log(`${nameTag(p)} ${p.level > before ? 'піднімається' : 'падає'} на ${p.level}-й рівень.`);
-    levelFx(p, p.level > before); floatLevel(p, p.level - before); renderUI(); if (p.level > before) botLeadCheck(p); await wait(550);
+    levelFx(p, p.level > before); floatLevel(p, p.level - before); avatarReact(p, p.level > before ? 'joy' : 'sad'); renderUI(); if (p.level > before) botLeadCheck(p); await wait(550);
   } else if (delta > 0 && !allowWin && (G.teams ? levelsToWin(p) <= 1 : before >= G.goal - 1)) log(G.teams ? `${nameTag(p)} не може так здобути переможний рівень команди — лише перемогою над монстром.` : `${nameTag(p)} не може отримати ${G.goal}-й рівень так — лише перемогою над монстром.`);
   plateDraw(p);
   if (G.teams ? levelsToWin(p) <= 0 : p.level >= G.goal) await gameOver(p);
@@ -644,6 +732,7 @@ async function monsterStrike(m, q, word = null) {
   playSfx('smack'); camShake(.5, 480); ringFx(tgt, 0xff4a3a, 800, true); flashAt(tgt.clone().setY(1.5), 3.5, 500, 0xff3020, true);
   if (hereHuman(q)) vignette();
   const sp = screenOf(tgt.clone().setY(1.4)); domPop('comic', esc(word), sp.x, sp.y, 1300);
+  avatarReact(q, 'hurt');
   q._claw = performance.now() + 3500; plateDraw(q); setTimeout(() => { if (q.seat) plateDraw(q); }, 3600);
   await wait(240);
   const b = poseOf(m);
@@ -677,10 +766,34 @@ function floatLevel(p, d) {
   const sp = screenOf(p.seat.anchor.clone().setY(2));
   domPop('lvfloat ' + (d > 0 ? 'up' : 'down'), `${d > 0 ? '+' : '−'}${Math.abs(d)} ${plural(Math.abs(d), 'рівень', 'рівні', 'рівнів')}`, sp.x + 150, sp.y - 30, 1600);
 }
-async function rollDie(q, forced = 0) {
+/* великий кубик поверх інтерфейсу: видно навіть тоді, коли кубик на столі закрила панель */
+const PIPS = { 1: [[50, 50]], 2: [[28, 28], [72, 72]], 3: [[28, 28], [50, 50], [72, 72]], 4: [[28, 28], [72, 28], [28, 72], [72, 72]], 5: [[28, 28], [72, 28], [50, 50], [28, 72], [72, 72]], 6: [[28, 25], [72, 25], [28, 50], [72, 50], [28, 75], [72, 75]] };
+const dieSVG = v => `<svg viewBox="0 0 100 100" aria-hidden="true"><defs><radialGradient id="dg" cx="40%" cy="35%" r="75%"><stop offset="0" stop-color="#fffaf0"/><stop offset=".7" stop-color="#efe2c8"/><stop offset="1" stop-color="#cdb894"/></radialGradient></defs><rect x="4" y="4" width="92" height="92" rx="20" fill="url(#dg)" stroke="#5a4632" stroke-width="3"/>${PIPS[v].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${v === 1 ? 13 : 9}" fill="${v === 1 ? '#b8202f' : '#1b1512'}"/>`).join('')}</svg>`;
+function diePop(q, v, info) {
+  document.querySelectorAll('.diepop').forEach(e => e.remove());
+  const el = document.createElement('div'); el.className = 'diepop'; el.style.setProperty('--pc', q.color);
+  const need = info && info.need, bonus = (info && info.bonus) || 0, total = v + bonus, ok = need ? total >= need : null;
+  el.innerHTML = `<div class="dp-who" style="color:${q.color}">${esc(q.name)}${info && info.what ? ` · ${esc(info.what)}` : ''}</div><div class="dp-die">${dieSVG(1 + rnd(6))}</div><div class="dp-res" hidden></div>`;
+  document.body.appendChild(el);
+  const dieEl = el.querySelector('.dp-die'), res = el.querySelector('.dp-res');
+  const less = document.documentElement.classList.contains('less-motion');
+  let k = 0; const spin = less ? 0 : 9;
+  const tick = () => {
+    if (k < spin) { dieEl.innerHTML = dieSVG(1 + rnd(6)); dieEl.style.transform = `rotate(${(Math.random() - .5) * 70}deg) scale(${.9 + Math.random() * .2})`; k++; setTimeout(tick, 70 + k * 8); return; }
+    dieEl.innerHTML = dieSVG(v); dieEl.style.transform = ''; dieEl.classList.add('land');
+    res.hidden = false;
+    res.innerHTML = need ? `${v}${bonus ? ` ${bonus > 0 ? '+' : '−'} ${Math.abs(bonus)} = <b>${total}</b>` : ''} · треба ${need}+ <span class="${ok ? 'ok' : 'no'}">${ok ? '✔ вдалося' : '✘ ні'}</span>` : (info && info.res ? info.res(v) : `<b>${v}</b>`);
+    if (need) el.classList.add(ok ? 'good' : 'bad');
+    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 400); }, 1700);
+  };
+  tick();
+}
+async function rollDie(q, forced = 0, info = null) {
   const v = forced || 1 + rnd(6);
+  if (info === true) info = null;
   playSfx('dice');
-  emitFx('die', { who: q.idx, v, ok: v + fleeBonus(q) >= 5 });
+  emitFx('die', { who: q.idx, v, info: info ? { need: info.need || 0, bonus: info.bonus || 0, what: info.what || '' } : null });
+  diePop(q, v, info);
   const FACE = { 1: [0, 0, 0], 6: [Math.PI, 0, 0], 3: [0, 0, Math.PI / 2], 4: [0, 0, -Math.PI / 2], 2: [-Math.PI / 2, 0, 0], 5: [Math.PI / 2, 0, 0] }[v];
   const qFinal = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * 6.28).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(FACE[0], FACE[1], FACE[2])));
   const axis = new THREE.Vector3(Math.random() - .5, Math.random() - .5, Math.random() - .5).normalize();
@@ -692,7 +805,7 @@ async function rollDie(q, forced = 0) {
     T.die.quaternion.copy(qFinal).multiply(new THREE.Quaternion().setFromAxisAngle(axis, spins * (1 - e)));
   }, easeOut);
   T.die.position.set(to.x, to.y, to.z); T.die.quaternion.copy(qFinal);
-  ringFx(T.die.position, v + fleeBonus(q) >= 5 ? 0x7fd081 : 0xff4a3a, 700, true);
+  ringFx(T.die.position, !info || !info.need ? 0xffd36b : v + (info.bonus || 0) >= info.need ? 0x7fd081 : 0xff4a3a, 700, true);
   await wait(450);
   return v;
 }
@@ -756,6 +869,7 @@ function loop(now) {
     if (T.torches) T.torches.forEach((t, i) => { const f = .85 + Math.sin(s * 9 + i) * .1 + Math.sin(s * 23 + i * 2) * .07; t.light.intensity = 1.1 * f; t.flame.scale.setScalar(1.15 * f); });
     if (T.stars) T.stars.material.opacity = .7 + Math.sin(s * 1.3) * .2;
   }
+  avatarsIdle();
   // маркер ходу + підсвітка колоди
   const p = cur();
   if (p && p.seat && !G.over) {

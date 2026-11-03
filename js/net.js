@@ -501,7 +501,8 @@ function onNetFx(d) {
     case 'gloat': { const m = NET.mirror.get(a.uid); if (m) monsterGloat(m, a.text); break; }
     case 'lvl': { const q = G.players[a.who]; if (q) floatLevel(q, a.d); break; }
     case 'defeat': { const m = NET.mirror.get(a.uid); if (m) { NET.mirror.delete(a.uid); defeatAnim(m); } break; }
-    case 'die': { const q = G.players[a.who]; if (q) rollDie(q, a.v); break; }
+    case 'die': { const q = G.players[a.who]; if (q) rollDie(q, a.v, a.info || null); break; }
+    case 'emo': { const q = G.players[a.who]; if (q) avatarReact(q, a.kind); break; }
     case 'banner': banner(a.text, a.color); break;
     case 'confetti': for (let i = 0; i < 4; i++) setTimeout(() => burst(new THREE.Vector3((Math.random() - .5) * 8, 9, (Math.random() - .5) * 8), [a.color, '#ffd36b', '#ffffff', '#ef6b5d', '#5aa9e2', '#86cf6e'], 260, 5, 4.5, -2.6, .22, false, 6, true), i * 450); break;
     case 'sfx': playSfx(a.n); break;

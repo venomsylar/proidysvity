@@ -19,6 +19,7 @@ function meddleTalk(p, f) {
   if (!p || !f || p === f || sameTeam(p, f)) return;
   if (traitOf(p)) botSay(p, 'meddle', { n: f.name }, .55);
   if (traitOf(f)) setTimeout(() => botSay(f, 'meddled', { n: p.name }, .85), 1500);
+  avatarReact(f, 'angry');
 }
 function memo(a, b, d) { if (!a || !b || a === b) return; if (d < 0) d *= TT(a, 'neg', 1); a.mem = a.mem || {}; a.mem[b.idx] = (a.mem[b.idx] || 0) + d; }
 function confirmFor(p, title, text, yes, no) { return p.type === 'remote' ? askRemote(p, title, text, yes, no) : confirmModal(title, text, yes, no); }
@@ -105,12 +106,12 @@ async function beginCombat(c, m) {
   G.combat = { fighter: G.cur, mons: [{ c, m }], mods: [], pShots: [], mShots: [], helper: null, offer: null, wiz: 0, interfered: new Set(), passed: new Set(), asked: new Set(), meshes: new Map() };
   G.phase = 'combat';
   if (c.ab === 'mirror') c.lvl = Math.max(1, baseStr(p) + 1);
-  if (c.ab === 'schrodinger') { renderUI(); const r = await rollDie(p, 0, true); c.lvl = r * 3; log(`Коробку відкрито: ${esc(c.name)} має рівень ${r} × 3 = <b>${c.lvl}</b>.`); }
+  if (c.ab === 'schrodinger') { renderUI(); const r = await rollDie(p, 0, { what: 'рівень = кубик × 3', res: v => `рівень <b>${v * 3}</b>` }); c.lvl = r * 3; log(`Коробку відкрито: ${esc(c.name)} має рівень ${r} × 3 = <b>${c.lvl}</b>.`); }
   log(`Бій! ${nameTag(p)} проти <b>${esc(c.name)}</b> (рівень ${monLvl(c, p)}).${c.ab ? ` ⚡ ${esc(MON_AB[c.ab])}` : ''}`);
   renderUI();
   await roar(m);
   if (c.ab === 'sleepy') {
-    const r = await rollDie(p, 0, true);
+    const r = await rollDie(p, 0, { what: '1–3 — монстр засинає', res: v => v <= 3 ? `<b>${v}</b> · засинає 😴` : `<b>${v}</b> · не спить 😠` });
     if (r <= 3) { log(`На кубику ${r}: ${esc(c.name)} позіхає й засинає. Перемога без бою!`); say(`${c.name} заснув!`, 2200); await winCombat(); return; }
     log(`На кубику ${r}: ${esc(c.name)} прокинувся, і він не в гуморі.`);
   }
@@ -206,7 +207,7 @@ async function doSteal(p, t, c) {
   p.stoleTurn = G.turnNo;
   log(`${nameTag(p)} (Злодюжка) намагається поцупити в ${nameTag(t)} «${esc(c.name)}»…`);
   memo(t, p, -3); sfx('steal'); renderUI();
-  const r = await rollDie(p);
+  const r = await rollDie(p, 0, { need: 4, what: 'крадіжка' });
   say(`Кубик · ${p.name}: ${r}. Треба 4+ — ${r >= 4 ? 'вийшло!' : 'спіймали!'}`, 2400);
   await wait(1100);
   if (r >= 4) {
@@ -586,7 +587,7 @@ async function winCombat() {
   if (orcBonus) log(`${nameTag(p)} (Орк) розносить монстра з перевагою ${s0.hero - s0.mon}: +1 рівень зверху!`);
   if (curseN(p, 'sack') && treasureCount()) log(`Прокляття «Дірявий мішок»: ${nameTag(p)} отримує на ${Math.min(treasureCount(), curseN(p, 'sack'))} скарб менше.`);
   const helper = cb.helper != null ? G.players[cb.helper] : null;
-  statOnKill(p, helper, cb); hlKill(p, cb); botSay(p, 'win', {}, .7);
+  statOnKill(p, helper, cb); hlKill(p, cb); botSay(p, 'win', {}, .7); avatarReact(p, 'win'); if (helper) setTimeout(() => avatarReact(helper, 'joy'), 300);
   { // велика перемога — окремий банер
     const top = Math.max(...cb.mons.map(x => monLvl(x.c, p)));
     if (!cb.boss && (top >= 14 || cb.mons.length >= 3)) { const t = cb.mons.length >= 3 ? 'Три в одному!' : 'Велика перемога!'; banner(t, '#ffd23a'); netAll({ t: 'fx', type: 'banner', a: { text: t, color: '#ffd23a' } }); }
@@ -623,9 +624,10 @@ async function fleeCombat() {
         log(`${nameTag(q)} ${again ? 'перекидає' : 'кидає'} кубик${many ? ` (тікає від «${esc(mon.name)}»)` : ''}: випало <b>${r}</b>${fb ? `, ${fb > 0 ? 'бонус' : 'штраф'} втечі ${sgn(fb)} → ${r + fb}` : ''}. Треба 5+ → ${ok ? 'втеча вдалася' : 'не вдалося'}.`);
       };
       if (mon.ab === 'noflee') { say(`Від «${mon.name}» не втекти!`, 2200); log(`${nameTag(q)} намагається втекти від «${esc(mon.name)}», але від нього не втекти.`); await wait(900); }
-      let r = mon.ab === 'noflee' ? 0 : await rollDie(q); let ok = mon.ab !== 'noflee' && r + fb >= 5; if (mon.ab !== 'noflee') sayRoll(r, ok, false);
-      if (!ok && mon.ab !== 'noflee' && hasRace(q, 'halfling')) { await wait(1400); r = await rollDie(q); ok = r + fb >= 5; sayRoll(r, ok, true); }
-      if (!ok && mon.ab !== 'noflee' && blessN(q, 'reroll') && !(cb.rerolled || {})[q.idx]) { cb.rerolled = cb.rerolled || {}; cb.rerolled[q.idx] = true; log(`${nameTag(q)} (благословення) перекидає кубик утечі.`); await wait(1200); r = await rollDie(q); ok = r + fb >= 5; sayRoll(r, ok, true); }
+      const fi = { need: 5, bonus: fb, what: 'втеча' + (many ? ` від «${mon.name}»` : '') };
+      let r = mon.ab === 'noflee' ? 0 : await rollDie(q, 0, fi); let ok = mon.ab !== 'noflee' && r + fb >= 5; if (mon.ab !== 'noflee') sayRoll(r, ok, false);
+      if (!ok && mon.ab !== 'noflee' && hasRace(q, 'halfling')) { await wait(1400); r = await rollDie(q, 0, fi); ok = r + fb >= 5; sayRoll(r, ok, true); }
+      if (!ok && mon.ab !== 'noflee' && blessN(q, 'reroll') && !(cb.rerolled || {})[q.idx]) { cb.rerolled = cb.rerolled || {}; cb.rerolled[q.idx] = true; log(`${nameTag(q)} (благословення) перекидає кубик утечі.`); await wait(1200); r = await rollDie(q, 0, fi); ok = r + fb >= 5; sayRoll(r, ok, true); }
       await wait(1300);
       if (!ok) {
         if (isMe(q)) statFlag('hit'); hlAdd('hits', q);
@@ -1024,7 +1026,7 @@ async function doCurse(from, c, target) {
   if (!target) return;
   removeFromHand(from, c);
   log(`${nameTag(from)} насилає «${esc(c.name)}» на ${nameTag(target)}!`); hlAdd('curses', from);
-  memo(target, from, -3); sfx('curse'); if (target !== from) setTimeout(() => botSay(target, 'cursed', { n: from.name }, .8), 900);
+  memo(target, from, -3); sfx('curse'); avatarReact(target, 'angry'); if (target !== from) setTimeout(() => botSay(target, 'cursed', { n: from.name }, .8), 900);
   const m = cardMesh(c); scene.add(m); renderUI();
   await fly(m, fromHandOf(from), seatPose(target.idx, true), 750, 2.2);
   hitFx(target); disposeMesh(m);
@@ -1225,7 +1227,7 @@ async function gameOver(p) {
   clearSave(); statGameEnd(isMe(p) || sameTeam(p, statMe()));
   G.over = true; G.phase = 'over'; G.busy = false; G.window = null;
   log(G.teams ? `${nameTag(p)} здобуває переможний рівень — команда ${teamTag(p.team)} перемагає (${teamScore(p.team)} з ${teamTarget(p.team)})!` : `${nameTag(p)} досягає ${G.goal}-го рівня і перемагає!`, 'turn');
-  confetti(G.teams ? TEAMS[p.team].color : p.color); renderUI(); sfx('win'); botSay(p, 'gameWin', {}, 1);
+  confetti(G.teams ? TEAMS[p.team].color : p.color); renderUI(); sfx('win'); avatarReact(p, 'win'); G.players.filter(q => q !== p && !sameTeam(p, q)).forEach((q, k) => setTimeout(() => avatarReact(q, 'sad'), 400 + k * 200)); botSay(p, 'gameWin', {}, 1);
   const sumD = summaryData(); G._sum = sumD;
   emitFx('win', { idx: p.idx, sum: sumD });
   await wait(900);
