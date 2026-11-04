@@ -75,7 +75,7 @@ async function kickDoor() {
     say(`Прокляття «${c.name}»: ${c.bad.text}${c.persist ? ' (діє, поки не знімеш)' : ''}`, 2600); sfx('curse');
     await fly(m, poseOf(m), seatPose(p.idx, true), 600, 1); hitFx(p);
     disposeMesh(m);
-    if (holidayBlocks(p, c) || wardBlocks(p, c)) discard(c); else if (c.persist) attachCurse(p, c); else { discard(c); await applyBad(p, c.bad); }
+    if (holidayBlocks(p, c) || wardBlocks(p, c)) discard(c); else if (c.persist) attachCurse(p, c); else { discard(c); await applyBadShown(p, c.bad, c.name); }
   } else {
     await fly(m, poseOf(m), toHandOf(p), 600, 1, { owner: p.idx });
     disposeMesh(m); giveCard(p, c);
@@ -635,7 +635,7 @@ async function fleeCombat() {
         if (isMe(q)) statFlag('hit'); hlAdd('hits', q);
         await monsterStrike(x.m, q);
         log(`Халепа від «${esc(mon.name)}»: ${esc(mon.bad.text)}`);
-        G._badTo = x.m; try { await applyBad(q, mon.tyrant ? { ...mon.bad, mon } : mon.bad); } finally { G._badTo = null; }
+        G._badTo = x.m; try { await applyBadShown(q, mon.tyrant ? { ...mon.bad, mon } : mon.bad, mon.name); } finally { G._badTo = null; }
         if (G.over) return;
         await monsterGloat(x.m);
         botSay(q, 'beaten', {}, .8);
@@ -691,6 +691,34 @@ function grantBless(p, mon) {
   banner(`${b.icon} ${b.name}`, '#9fe0bd'); netAll({ t: 'fx', type: 'banner', a: { text: `${b.icon} ${b.name}`, color: '#9fe0bd' } });
   if (p.seat) { ringFx(p.seat.anchor, 0x9fe0bd); burst(p.seat.anchor.clone().setY(.9), ['#9fe0bd', '#ffffff', '#ffe07a'], 80, 2.4, 1.2); }
   syncSeat(p); renderUI();
+}
+/* халепа з наочним підсумком: що саме гравець утратив — окремою табличкою на екрані */
+function lossSnap(q) { return { lvl: q.level, gold: q.gold, hand: q.hand.length, gear: q.gear.slice(), rc: [...raceCards(q), ...clsCards(q)], curses: (q.curses || []).map(k => k.uid), sex: q.sex }; }
+function lossLines(q, a) {
+  const L = [], chip = c => `<span class="lchip">${artIcon(c)} ${esc(c.name)}</span>`;
+  if (q.level < a.lvl) L.push(`<b class="neg">−${a.lvl - q.level} ${plural(a.lvl - q.level, 'рівень', 'рівні', 'рівнів')}</b> → тепер ${q.level}`);
+  const gone = a.gear.filter(c => !q.gear.includes(c)); if (gone.length) L.push(`Втрачено: ${gone.map(chip).join(' ')}`);
+  const rc = a.rc.filter(c => !raceCards(q).includes(c) && !clsCards(q).includes(c)); if (rc.length) L.push(`Більше не: ${rc.map(chip).join(' ')}`);
+  if (q.hand.length < a.hand) L.push(`<b class="neg">−${a.hand - q.hand.length}</b> ${plural(a.hand - q.hand.length, 'карта', 'карти', 'карт')} з руки`);
+  if (q.gold < a.gold) L.push(`<b class="neg">−${a.gold - q.gold}</b> золотих`);
+  if (q.sex !== a.sex) L.push(`Стать змінилась: тепер ${q.sex === 'f' ? 'жінка' : 'чоловік'}`);
+  const nc = (q.curses || []).filter(k => !a.curses.includes(k.uid)); if (nc.length) L.push(`Нове прокляття: ${nc.map(chip).join(' ')}`);
+  return L;
+}
+async function applyBadShown(q, bad, from) {
+  const a = lossSnap(q);
+  await applyBad(q, bad);
+  const L = lossLines(q, a);
+  showLoss(q.idx, from, L.length ? L : ['Пронесло — нічого не втрачено.']);
+}
+function showLoss(who, from, lines) {
+  const q = G.players[who]; if (!q) return;
+  emitFx('loss', { who, from, lines });
+  document.querySelectorAll('.lossbox').forEach(x => x.remove());
+  const el = document.createElement('div'); el.className = 'lossbox'; el.setAttribute('role', 'status');
+  el.innerHTML = `<div class="lh"><span style="color:${q.color}">${esc(q.name)}</span>${from ? ` · халепа від «${esc(from)}»` : ''}</div>${lines.map(l => `<div class="ll">${l}</div>`).join('')}<small>торкнись, щоб закрити</small>`;
+  document.body.appendChild(el); el.onclick = () => el.remove();
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 400); }, 3800 + lines.length * 900);
 }
 async function applyBad(q, bad) {
   const lost = [], flyTo = G._badTo, flying = [];
@@ -1033,7 +1061,7 @@ async function doCurse(from, c, target) {
   const m = cardMesh(c); scene.add(m); renderUI();
   await fly(m, fromHandOf(from), seatPose(target.idx, true), 750, 2.2);
   hitFx(target); disposeMesh(m);
-  if (holidayBlocks(target, c) || wardBlocks(target, c)) discard(c); else if (c.persist) attachCurse(target, c); else { discard(c); await applyBad(target, c.bad); }
+  if (holidayBlocks(target, c) || wardBlocks(target, c)) discard(c); else if (c.persist) attachCurse(target, c); else { discard(c); await applyBadShown(target, c.bad, c.name); }
 }
 /* --- тривалі прокляття --- */
 function attachCurse(q, c) {

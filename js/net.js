@@ -498,6 +498,7 @@ function onNetFx(d) {
     case 'lunge': { const m = NET.mirror.get(a.uid); if (m) lunge(m); break; }
     case 'strike': { const m = NET.mirror.get(a.uid), q = G.players[a.who]; if (m && q) monsterStrike(m, q, a.word); break; }
     case 'react': reactShow(a.who, a.e); break;
+    case 'loss': showLoss(a.who, a.from, a.lines || []); break;
     case 'say': { const p = G.players[a.who]; if (p) speechBubble(p, a.text); break; }
     case 'gloat': { const m = NET.mirror.get(a.uid); if (m) monsterGloat(m, a.text); break; }
     case 'lvl': { const q = G.players[a.who]; if (q) floatLevel(q, a.d); break; }
