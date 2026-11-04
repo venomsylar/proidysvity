@@ -904,16 +904,19 @@ html[data-ui="l"] #ui,html[data-ui="l"] .modal:not(.screen) .sheet,html[data-ui=
 .sj-row b{font-variant-numeric:tabular-nums;color:var(--brass)}
 .sj-sum{padding:8px 2px;font-size:14px}.sj-sum b{color:var(--brass)}.sj-sum b.up{color:var(--good)}
 /* подія на столі */
-.evpill{position:absolute;left:50%;top:0;transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:8px;max-width:min(560px,calc(100% - 20px));padding:6px 14px 6px 8px;border-radius:999px;border:1px solid rgba(159,208,255,.55);background:linear-gradient(180deg,rgba(28,40,62,.94),rgba(18,26,42,.94));color:#e8f2ff;font:inherit;font-size:13px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.4),0 0 0 3px rgba(159,208,255,.08);animation:evIn .5s ease-out}
+.evpill{pointer-events:auto;position:absolute;left:50%;top:0;transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:8px;max-width:min(560px,calc(100% - 20px));padding:6px 14px 6px 8px;border-radius:999px;border:1px solid rgba(159,208,255,.55);background:linear-gradient(180deg,rgba(28,40,62,.94),rgba(18,26,42,.94));color:#e8f2ff;font:inherit;font-size:13px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.4),0 0 0 3px rgba(159,208,255,.08);animation:evIn .5s ease-out}
 .evpill[hidden]{display:none}
 .evpill .ev-i{font-size:20px;line-height:1}
 .evpill b{white-space:nowrap;color:#9fd0ff}
 .evpill .ev-t{opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 @keyframes evIn{from{opacity:0;transform:translate(-50%,-8px)}to{opacity:1;transform:translate(-50%,0)}}
 @media (max-width:760px),(max-height:520px) and (pointer:coarse){
-  .evpill{position:fixed;top:auto;bottom:calc(var(--dockH,120px) + 8px);font-size:12px;padding:4px 10px 4px 6px}
-  .evpill .ev-t{display:none}
+  /* на телефоні — кругла кнопка-значок праворуч над панеллю, як кнопка реакцій зліва */
+  .evpill{position:fixed;left:auto;right:max(14px,env(safe-area-inset-right,0px));top:auto;bottom:calc(var(--dockH,250px) + 12px);transform:none;width:46px;height:46px;max-width:none;padding:0;justify-content:center;border-radius:50%;animation:evInM .4s ease-out}
+  .evpill b,.evpill .ev-t{display:none}
+  .evpill .ev-i{font-size:24px}
 }
+@keyframes evInM{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:none}}
 
 /* тла, що відкриваються досягненнями */
 [data-panel="mahogany"]{--grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cfilter id='g' x='0' y='0' width='1' height='1' filterUnits='objectBoundingBox' primitiveUnits='userSpaceOnUse'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.006 .22' numOctaves='3' seed='21' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.72 0 0 0 0 0.28 0 0 0 0 0.18 0 0 0 0.22 0'/%3E%3C/filter%3E%3Crect width='320' height='320' filter='url(%23g)'/%3E%3C/svg%3E");--panel-base:rgba(40,13,9,.93);--rivet:rgba(236,176,80,.6)}

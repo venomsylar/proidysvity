@@ -59,7 +59,8 @@ const eventNoMeddle = () => evOn('quiet');
 // плашка з поточною подією
 function renderEvent() {
   let el = $('#evPill');
+  if (!el && typeof ResizeObserver === 'function' && $('#dock')) new ResizeObserver(() => document.documentElement.style.setProperty('--dockH', Math.round($('#dock').getBoundingClientRect().height) + 'px')).observe($('#dock')); // кнопки над панеллю йдуть за її висотою
   if (!el) { el = document.createElement('button'); el.id = 'evPill'; el.type = 'button'; el.className = 'evpill'; el.hidden = true; $('#ui .middle').appendChild(el); el.onclick = () => G.event && showModal(`<h2>${G.event.icon} ${esc(G.event.name)}</h2><p>${esc(G.event.text)}</p><p class="hint">Подія діє до кінця цього кола — поки кожен не зробить свій хід. Вимкнути події можна в налаштуваннях гри.</p><div class="row end"><button class="btn primary" type="button" data-close>Зрозуміло</button></div>`); }
   const e = G.event && !G.over ? G.event : null;
-  el.hidden = !e; if (e) { el.innerHTML = `<span class="ev-i">${e.icon}</span><b>${esc(e.name)}</b><span class="ev-t">${esc(e.text)}</span>`; el.title = e.text; }
+  el.hidden = !e; if (e) { el.innerHTML = `<span class="ev-i">${e.icon}</span><b>${esc(e.name)}</b><span class="ev-t">${esc(e.text)}</span>`; el.title = `${e.name}: ${e.text}`; el.setAttribute('aria-label', `Подія: ${e.name}`); }
 }
