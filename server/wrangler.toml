@@ -1,0 +1,9 @@
+name = "proidysvity-api"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "proidysvity"
+# після «npx wrangler d1 create proidysvity» встав сюди database_id, який він покаже
+database_id = "REPLACE_WITH_DATABASE_ID"

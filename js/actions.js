@@ -651,7 +651,7 @@ function loadSave() { try { const d = JSON.parse(localStorage.getItem(SAVE_KEY) 
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { } }
 function resumeGame() {
   const d = loadSave(); if (!d) { toast('Збереженої гри немає'); return; }
-  hideMainMenu(); closeModal();
+  hideMainMenu(); closeModal(); G.vg = null;
   G.players.forEach(destroySeat);
   if (G.combat) { G.combat.mons.forEach(x => disposeMesh(x.m)); G.combat.meshes.forEach(disposeMesh); }
   T.die.visible = false;
@@ -701,6 +701,7 @@ async function newGame() {
   rollTraits(G.players);
   if (coopOnNow) coopStart(s.coopDiff);
   rows.forEach((r, i) => { if (r.type === 'remote' && r.conn) { r.conn._pidx = i; NET.conns.set(i, r.conn); G.players[i].tok = makeTok(); G.players[i]._row = r; } });
+  vgStart();
   G.players.forEach(buildSeat);
   const firstHuman = G.players.find(p => p.type === 'human');
   G.viewer = firstHuman ? firstHuman.idx : -1;

@@ -1022,3 +1022,15 @@ html.touch-ui .hand{padding-top:12px}
 .sh-bubble b{color:var(--brass);font-size:15px}
 .sh-bubble .btn{justify-self:end}
 html.less-motion .sh-finger span,html.less-motion .sh-finger i{animation-duration:3s}
+/* акаунт і загальний борд */
+.linkbtn{background:none;border:0;padding:0;font:inherit;color:var(--brass);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.accform{display:grid;gap:12px;margin-top:14px}
+.accform label{display:grid;gap:5px;font-size:13px;color:var(--muted)}
+.accform input{font:inherit;font-size:16px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:rgba(0,0,0,.25);color:var(--text)}
+.accform input:focus{outline:2px solid var(--brass);outline-offset:1px}
+.acc-err{color:#ff8a7a;min-height:1.2em;margin:0}
+#accLine .neg,#accSt .neg{color:#ff8a7a}
+.bd-wrap{overflow-x:auto;margin:8px 0}
+.board-t{width:100%;min-width:420px}
+.board-t td:first-child{color:var(--muted);width:2em}
+.board-t tr.me td{background:rgba(224,169,59,.14);color:var(--brass);font-weight:700}

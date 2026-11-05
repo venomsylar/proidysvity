@@ -47,6 +47,10 @@ function buildMainMenu() {
             <button type="button" class="mm-btn small" data-mm="stats">Досягнення</button>
           </div>
           <div class="mm-row">
+            <button type="button" class="mm-btn small" data-mm="acc">👤 Акаунт</button>
+            <button type="button" class="mm-btn small" data-mm="board">🏆 Борд</button>
+          </div>
+          <div class="mm-row">
             <button type="button" class="mm-btn small" data-mm="table">Стіл і графіка</button>
             <button type="button" class="mm-btn small" data-mm="sound">Звук</button>
           </div>
@@ -130,6 +134,8 @@ function menuAction(a) {
     case 'rules': openRules(); break;
     case 'cards': openGallery(); break;
     case 'stats': openStats(); break;
+    case 'acc': openAccount(); break;
+    case 'board': openBoard(); break;
     case 'table': openSkins(); break;
     case 'sound': openSound(); break;
     case 'ver': openChangelog(); break;

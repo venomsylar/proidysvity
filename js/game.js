@@ -1291,7 +1291,7 @@ async function botTurn(p) {
 
 async function gameOver(p) {
   if (G.over) return;
-  clearSave(); statGameEnd(isMe(p) || sameTeam(p, statMe()));
+  clearSave(); statGameEnd(isMe(p) || sameTeam(p, statMe())); vgReport(vgWinners(p));
   G.over = true; G.phase = 'over'; G.busy = false; G.window = null;
   log(G.teams ? `${nameTag(p)} здобуває переможний рівень — команда ${teamTag(p.team)} перемагає (${teamScore(p.team)} з ${teamTarget(p.team)})!` : `${nameTag(p)} досягає ${G.goal}-го рівня і перемагає!`, 'turn');
   confetti(G.teams ? TEAMS[p.team].color : p.color); renderUI(); sfx('win');

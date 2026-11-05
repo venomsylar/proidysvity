@@ -81,13 +81,21 @@ function openStats() {
   const rows = Object.entries(STATS.modes).map(([k, x]) => `<tr><td>${mName[k]}</td><td>${x.p}</td><td>${x.w}</td><td>${x.p ? Math.round(x.w / x.p * 100) + '%' : '—'}</td></tr>`).join('');
   const got = ACH.filter(a => STATS.ach[a[0]]).length;
   showModal(`<h2>Досягнення</h2>
-    <p class="hint">Статистика й досягнення зберігаються лише на цьому пристрої.</p>
+    <p class="hint" id="accLine">${typeof accLineHTML === 'function' ? accLineHTML() : ''}</p>
     <table class="cstats"><tr><th>Режим</th><th>Партій</th><th>Перемог</th><th>Відсоток</th></tr>${rows}</table>
     <div class="st-line">Переможено монстрів: <b>${STATS.kills}</b> · допомог іншим: <b>${STATS.helps}</b>${STATS.best ? ` · найсильніший переможений: <b>${esc(STATS.best.name)}</b> (${STATS.best.lvl})` : ''}</div>
     <h3>Досягнення · ${got} / ${ACH.length}</h3>
     <div class="ach-grid">${ACH.map(([id, e, n, d]) => { const t = STATS.ach[id]; return `<div class="ach${t ? ' on' : ''}"><span class="ae">${t ? e : '🔒'}</span><span><b>${esc(n)}</b><small>${esc(d)}${t ? ` · ${new Date(t).toLocaleDateString('uk-UA')}` : ''}</small>${achUnlocks(id) ? `<small class="unl">${t ? '🔓' : '🎁'} ${esc(achUnlocks(id))}</small>` : ''}</span></div>`; }).join('')}</div>
-    <div class="row end"><button class="btn ghost small" type="button" id="stReset">Скинути статистику</button><button class="btn primary" type="button" data-close>Назад</button></div>`, 'wide');
-  $('#stReset').onclick = async () => { if (await confirmModal('Скинути статистику?', 'Усі партії й досягнення на цьому пристрої буде стерто.', 'Скинути', 'Ні')) { localStorage.removeItem(STATS_KEY); STATS = statsLoad(); } openStats(); };
+    <div class="row end"><button class="btn small" type="button" id="stBoard">🏆 Загальний борд</button><button class="btn ghost small" type="button" id="stReset">Скинути статистику</button><button class="btn primary" type="button" data-close>Назад</button></div>`, 'wide');
+  $('#stBoard').onclick = () => openBoard(() => openStats());
+  $('#stReset').onclick = async () => {
+    if (typeof ACC !== 'undefined' && ACC) {
+      if (await confirmModal('Скинути статистику акаунта?', 'Усі партії й досягнення буде стерто на всіх твоїх пристроях. Загальний борд це не змінить.', 'Скинути', 'Ні')) {
+        try { const d = await api('POST', '/stats/reset', {}); lsSet(BASE_KEY, d.stats); lsSet(PEND_KEY, null); statsReplace(d.stats); } catch (e) { toast(accErrText(e), 2600); }
+      }
+    } else if (await confirmModal('Скинути статистику?', 'Усі партії й досягнення на цьому пристрої буде стерто.', 'Скинути', 'Ні')) { localStorage.removeItem(STATS_KEY); STATS = statsLoad(); }
+    openStats();
+  };
 }
 
 // стіл чи тло, відкриті досягненням, могли зачинитися (скинули статистику) — повертаємо звичайні

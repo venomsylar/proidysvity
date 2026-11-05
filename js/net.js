@@ -83,7 +83,7 @@ function queueSnap() {
 function snapFor(i) {
   const cb = G.combat;
   return {
-    gid: G.gid, turnNo: G.turnNo || 0, goal: G.goal, teams: !!G.teams, ev: G.event || null, bossWait: G.bossWait ? G.bossWait.waiting : null,
+    gid: G.gid, turnNo: G.turnNo || 0, goal: G.goal, teams: !!G.teams, ev: G.event || null, vg: G.vg ? { id: G.vg.id, map: G.vg.map } : null, bossWait: G.bossWait ? G.bossWait.waiting : null,
     coop: G.coop ? { threat: G.coop.threat, max: G.coop.max, keys: G.coop.keys, need: G.coop.need, lair: G.coop.lair, round: G.coop.round, diff: G.coop.diff, handN: G.coop.hand.length, boss: G.coop.boss ? { id: G.coop.boss.id, name: G.coop.boss.name, art: G.coop.boss.art, ability: G.coop.boss.ability } : null, guards: G.coop.guards ? G.coop.guards.map(g => ({ name: g.name, lvl: g.lvl, art: g.art })) : null, guardsDone: G.coop.guardsDone | 0, fc: G.coop.lair ? bossForecast() : null } : null, cur: G.cur, phase: G.phase, busy: G.busy, over: G.over, log: G.log.slice(-60), prepWait: G.prepWait || [],
     dN: G.doorDeck.length, tN: G.treasureDeck.length, dTop: G.doorDiscard[G.doorDiscard.length - 1] || null, tTop: G.treasureDiscard[G.treasureDiscard.length - 1] || null,
     players: G.players.map(p => ({ idx: p.idx, dblTurn: p.dblTurn, stoleTurn: p.stoleTurn, team: p.team, name: p.name, type: p.type, off: offLeft(p), sub: !!p.wasRemote, color: p.color, sex: p.sex, diff: p.diff, trait: p.trait, vanished: !!p.vanished, ownTurns: p.ownTurns || 0, sniffAt: p.sniffAt ?? null, forgeTurn: p.forgeTurn, resTurn: p.resTurn, healTurn: p.healTurn, level: p.level, gold: p.gold, gear: p.gear, raceCard: p.raceCard, clsCard: p.clsCard, raceCard2: p.raceCard2, clsCard2: p.clsCard2, dualRace: p.dualRace, dualCls: p.dualCls, curses: p.curses || [], bless: p.bless || [], died: p.died, mem: p.type === 'bot' ? p.mem : null, hand: p.idx === i ? p.hand : p.hand.length })),
@@ -144,6 +144,7 @@ function hostOnData(conn, d) {
     if (setupState.rows.length >= 6) { sendConn(conn, { t: 'full', reason: 'У кімнаті вже 6 гравців.' }); return; }
     const name = String(d.name || 'Гість').trim().slice(0, 16) || 'Гість';
     const row = { name, type: 'remote', sex: d.sex === 'f' ? 'f' : 'm', diff: 2, conn, team: setupState.rows.length % 2 };
+    if (d.acc && Number.isInteger(d.acc.id)) row.acc = { id: d.acc.id, name: String(d.acc.name || '').slice(0, 16) };
     conn._row = row; setupState.rows.push(row);
     toast(`${name} приєднується до кімнати`);
     rerenderSetup && rerenderSetup(); sendLobby();
@@ -324,7 +325,7 @@ async function joinRoom(code, name, sex, onErr) {
   try { await loadPeer(); } catch (e) { onErr('Не вдалося завантажити модуль мережі. Перевір інтернет.'); return; }
   await getIce();
   NET.rejoining = null; NET.tok = null;
-  clientConnect(code, conn => { sendConn(conn, { t: 'hello', name, sex, v: 1, ver: APP_VERSION }); showLobby({ code, rows: [], you: -1 }); },
+  clientConnect(code, conn => { sendConn(conn, { t: 'hello', name, sex, v: 1, ver: APP_VERSION, acc: ACC ? { id: ACC.user.id, name: ACC.user.name } : null }); showLobby({ code, rows: [], you: -1 }); },
     why => onErr(why === 'nohost' ? 'Кімнату з таким кодом не знайдено.' : why === 'timeout' ? 'Не вдалося підключитися. Перевір код і чи відкрита кімната.' : 'Помилка мережі: ' + why + '.'));
 }
 /* --- відновлення звʼязку --- */
@@ -429,6 +430,7 @@ function applySnap(s) {
     G.players.forEach(destroySeat); NET.mirror.forEach(disposeMesh); NET.mirror.clear(); G.players = []; boardFor = null;
   }
   if (s.over) saveRejoin(null);
+  if (s.vg) { if (!G.vg || G.vg.id !== s.vg.id) G.vg = { id: s.vg.id, map: s.vg.map }; } else G.vg = null;
   Object.assign(G, { turnNo: s.turnNo, coop: s.coop || null, bossWait: s.bossWait ? { waiting: s.bossWait } : null, goal: s.goal, teams: !!s.teams, event: s.ev || null, cur: s.cur, phase: s.phase, busy: s.busy, over: s.over, log: s.log, prepWait: s.prepWait || [] });
   G.doorDeck = new Array(s.dN).fill(0); G.treasureDeck = new Array(s.tN).fill(0);
   G.doorDiscard = s.dTop ? [s.dTop] : []; G.treasureDiscard = s.tTop ? [s.tTop] : [];
@@ -507,7 +509,7 @@ function onNetFx(d) {
     case 'banner': banner(a.text, a.color); break;
     case 'confetti': for (let i = 0; i < 4; i++) setTimeout(() => burst(new THREE.Vector3((Math.random() - .5) * 8, 9, (Math.random() - .5) * 8), [a.color, '#ffd36b', '#ffffff', '#ef6b5d', '#5aa9e2', '#86cf6e'], 260, 5, 4.5, -2.6, .22, false, 6, true), i * 450); break;
     case 'sfx': playSfx(a.n); break;
-    case 'win': { const p = G.players[a.idx]; if (p) { statGameEnd(isMe(p) || sameTeam(p, statMe())); setTimeout(() => showWin(p, false, a.sum), 900); } break; }
-    case 'coopEnd': statGameEnd(!!a.win); setTimeout(() => showCoopEnd(a, false), 900); break;
+    case 'win': { const p = G.players[a.idx]; if (p) { statGameEnd(isMe(p) || sameTeam(p, statMe())); vgReport(vgWinners(p)); setTimeout(() => showWin(p, false, a.sum), 900); } break; }
+    case 'coopEnd': statGameEnd(!!a.win); vgReport(a.win ? G.players.map(q => q.idx) : []); setTimeout(() => showCoopEnd(a, false), 900); break;
   }
 }
