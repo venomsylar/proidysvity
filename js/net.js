@@ -157,6 +157,8 @@ function hostOnData(conn, d) {
     return;
   }
   if (d.t === 'ping') return;
+  // гість увійшов чи вийшов з акаунта вже в кімнаті
+  if (d.t === 'acc') { const row = conn._row; if (row) { row.acc = d.acc && Number.isInteger(d.acc.id) ? { id: d.acc.id, name: String(d.acc.name || '').slice(0, 16) } : null; rerenderSetup && rerenderSetup(); } return; }
   if (d.t === 'chat') { chatFromGuest(conn, d); return; }
   if (d.t === 'react') { reactFromGuest(conn, d); return; }
   if (d.t === 'rejoin') { hostRejoin(conn, d); return; }

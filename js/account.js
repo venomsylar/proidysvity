@@ -84,12 +84,14 @@ function accSoon() { if (!ACC) return; clearTimeout(ACCS.timer); ACCS.timer = se
 const statsSaveRaw = statsSave;
 statsSave = function () { statsSaveRaw(); accSoon(); };
 
+// гість у кімнаті: повідомити господаря, що ми увійшли/вийшли (щоб партія пішла на борд)
+function accTellHost() { if (NET.role === 'client' && NET.conn) sendConn(NET.conn, { t: 'acc', acc: ACC ? { id: ACC.user.id, name: ACC.user.name } : null }); else if (NET.role === 'host') rerenderSetup && rerenderSetup(); }
 function accDropSession() { if (!ACC) return; ACC = null; lsSet(ACC_KEY, null); lsSet(BASE_KEY, null); lsSet(PEND_KEY, null); toast('Тебе вийшло з акаунта — увійди знову (👤 угорі)', 3200); accBadge(); }
 
 async function accLogin(name, pass, isNew) {
   const d = await api('POST', isNew ? '/auth/register' : '/auth/login', { name, pass });
   const hadLocal = !statsDeltaEmpty(statsDiff(STATS, statsEmpty()));
-  ACC = { token: d.token, user: d.user }; lsSet(ACC_KEY, ACC); accBadge();
+  ACC = { token: d.token, user: d.user }; lsSet(ACC_KEY, ACC); accBadge(); accTellHost();
   // перший вхід на цьому пристрої: усе, що тут уже було награно, додаємо до акаунта
   lsSet(BASE_KEY, statsEmpty()); lsSet(PEND_KEY, null);
   if (!hadLocal) { lsSet(BASE_KEY, d.stats); statsReplace(d.stats); }
@@ -100,7 +102,7 @@ async function accLogout() {
   try { await api('POST', '/auth/logout', {}); } catch (e) { }
   ACC = null; lsSet(ACC_KEY, null); lsSet(BASE_KEY, null); lsSet(PEND_KEY, null);
   statsReplace(statsEmpty()); // статистика лишається на сервері; цей пристрій знову «чистий»
-  accBadge();
+  accBadge(); accTellHost();
 }
 
 /* --- партії через інтернет для загального борду --- */
