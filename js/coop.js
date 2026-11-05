@@ -332,7 +332,7 @@ async function bossDefeat() {
 }
 async function coopEnd(win) {
   if (G.over) return;
-  clearSave(); statGameEnd(win); vgReport(win ? G.players.map(q => q.idx) : []);
+  clearSave(); statGameEnd(win); vgReport(win ? G.players.map(q => q.idx) : []); teleSend(win ? G.players.map(q => q.idx) : []); hostCloudDrop();
   const co = G.coop;
   G.over = true; G.phase = 'over'; G.busy = false; G.window = null; G.assist = null; G.bossWait = null;
   if (G.combat) { G.combat.mons.forEach(x => x.m && disposeMesh(x.m)); G.combat.meshes.forEach(disposeMesh); G.combat = null; }

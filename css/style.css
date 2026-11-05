@@ -1051,3 +1051,12 @@ html.less-motion .sh-finger span,html.less-motion .sh-finger i{animation-duratio
   .top-actions > #btnAcc .an{display:none}
   .top-actions.open > #btnAcc.acc-chip.btn{position:static;top:auto;width:auto;border-radius:9px;font-size:inherit;padding:6px 10px;margin:0;background:var(--raise);border:1px solid var(--line)}
 }
+/* відкриті кімнати */
+.rooms{display:grid;gap:6px;margin-bottom:6px}
+.room-it{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto auto;column-gap:10px;align-items:center;text-align:left;padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:var(--raise);color:var(--text);font:inherit;cursor:pointer}
+.room-it:hover{border-color:var(--brass)}
+.room-it b{font-size:15px}
+.room-it span{grid-column:1;font-size:12.5px;color:var(--muted)}
+.room-it em{grid-column:2;grid-row:1/3;font-style:normal;font-weight:700;color:var(--brass);font-variant-numeric:tabular-nums}
+.room-it.busy{opacity:.6}
+.bal-t td:first-child{text-align:left}

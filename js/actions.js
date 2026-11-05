@@ -550,6 +550,9 @@ function openSetup() {
   const s = setupState;
   const netBlock = () => NET.role === 'host'
     ? `<h3>Гра по мережі</h3><div class="netcode"><span>Код кімнати</span><b>${esc(NET.code)}</b></div>
+       <div class="lbl2" style="margin-top:8px">Кімната</div>
+       <div class="seg" role="group" aria-label="Відкрита чи закрита кімната"><button type="button" data-room="closed" aria-pressed="${!s.roomOpen}">🔒 Закрита</button><button type="button" data-room="open" aria-pressed="${!!s.roomOpen}">🌍 Відкрита</button></div>
+       <p class="hint" style="margin-top:4px">${s.roomOpen ? 'Кімнату видно всім у «Приєднатися» → «Відкриті кімнати»: зайти може будь-хто без коду.' : 'Зайти можна лише за кодом чи посиланням — у списку відкритих кімнат її немає.'}</p>
        ${shareBlock(NET.code)}
        <p class="hint">Або друзі відкривають гру, тиснуть «Приєднатися» й вводять код. Підключено: ${s.rows.filter(r => r.type === 'remote').length}.</p>
        <p class="hint net-relay ${NET.relay ? 'on' : ''}">${NET.relay ? '● Сервер-посередник увімкнено: можна грати з різних мереж і мобільного інтернету.' : '○ Сервер-посередник недоступний: надійно працює в одній мережі Wi-Fi, з різних мереж — як пощастить.'}</p>
@@ -623,6 +626,7 @@ function openSetup() {
       else if (b.id === 'netHost') { save(); hostRoom(); }
       else if (b.id === 'netJoin') { save(); openJoin(); }
       else if (b.id === 'netStop') { save(); stopHosting(); rerender(); }
+      else if (b.dataset.room) { save(); s.roomOpen = b.dataset.room === 'open'; roomTick(true); rerender(); }
       else if (b.id === 'rulesB') { save(); openRules(); const back = $('#sheet').querySelector('[data-close]'); back.textContent = 'Назад'; back.onclick = () => openSetup(); }
       else if (b.id === 'startB') { save(); if (s.teams && !setupTeamsValid(s)) { toast('Для командної гри потрібні щонайменше дві команди'); return; } storeSetup(); closeModal(); newGame(); }
       else if (b.id === 'setupVer') { save(); openChangelog(); }
@@ -638,20 +642,22 @@ function openSetup() {
    Якщо сторінку закрили чи оновили — на головному екрані зʼявиться «Продовжити збережену гру». */
 const SAVE_KEY = 'pdsv-save';
 const saveSkip = k => k === 'seat' || k[0] === '_' || k === 'conn' || k === 'tok';
-function saveGame() {
-  if (NET.role !== 'local' || G.over || !G.players.length || G.players.some(p => p.type === 'remote')) return;
-  try {
-    const data = { v: APP_VERSION, t: Date.now(), goal: G.goal, teams: G.teams, types: G.types, cur: G.cur, turnNo: G.turnNo || 0, gid: G.gid,
+// знімок партії (для локального збереження й для відновлення кімнати господаря через сервер)
+function saveData(withTok = false) {
+  const data = { v: APP_VERSION, t: Date.now(), goal: G.goal, teams: G.teams, types: G.types, cur: G.cur, turnNo: G.turnNo || 0, gid: G.gid,
       players: G.players, doorDeck: G.doorDeck, treasureDeck: G.treasureDeck, doorDiscard: G.doorDiscard, treasureDiscard: G.treasureDiscard,
       log: G.log.slice(-60), coop: G.coop, event: G.event || null, events: !!G.events, lastEvent: G.lastEvent || null, hist: G.hist, hl: G.hl, setup: { speed: setupState.speed, anim: setupState.anim, mode: setupState.mode } };
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data, (k, v) => (k && saveSkip(k)) ? undefined : v));
-  } catch (e) { /* місця немає чи приватний режим — гра працює й без збереження */ }
+  return JSON.stringify(data, (k, v) => (k && saveSkip(k) && !(withTok && k === 'tok')) ? undefined : v);
+}
+function saveGame() {
+  if (NET.role !== 'local' || G.over || !G.players.length || G.players.some(p => p.type === 'remote')) return;
+  try { localStorage.setItem(SAVE_KEY, saveData()); } catch (e) { /* місця немає чи приватний режим — гра працює й без збереження */ }
 }
 function loadSave() { try { const d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); return d && d.v === APP_VERSION && Array.isArray(d.players) && d.players.length ? d : null; } catch (e) { return null; } }
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { } }
-function resumeGame() {
-  const d = loadSave(); if (!d) { toast('Збереженої гри немає'); return; }
-  hideMainMenu(); closeModal(); G.vg = null;
+function resumeGame(dIn) {
+  const d = dIn || loadSave(); if (!d) { toast('Збереженої гри немає'); return; }
+  hideMainMenu(); closeModal(); G.vg = null; G.tele = { t0: Date.now(), mons: {} };
   G.players.forEach(destroySeat);
   if (G.combat) { G.combat.mons.forEach(x => disposeMesh(x.m)); G.combat.meshes.forEach(disposeMesh); }
   T.die.visible = false;
@@ -676,7 +682,7 @@ function resumeGame() {
 }
 async function newGame() {
   hideMainMenu(); clearSave();
-  const s = setupState; botSpeed = s.speed; ANIM = s.anim || 1.5; G.goal = s.goal; G.events = s.events !== false; G.event = null; G.lastEvent = null;
+  const s = setupState; botSpeed = s.speed; ANIM = s.anim || 1.5; G.goal = s.goal; G.events = s.events !== false; G.event = null; G.lastEvent = null; G.tele = { t0: Date.now(), mons: {} };
   G.players.forEach(destroySeat);
   if (G.combat) { G.combat.mons.forEach(x => disposeMesh(x.m)); G.combat.meshes.forEach(disposeMesh); }
   T.die.visible = false;
@@ -701,7 +707,7 @@ async function newGame() {
   rollTraits(G.players);
   if (coopOnNow) coopStart(s.coopDiff);
   rows.forEach((r, i) => { if (r.type === 'remote' && r.conn) { r.conn._pidx = i; NET.conns.set(i, r.conn); G.players[i].tok = makeTok(); G.players[i]._row = r; } });
-  vgStart();
+  vgStart(); roomTick(true);
   G.players.forEach(buildSeat);
   const firstHuman = G.players.find(p => p.type === 'human');
   G.viewer = firstHuman ? firstHuman.idx : -1;

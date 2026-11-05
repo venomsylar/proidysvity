@@ -27,7 +27,7 @@ async function startTurn() {
   if (G.over || NET.role === 'client' || G.phase !== 'next') return;
   if (G.pendingSetup) { G.pendingSetup = false; openSetup(); return; }
   applyReclaims();
-  saveGame(); histTurn();
+  saveGame(); hostCloudSave(); histTurn();
   const p = cur(); G.phase = 'start'; G.combat = null; forgetTick(p); G.turnNo = (G.turnNo || 0) + 1; p.ownTurns = (p.ownTurns || 0) + 1;
   G.players.forEach(plateDraw);
   log(`Хід: ${nameTag(p)} · рівень ${p.level}`, 'turn');
@@ -590,6 +590,7 @@ async function winCombat() {
   if (curseN(p, 'sack') && treasureCount()) log(`Прокляття «Дірявий мішок»: ${nameTag(p)} отримує на ${Math.min(treasureCount(), curseN(p, 'sack'))} скарб менше.`);
   const helper = cb.helper != null ? G.players[cb.helper] : null;
   statOnKill(p, helper, cb); hlKill(p, cb); botSay(p, 'win', {}, .7);
+  cb.mons.forEach(x => teleMon(x.c, 'w'));
   { // велика перемога — окремий банер
     const top = Math.max(...cb.mons.map(x => monLvl(x.c, p)));
     if (!cb.boss && (top >= 14 || cb.mons.length >= 3)) { const t = cb.mons.length >= 3 ? 'Три в одному!' : 'Велика перемога!'; banner(t, '#ffd23a'); netAll({ t: 'fx', type: 'banner', a: { text: t, color: '#ffd23a' } }); }
@@ -633,13 +634,14 @@ async function fleeCombat() {
       await wait(1300);
       if (!ok) {
         if (isMe(q)) statFlag('hit'); hlAdd('hits', q);
+        if (q === G.players[cb.fighter]) teleMon(mon, 'h');
         await monsterStrike(x.m, q);
         log(`Халепа від «${esc(mon.name)}»: ${esc(mon.bad.text)}`);
         G._badTo = x.m; try { await applyBadShown(q, mon.tyrant ? { ...mon.bad, mon } : mon.bad, mon.name); } finally { G._badTo = null; }
         if (G.over) return;
         await monsterGloat(x.m);
         botSay(q, 'beaten', {}, .8);
-      } else botSay(q, 'escaped', {}, .6);
+      } else { if (q === G.players[cb.fighter]) teleMon(mon, 'fl'); botSay(q, 'escaped', {}, .6); }
     }
   }
   await clearCombat(); G.phase = 'charity';
@@ -1291,7 +1293,7 @@ async function botTurn(p) {
 
 async function gameOver(p) {
   if (G.over) return;
-  clearSave(); statGameEnd(isMe(p) || sameTeam(p, statMe())); vgReport(vgWinners(p));
+  clearSave(); statGameEnd(isMe(p) || sameTeam(p, statMe())); vgReport(vgWinners(p)); teleSend(vgWinners(p)); hostCloudDrop();
   G.over = true; G.phase = 'over'; G.busy = false; G.window = null;
   log(G.teams ? `${nameTag(p)} здобуває переможний рівень — команда ${teamTag(p.team)} перемагає (${teamScore(p.team)} з ${teamTarget(p.team)})!` : `${nameTag(p)} досягає ${G.goal}-го рівня і перемагає!`, 'turn');
   confetti(G.teams ? TEAMS[p.team].color : p.color); renderUI(); sfx('win');

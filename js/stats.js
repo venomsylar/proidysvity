@@ -86,8 +86,11 @@ function openStats() {
     <div class="st-line">Переможено монстрів: <b>${STATS.kills}</b> · допомог іншим: <b>${STATS.helps}</b>${STATS.best ? ` · найсильніший переможений: <b>${esc(STATS.best.name)}</b> (${STATS.best.lvl})` : ''}</div>
     <h3>Досягнення · ${got} / ${ACH.length}</h3>
     <div class="ach-grid">${ACH.map(([id, e, n, d]) => { const t = STATS.ach[id]; return `<div class="ach${t ? ' on' : ''}"><span class="ae">${t ? e : '🔒'}</span><span><b>${esc(n)}</b><small>${esc(d)}${t ? ` · ${new Date(t).toLocaleDateString('uk-UA')}` : ''}</small>${achUnlocks(id) ? `<small class="unl">${t ? '🔓' : '🎁'} ${esc(achUnlocks(id))}</small>` : ''}</span></div>`; }).join('')}</div>
-    <div class="row end"><button class="btn small" type="button" id="stBoard">🏆 Загальний борд</button><button class="btn ghost small" type="button" id="stReset">Скинути статистику</button><button class="btn primary" type="button" data-close>Назад</button></div>`, 'wide');
+    <label class="chk" style="margin-top:12px"><input type="checkbox" id="stTele" ${typeof teleOn === 'function' && teleOn() ? 'checked' : ''}> Надсилати анонімну статистику партій (раси, класи, монстри — без імен), щоб покращувати баланс гри</label>
+    <div class="row end"><button class="btn small" type="button" id="stBal">📊 Баланс гри</button><button class="btn small" type="button" id="stBoard">🏆 Загальний борд</button><button class="btn ghost small" type="button" id="stReset">Скинути статистику</button><button class="btn primary" type="button" data-close>Назад</button></div>`, 'wide');
   $('#stBoard').onclick = () => openBoard(() => openStats());
+  $('#stBal').onclick = () => openBalance(() => openStats());
+  $('#stTele').onchange = e => { try { localStorage.setItem(TELE_KEY, e.target.checked ? '1' : '0'); } catch (er) { } };
   $('#stReset').onclick = async () => {
     if (typeof ACC !== 'undefined' && ACC) {
       if (await confirmModal('Скинути статистику акаунта?', 'Усі партії й досягнення буде стерто на всіх твоїх пристроях. Загальний борд це не змінить.', 'Скинути', 'Ні')) {

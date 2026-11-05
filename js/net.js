@@ -4,7 +4,7 @@
 const NET = { role: 'local', peer: null, code: '', conns: new Map(), conn: null, me: -1, gid: -1, asks: new Map(), askSeq: 0, flying: new Set(), mirror: new Map(), snapT: 0, busy: false, err: '', setupOpen: false };
 const PEER_PREFIX = 'proidysvity-v1-';
 const NET_GRACE = 60000;      // скільки господар чекає на гравця, що втратив звʼязок, перш ніж віддати хід боту
-const NET_REJOIN = 120000;    // скільки гість сам пробує відновити звʼязок
+const NET_REJOIN = 300000;    // скільки гість сам пробує відновити звʼязок (господар міг перезавантажити сторінку й відновити кімнату)
 const REJOIN_KEY = 'pdsv-rejoin';
 NET.allConns = new Set(); NET.lastRx = 0; NET.tok = null; NET.rejoining = null;
 const makeTok = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -105,17 +105,21 @@ function sendLobby() {
   if (NET.role !== 'host') return;
   const rows = setupState.rows.map(r => ({ name: r.name, type: r.type, sex: r.sex, team: setupState.teams ? r.team | 0 : null }));
   setupState.rows.forEach((r, i) => { if (r.conn) sendConn(r.conn, { t: 'lobby', code: NET.code, rows, you: i }); });
+  roomTick();
 }
-async function hostRoom() {
+async function hostRoom(fixedCode = '', onReady = null) {
   NET.err = ''; NET.busy = true; rerenderSetup && rerenderSetup();
   try { await loadPeer(); } catch (e) { NET.busy = false; NET.err = 'Не вдалося завантажити модуль мережі. Перевір інтернет.'; rerenderSetup && rerenderSetup(); return; }
   const ice = await getIce();
   const tryOpen = (attempt) => {
-    const code = makeCode();
+    const code = fixedCode || makeCode();
     const peer = new window.Peer(PEER_PREFIX + code, peerOpts(ice));
-    peer.on('open', () => { NET.role = 'host'; NET.peer = peer; NET.code = code; NET.busy = false; rerenderSetup && rerenderSetup(); chatSync(); });
+    peer.on('open', () => { NET.role = 'host'; NET.peer = peer; NET.code = code; NET.busy = false; if (!fixedCode || !NET.roomSecret) NET.roomSecret = roomSecretNew(); rerenderSetup && rerenderSetup(); chatSync(); if (onReady) onReady(true); else roomTick(true); });
     peer.on('error', e => {
-      if (e.type === 'unavailable-id' && attempt < 3) { peer.destroy(); tryOpen(attempt + 1); return; }
+      // відновлення кімнати: старий код ще може бути зайнятий на сервері звʼязку кілька десятків секунд
+      if (e.type === 'unavailable-id' && fixedCode && attempt < 25) { peer.destroy(); setTimeout(() => tryOpen(attempt + 1), 3000); return; }
+      if (e.type === 'unavailable-id' && !fixedCode && attempt < 3) { peer.destroy(); tryOpen(attempt + 1); return; }
+      if (onReady && NET.role !== 'host') { NET.busy = false; onReady(false, e.type); return; }
       if (NET.role !== 'host') { NET.busy = false; NET.err = 'Не вдалося створити кімнату: ' + (e.type || 'помилка мережі') + '.'; rerenderSetup && rerenderSetup(); }
       else toast('Мережа: ' + (e.type || 'помилка'));
     });
@@ -129,6 +133,7 @@ async function hostRoom() {
   tryOpen(0);
 }
 function stopHosting() {
+  roomCloseAll();
   NET.allConns.forEach(c => sendConn(c, { t: 'bye' })); NET.allConns.clear();
   setupState.rows = setupState.rows.filter(r => { if (r.type === 'remote') { try { r.conn.close(); } catch (e) { } return false; } return true; });
   if (NET.peer) try { NET.peer.destroy(); } catch (e) { }
@@ -287,17 +292,20 @@ function joinFromURL() {
 function openJoin(code = '') {
   const r0 = setupState.rows.find(r => r.type === 'human') || { name: 'Гість', sex: 'm' };
   const st = { sex: r0.sex || 'm', code };
-  const draw = (err = '') => `<h2>Приєднатися</h2><p>Введи код кімнати, який бачить господар гри на своєму екрані.</p>
+  const draw = (err = '') => `<h2>Приєднатися</h2>
+    <h3 style="margin-top:4px">Відкриті кімнати</h3><div class="rooms" id="jRooms"><p class="hint">Шукаю відкриті кімнати…</p></div>
+    <h3>Або за кодом</h3><p>Введи код кімнати, який бачить господар гри на своєму екрані.</p>
     <label class="lbl2" for="jCode">Код кімнати</label><input class="inp code" id="jCode" maxlength="5" autocomplete="off" spellcheck="false" placeholder="напр. K7P2Q" value="${esc(st.code || '')}">
     <label class="lbl2" for="jName">Твоє імʼя</label><input class="inp" id="jName" maxlength="16" value="${esc(st.name || r0.name)}">
     <div class="lbl2">Стать</div><div class="seg" role="group" aria-label="Стать"><button type="button" data-js="m" aria-pressed="${st.sex === 'm'}">Чоловік</button><button type="button" data-js="f" aria-pressed="${st.sex === 'f'}">Жінка</button></div>
     ${err ? `<p class="hint" style="color:var(--bad);margin-top:12px">${esc(err)}</p>` : ''}
     <div class="row end"><button class="btn ghost" type="button" id="jBack">Назад</button><button class="btn primary" type="button" id="jGo">Підключитися</button></div>`;
   const keep = () => { st.code = ($('#jCode').value || '').trim().toUpperCase(); st.name = ($('#jName').value || '').trim(); };
-  const show = (err) => { showModal(draw(err)); bind(); };
+  const show = (err) => { showModal(draw(err)); bind(); roomsPoll(); };
   const bind = () => {
     $('#sheet').onclick = e => {
       const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.rc) { keep(); st.code = b.dataset.rc; b.disabled = true; b.classList.add('busy'); joinRoom(st.code, st.name || 'Гість', st.sex, err => show(err)); return; }
       if (b.dataset.js) { keep(); st.sex = b.dataset.js; show(); }
       else if (b.id === 'jBack') { if (MENU.open) closeModal(); else openSetup(); }
       else if (b.id === 'jGo') { keep(); if (st.code.length < 4) { show('Введи код із 5 символів.'); return; } b.disabled = true; b.textContent = 'Підключаємося…'; joinRoom(st.code, st.name || 'Гість', st.sex, err => show(err)); }

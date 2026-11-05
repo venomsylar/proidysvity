@@ -41,6 +41,7 @@ function buildMainMenu() {
           <button type="button" class="mm-btn primary" data-mm="new">Нова гра</button>
           <button type="button" class="mm-btn primary" data-mm="resume" hidden>Продовжити збережену гру</button>
           <button type="button" class="mm-btn primary" data-mm="rejoin" hidden>Повернутися в гру</button>
+          <button type="button" class="mm-btn primary" data-mm="hostresume" hidden>Відновити кімнату</button>
           <button type="button" class="mm-btn" data-mm="join">Приєднатися до гри</button>
           <button type="button" class="mm-btn" data-mm="rules">Правила</button>
           <div class="mm-row">
@@ -113,6 +114,8 @@ function openMainMenu() {
   el.querySelector('[data-mm="new"]').classList.toggle('primary', !gameRunning() && !sv);
   const rj = rejoinRec(), rb = el.querySelector('[data-mm="rejoin"]');
   rb.hidden = !rj || NET.role !== 'local' || gameRunning(); if (rj) rb.textContent = `Повернутися в гру · ${rj.code}`;
+  const hr = typeof hostRec === 'function' ? hostRec() : null, hb = el.querySelector('[data-mm="hostresume"]');
+  hb.hidden = !hr || NET.role !== 'local' || gameRunning(); if (hr) hb.innerHTML = `Відновити кімнату · ${esc(hr.code)}<small>${esc(hr.names || '')}</small>`;
   const vb = el.querySelector('[data-mm="ver"]'); vb.textContent = 'v' + APP_VERSION; vb.classList.toggle('new', seenVersion() < APP_VERSION);
   el.hidden = false; MENU.open = true; document.body.classList.add('in-menu');
   clearTimeout(MENU.timer); MENU.timer = setTimeout(() => peekCycle(false), 1200);
@@ -132,6 +135,7 @@ function menuAction(a) {
       openSetup(); break;
     case 'join': openJoin(); break;
     case 'rejoin': manualRejoin(); break;
+    case 'hostresume': hostResume(); break;
     case 'resume': resumeGame(); break;
     case 'rules': openRules(); break;
     case 'cards': openGallery(); break;

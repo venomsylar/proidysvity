@@ -69,6 +69,20 @@ async function newSession(env, userId) {
 const nameKey = n => n.toLocaleLowerCase('uk').replace(/ё/g, 'е');
 const NAME_RE = /^[\p{L}\p{N}][\p{L}\p{N} _.\-]{1,14}[\p{L}\p{N}]$/u;
 
+
+/* --- кімнати, збереження господаря, статистика для балансу --- */
+const CODE_RE = /^[A-Z0-9]{4,6}$/, SECRET_RE = /^[0-9a-f]{24,64}$/;
+const sha = async t => hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)));
+const ROOM_TTL = 75 * 1000, SAVE_TTL = 12 * 3600 * 1000;
+const clean = (v, n) => String(v || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, n);
+// власник кімнати = той, хто знає її секрет; чужу «живу» кімнату перезаписати не можна
+async function roomOwner(env, table, code, secret, ttl) {
+  const row = await env.DB.prepare(`SELECT secret, updated FROM ${table} WHERE code = ?`).bind(code).first();
+  const h = await sha(secret);
+  if (row && row.secret !== h && now() - row.updated < ttl) return null;
+  return h;
+}
+
 /* --- маршрути --- */
 const routes = {
   'POST /auth/register': async (req, env) => {
@@ -157,6 +171,94 @@ const routes = {
     }
     return json({ status: 'confirmed', result: top.result });
   },
+
+  // відкрита кімната: господар оголошує її раз на ~20 с, поки чекає гравців
+  'POST /rooms/announce': async (req, env) => {
+    const b = await body(req), code = String(b.code || ''), secret = String(b.secret || '');
+    if (!CODE_RE.test(code) || !SECRET_RE.test(secret)) return fail('bad_room');
+    const h = await roomOwner(env, 'rooms', code, secret, ROOM_TTL); if (!h) return fail('room_taken', 409);
+    const mode = MODES.includes(b.mode) ? b.mode : 'ffa';
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM rooms WHERE updated < ?').bind(now() - ROOM_TTL),
+      env.DB.prepare(`INSERT INTO rooms (code, secret, name, mode, goal, n, ver, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(code) DO UPDATE SET secret = excluded.secret, name = excluded.name, mode = excluded.mode, goal = excluded.goal, n = excluded.n, ver = excluded.ver, updated = excluded.updated`)
+        .bind(code, h, clean(b.name, 16) || 'Гравець', mode, int(b.goal, 30) || 10, Math.max(1, int(b.n, 6)), int(b.ver, 1e6), now())
+    ]);
+    return json({ ok: true });
+  },
+  'POST /rooms/close': async (req, env) => {
+    const b = await body(req), code = String(b.code || ''), secret = String(b.secret || '');
+    if (!CODE_RE.test(code) || !SECRET_RE.test(secret)) return fail('bad_room');
+    await env.DB.prepare('DELETE FROM rooms WHERE code = ? AND secret = ?').bind(code, await sha(secret)).run();
+    return json({ ok: true });
+  },
+  'GET /rooms': async (req, env) => {
+    const ver = int(new URL(req.url).searchParams.get('ver'), 1e6);
+    const { results } = await env.DB.prepare('SELECT code, name, mode, goal, n, ver FROM rooms WHERE updated > ? AND n < 6 ORDER BY updated DESC LIMIT 30').bind(now() - ROOM_TTL).all();
+    return json({ rooms: results.filter(r => !ver || r.ver === ver) });
+  },
+  // збереження партії господаря: якщо його браузер перезавантажився, кімнату можна відновити
+  'POST /room/save': async (req, env) => {
+    const b = await body(req), code = String(b.code || ''), secret = String(b.secret || ''), data = String(b.data || '');
+    if (!CODE_RE.test(code) || !SECRET_RE.test(secret)) return fail('bad_room');
+    if (!data || data.length > 1800000) return fail('too_big', 413);
+    const h = await roomOwner(env, 'hostsaves', code, secret, SAVE_TTL); if (!h) return fail('room_taken', 409);
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM hostsaves WHERE updated < ?').bind(now() - SAVE_TTL),
+      env.DB.prepare('INSERT INTO hostsaves (code, secret, data, updated) VALUES (?, ?, ?, ?) ON CONFLICT(code) DO UPDATE SET secret = excluded.secret, data = excluded.data, updated = excluded.updated').bind(code, h, data, now())
+    ]);
+    return json({ ok: true });
+  },
+  'POST /room/load': async (req, env) => {
+    const b = await body(req), code = String(b.code || ''), secret = String(b.secret || '');
+    if (!CODE_RE.test(code) || !SECRET_RE.test(secret)) return fail('bad_room');
+    const row = await env.DB.prepare('SELECT data, updated FROM hostsaves WHERE code = ? AND secret = ?').bind(code, await sha(secret)).first();
+    if (!row || now() - row.updated > SAVE_TTL) return fail('no_save', 404);
+    return json({ data: row.data, updated: row.updated });
+  },
+  'POST /room/drop': async (req, env) => {
+    const b = await body(req), code = String(b.code || ''), secret = String(b.secret || '');
+    if (!CODE_RE.test(code) || !SECRET_RE.test(secret)) return fail('bad_room');
+    const h = await sha(secret);
+    await env.DB.batch([env.DB.prepare('DELETE FROM hostsaves WHERE code = ? AND secret = ?').bind(code, h), env.DB.prepare('DELETE FROM rooms WHERE code = ? AND secret = ?').bind(code, h)]);
+    return json({ ok: true });
+  },
+  // анонімна статистика завершеної партії (без імен і акаунтів) — для балансу рас, класів і монстрів
+  'POST /tele': async (req, env) => {
+    const b = await body(req), mode = MODES.includes(b.mode) ? b.mode : 'ffa';
+    const ps = (Array.isArray(b.players) ? b.players : []).slice(0, 6);
+    if (ps.length < 2) return fail('bad_tele');
+    const stm = [];
+    const KEY = /^[a-z_]{2,20}$/;
+    for (const p of ps) {
+      const win = p.win ? 1 : 0, lvl = int(p.level, 30);
+      const races = (Array.isArray(p.race) ? p.race : []).filter(k => KEY.test(k)).slice(0, 2), clss = (Array.isArray(p.cls) ? p.cls : []).filter(k => KEY.test(k)).slice(0, 2);
+      for (const [kind, keys] of [['race', races.length ? races : ['none']], ['cls', clss.length ? clss : ['none']]])
+        for (const k of keys) stm.push(env.DB.prepare(`INSERT INTO tele_pick (kind, key, mode, games, wins, levels) VALUES (?, ?, ?, 1, ?, ?)
+          ON CONFLICT(kind, key, mode) DO UPDATE SET games = games + 1, wins = wins + excluded.wins, levels = levels + excluded.levels`).bind(kind, k, mode, win, lvl));
+    }
+    const mons = b.mons && typeof b.mons === 'object' ? Object.entries(b.mons).slice(0, 60) : [];
+    for (const [name, m] of mons) {
+      const n = clean(name, 40); if (!n || !m) continue;
+      const w = int(m.w, 50), fl = int(m.fl, 50), h = int(m.h, 50), f = Math.max(int(m.f, 50), w + fl + h); if (!f) continue;
+      stm.push(env.DB.prepare(`INSERT INTO tele_mon (name, fights, wins, fled, hit) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(name) DO UPDATE SET fights = fights + excluded.fights, wins = wins + excluded.wins, fled = fled + excluded.fled, hit = hit + excluded.hit`).bind(n, f, w, fl, h));
+    }
+    const botWin = ps.some(p => p.win && p.bot) ? 1 : 0, humWin = ps.some(p => p.win && !p.bot) ? 1 : 0;
+    stm.push(env.DB.prepare(`INSERT INTO tele_games (mode, games, turns, minutes, bot_wins, human_wins) VALUES (?, 1, ?, ?, ?, ?)
+      ON CONFLICT(mode) DO UPDATE SET games = games + 1, turns = turns + excluded.turns, minutes = minutes + excluded.minutes, bot_wins = bot_wins + excluded.bot_wins, human_wins = human_wins + excluded.human_wins`)
+      .bind(mode, int(b.turns, 2000), int(b.minutes, 600), botWin, humWin));
+    await env.DB.batch(stm.slice(0, 90));
+    return json({ ok: true });
+  },
+  'GET /balance': async (req, env) => {
+    const [a, m, g] = await env.DB.batch([
+      env.DB.prepare('SELECT kind, key, SUM(games) AS games, SUM(wins) AS wins, SUM(levels) AS levels FROM tele_pick GROUP BY kind, key ORDER BY kind, games DESC'),
+      env.DB.prepare('SELECT name, fights, wins, fled, hit FROM tele_mon WHERE fights >= 3 ORDER BY fights DESC LIMIT 150'),
+      env.DB.prepare('SELECT * FROM tele_games')
+    ]);
+    return json({ picks: a.results, mons: m.results, games: g.results });
+  },
   'GET /board': async (req, env, u) => {
     const { results } = await env.DB.prepare(`SELECT b.user_id AS id, u.name, b.games, b.wins, b.coop_games, b.coop_wins
       FROM board b JOIN users u ON u.id = b.user_id WHERE b.games + b.coop_games > 0
@@ -166,7 +268,7 @@ const routes = {
     return json({ top: results, me });
   }
 };
-const OPEN = new Set(['POST /auth/register', 'POST /auth/login', 'POST /auth/logout', 'GET /board']);
+const OPEN = new Set(['POST /auth/register', 'POST /auth/login', 'POST /auth/logout', 'GET /board', 'POST /rooms/announce', 'POST /rooms/close', 'GET /rooms', 'POST /room/save', 'POST /room/load', 'POST /room/drop', 'POST /tele', 'GET /balance']);
 
 export default {
   async fetch(req, env) {
