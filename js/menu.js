@@ -31,6 +31,7 @@ function buildMainMenu() {
   }).join('');
   const title = [...'Пройдисвіти'].map((ch, i) => `<span style="--i:${i}">${ch}</span>`).join('');
   el.innerHTML = `<div class="mm-bg" aria-hidden="true">${fly}</div>
+    <button type="button" class="mm-acc acc-chip" id="mmAcc" data-mm="acc" aria-label="Акаунт"></button>
     <div class="mm-wrap">
       <div class="mm-left">
         <h1 class="mm-title" aria-label="Пройдисвіти">${title}</h1>
@@ -79,6 +80,7 @@ function buildMainMenu() {
   // поки поверх меню відкрите вікно — зупиняємо анімацію
   new MutationObserver(() => el.classList.toggle('dim', !$('#modal').hidden)).observe($('#modal'), { attributes: true, attributeFilter: ['hidden'] });
   MENU.el = el; MENU.pool = menuArtPool(['monster']);
+  setTimeout(() => typeof accBadge === 'function' && accBadge(), 0);
   return el;
 }
 

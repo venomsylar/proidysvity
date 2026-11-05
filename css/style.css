@@ -1034,3 +1034,20 @@ html.less-motion .sh-finger span,html.less-motion .sh-finger i{animation-duratio
 .board-t{width:100%;min-width:420px}
 .board-t td:first-child{color:var(--muted);width:2em}
 .board-t tr.me td{background:rgba(224,169,59,.14);color:var(--brass);font-weight:700}
+/* значок акаунта */
+.acc-chip{display:inline-flex;align-items:center;gap:6px;max-width:170px}
+.acc-chip .an{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.acc-chip .ai{font-size:14px;line-height:1}
+.acc-chip:not(.in){border-style:dashed;color:var(--muted)}
+.acc-chip .ad{flex:0 0 auto;width:8px;height:8px;border-radius:50%;background:#7fd081;box-shadow:0 0 0 2px rgba(127,208,129,.25)}
+.acc-chip .ad.sync{background:#ffd36b;box-shadow:0 0 0 2px rgba(255,211,107,.25);animation:accPulse 1s ease-in-out infinite}
+.acc-chip .ad.err{background:#ef6b5d;box-shadow:0 0 0 2px rgba(239,107,93,.3)}
+@keyframes accPulse{50%{opacity:.35}}
+.mm-acc{position:absolute;top:max(14px,env(safe-area-inset-top,0px));right:max(14px,env(safe-area-inset-right,0px));z-index:3;padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:rgba(36,27,20,.85);color:var(--text);font:inherit;font-size:14px;cursor:pointer;backdrop-filter:blur(4px)}
+.mm-acc.in{border-color:rgba(127,208,129,.55)}
+.mm-acc:hover{border-color:var(--brass)}
+@media (max-width:760px),(max-height:520px) and (pointer:coarse){
+  .top-actions > #btnAcc{display:inline-flex;min-width:42px;justify-content:center;padding-left:10px;padding-right:10px}
+  .top-actions > #btnAcc .an{display:none}
+  .top-actions.open > #btnAcc.acc-chip.btn{position:static;top:auto;width:auto;border-radius:9px;font-size:inherit;padding:6px 10px;margin:0;background:var(--raise);border:1px solid var(--line)}
+}

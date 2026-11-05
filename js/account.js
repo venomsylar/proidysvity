@@ -80,16 +80,16 @@ async function accSync(force = false) {
   } catch (e) { ACCS.err = e.code || 'offline'; } finally { ACCS.busy = false; accRender(); }
 }
 // після кожного збереження статистики — синхронізація з невеликою затримкою
-function accSoon() { if (!ACC) return; clearTimeout(ACCS.timer); ACCS.timer = setTimeout(() => accSync(), 2500); }
+function accSoon() { if (!ACC) return; clearTimeout(ACCS.timer); ACCS.timer = setTimeout(() => accSync(), 2500); accBadge(); }
 const statsSaveRaw = statsSave;
 statsSave = function () { statsSaveRaw(); accSoon(); };
 
-function accDropSession() { if (!ACC) return; ACC = null; lsSet(ACC_KEY, null); lsSet(BASE_KEY, null); lsSet(PEND_KEY, null); toast('Сесія акаунта скінчилась — увійди знову', 2600); }
+function accDropSession() { if (!ACC) return; ACC = null; lsSet(ACC_KEY, null); lsSet(BASE_KEY, null); lsSet(PEND_KEY, null); toast('Тебе вийшло з акаунта — увійди знову (👤 угорі)', 3200); accBadge(); }
 
 async function accLogin(name, pass, isNew) {
   const d = await api('POST', isNew ? '/auth/register' : '/auth/login', { name, pass });
   const hadLocal = !statsDeltaEmpty(statsDiff(STATS, statsEmpty()));
-  ACC = { token: d.token, user: d.user }; lsSet(ACC_KEY, ACC);
+  ACC = { token: d.token, user: d.user }; lsSet(ACC_KEY, ACC); accBadge();
   // перший вхід на цьому пристрої: усе, що тут уже було награно, додаємо до акаунта
   lsSet(BASE_KEY, statsEmpty()); lsSet(PEND_KEY, null);
   if (!hadLocal) { lsSet(BASE_KEY, d.stats); statsReplace(d.stats); }
@@ -100,6 +100,7 @@ async function accLogout() {
   try { await api('POST', '/auth/logout', {}); } catch (e) { }
   ACC = null; lsSet(ACC_KEY, null); lsSet(BASE_KEY, null); lsSet(PEND_KEY, null);
   statsReplace(statsEmpty()); // статистика лишається на сервері; цей пристрій знову «чистий»
+  accBadge();
 }
 
 /* --- партії через інтернет для загального борду --- */
@@ -134,7 +135,15 @@ async function vgReport(winIdx) {
 const vgWinners = p => G.teams ? G.players.filter(q => sameTeam(q, p)).map(q => q.idx) : [p.idx];
 
 /* --- вікна --- */
-function accRender() { const el = $('#accLine'); if (el) el.innerHTML = accLineHTML(); }
+function accRender() { const el = $('#accLine'); if (el) el.innerHTML = accLineHTML(); accBadge(); }
+// значок акаунта у верхній панелі й на головному екрані: імʼя + крапка стану
+function accBadge() {
+  const st = !ACC ? 'off' : ACCS.err ? 'err' : (ACCS.busy || lsGet(PEND_KEY)) ? 'sync' : 'ok';
+  const tip = !ACC ? 'Ти не увійшов в акаунт — статистика лише на цьому пристрої. Натисни, щоб увійти.'
+    : st === 'err' ? `${ACC.user.name}: немає звʼязку з сервером — синхронізую, щойно зʼявиться інтернет.` : st === 'sync' ? `${ACC.user.name}: синхронізація…` : `${ACC.user.name}: увійшов, статистика синхронізована.`;
+  const html = ACC ? `<span class="ad ${st}" aria-hidden="true"></span><span class="ai" aria-hidden="true">👤</span><span class="an">${esc(ACC.user.name)}</span>` : `<span class="ai" aria-hidden="true">👤</span><span class="an">Увійти</span>`;
+  for (const el of document.querySelectorAll('.acc-chip')) { el.innerHTML = html; el.title = tip; el.setAttribute('aria-label', tip); el.classList.toggle('in', !!ACC); }
+}
 function accLineHTML() {
   if (!ACC) return `Статистика зберігається лише на цьому пристрої. <button type="button" class="linkbtn" data-acc>Увійди</button>, щоб вона була спільна для всіх твоїх пристроїв.`;
   return `👤 <b>${esc(ACC.user.name)}</b> · ${ACCS.busy ? 'синхронізація…' : ACCS.err ? `<span class="neg">${ACCS.err === 'offline' ? 'немає звʼязку — синхронізую пізніше' : 'не вдалося синхронізувати'}</span>` : 'статистика спільна для всіх твоїх пристроїв'} · <button type="button" class="linkbtn" data-acc>Акаунт</button>`;
@@ -195,5 +204,6 @@ async function openBoard(back) {
 document.addEventListener('click', e => { const b = e.target.closest('[data-acc]'); if (b) { e.preventDefault(); const back = $('#modal').hidden ? null : () => openStats(); openAccount(back); } });
 // старт: якщо вже увійшли — підтягнути зміни з інших пристроїв
 if (ACC) setTimeout(() => accSync(true), 1500);
+accBadge(); setTimeout(accBadge, 50); // головне меню будується трохи пізніше
 addEventListener('online', () => accSync(true));
 document.addEventListener('visibilitychange', () => { if (!document.hidden) accSync(); });
