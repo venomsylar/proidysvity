@@ -498,7 +498,7 @@ function init3D() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0e0a09);
   scene.fog = new THREE.Fog(0x0e0a09, 30, 80);
-  camera = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
+  camera = new THREE.PerspectiveCamera(42, 1, 1.5, 200); // ближня площина 1.5, а не 0.1: на телефонах буфер глибини грубий, і сукно «мерехтіло» деревом стільниці
 
   T.hemi = new THREE.HemisphereLight(0xffe4c0, 0x22150e, 0.6); scene.add(T.hemi); T.amb = new THREE.AmbientLight(0xfff0dc, 0.05); scene.add(T.amb);
   const lamp = new THREE.Group(); lamp.position.set(0, 21, 0); scene.add(lamp);
@@ -514,12 +514,12 @@ function init3D() {
   T.flash = new THREE.PointLight(0xff3020, 0, 14); T.flash.position.set(0, 3, 0); scene.add(T.flash);
 
   const wood = woodTex(); wood.wrapS = wood.wrapT = THREE.RepeatWrapping;
-  const woodMat = new THREE.MeshStandardMaterial({ map: wood, roughness: .5, metalness: .05 }); T.woodMat = woodMat;
+  const woodMat = new THREE.MeshStandardMaterial({ map: wood, roughness: .5, metalness: .05, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 4 }); T.woodMat = woodMat; // стільницю «відсуваємо» вглиб, щоб не проступала крізь сукно
   const table = new THREE.Mesh(new THREE.CylinderGeometry(9.4, 9.1, 0.6, 80), woodMat); table.receiveShadow = true; scene.add(table);
   const ped = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 2.6, 7, 28), woodMat); ped.position.y = -3.8; scene.add(ped);
   T.feltMat = new THREE.MeshStandardMaterial({ map: feltTex(), roughness: .95 });
   const felt = new THREE.Mesh(new THREE.CircleGeometry(FELT_R, 120), T.feltMat);
-  felt.rotation.x = -Math.PI / 2; felt.position.y = TABLE_Y + 0.002; felt.receiveShadow = true; scene.add(felt);
+  felt.rotation.x = -Math.PI / 2; felt.position.y = TABLE_Y + 0.006; felt.receiveShadow = true; scene.add(felt);
   const brass = new THREE.MeshStandardMaterial({ color: 0xc9922f, metalness: .85, roughness: .3 }); T.brass = brass;
   const ring = new THREE.Mesh(new THREE.TorusGeometry(FELT_R + .02, .07, 10, 140), brass); ring.rotation.x = Math.PI / 2; ring.position.y = TABLE_Y + .02; scene.add(ring);
   T.floorMat = new THREE.MeshStandardMaterial({ color: 0x1a1210, roughness: 1 });
@@ -613,7 +613,7 @@ function buildSeat(p) {
   sprite.userData.player = p.idx; sprite.scale.set(3.2, .8, 1); sprite.position.set(0, 1.05, 8.35); grp.add(sprite);
   const arcMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(p.color), transparent: true, opacity: .45, side: THREE.DoubleSide, depthWrite: false });
   const arc = new THREE.Mesh(new THREE.RingGeometry(7.95, 8.18, 40, 1, -Math.PI / 2 - .38, .76), arcMat);
-  arc.rotation.x = -Math.PI / 2; arc.position.y = TABLE_Y + .006; grp.add(arc);
+  arc.rotation.x = -Math.PI / 2; arc.position.y = TABLE_Y + .02; grp.add(arc);
   p.seat = { grp, equipG, plateTex, sprite, arc, arcMat, anchor: seatAnchor(p.idx) };
   plateDraw(p); syncSeat(p);
 }
@@ -884,7 +884,7 @@ function loop(now) {
     T.marker.position.copy(p.seat.anchor).setY(TABLE_Y + .05);
     T.marker.scale.setScalar(1 + Math.sin(s * 4) * .1); T.marker.material.opacity = .75 + Math.sin(s * 4) * .25;
     T.beam.position.copy(p.seat.anchor).setY(TABLE_Y + 2.75); T.beam.material.opacity = .32 + Math.sin(s * 3) * .14; T.beam.rotation.y = s * .5;
-    T.glow.position.copy(p.seat.anchor).setY(TABLE_Y + .012); T.glow.material.opacity = .55 + Math.sin(s * 4) * .2;
+    T.glow.position.copy(p.seat.anchor).setY(TABLE_Y + .022); T.glow.material.opacity = .55 + Math.sin(s * 4) * .2;
   } else { T.marker.visible = false; if (T.beam) T.beam.visible = T.glow.visible = false; }
   for (const q of G.players) if (q.seat) q.seat.arcMat.opacity = q === p ? .55 + Math.sin(s * 3) * .3 : .22;
   const kickable = canKickNow();

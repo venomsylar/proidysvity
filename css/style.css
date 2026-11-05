@@ -1060,3 +1060,7 @@ html.less-motion .sh-finger span,html.less-motion .sh-finger i{animation-duratio
 .room-it em{grid-column:2;grid-row:1/3;font-style:normal;font-weight:700;color:var(--brass);font-variant-numeric:tabular-nums}
 .room-it.busy{opacity:.6}
 .bal-t td:first-child{text-align:left}
+.pw{position:relative;display:block}
+.pw input{width:100%;padding-right:46px;box-sizing:border-box}
+.pw-eye{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:38px;height:38px;border:0;border-radius:8px;background:transparent;font-size:18px;cursor:pointer;opacity:.6}
+.pw-eye.on{opacity:1;background:rgba(224,169,59,.18)}

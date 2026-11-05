@@ -166,13 +166,14 @@ function openAccount(back) {
     <div class="seg" role="group" aria-label="Вхід чи реєстрація"><button type="button" data-am="login" aria-pressed="${mode === 'login'}">Увійти</button><button type="button" data-am="new" aria-pressed="${mode === 'new'}">Створити акаунт</button></div>
     <form id="accForm" class="accform" autocomplete="on">
       <label>Імʼя гравця<input id="accName" name="username" autocomplete="username" maxlength="16" required value="${esc(($('#accName') || {}).value || '')}"></label>
-      <label>Пароль<input id="accPass" name="password" type="password" autocomplete="${mode === 'new' ? 'new-password' : 'current-password'}" minlength="6" maxlength="64" required></label>
-      ${mode === 'new' ? '<p class="hint">Пошта не потрібна. Запамʼятай пароль: відновити його не вийде.</p>' : ''}
+      <label>Пароль<span class="pw"><input id="accPass" name="password" type="password" autocomplete="${mode === 'new' ? 'new-password' : 'current-password'}" minlength="6" maxlength="64" required><button type="button" class="pw-eye" id="accEye" aria-label="Показати пароль" title="Показати пароль">👁</button></span></label>
+      ${mode === 'new' ? '<p class="hint">Пошта не потрібна. Запамʼятай пароль: відновити його не вийде. Якщо браузер сам запропонує «надійний пароль» — натисни 👁, щоб побачити й записати його.</p>' : ''}
       <p class="acc-err" role="alert">${esc(err)}</p>
       <div class="row end"><button class="btn ghost" type="button" id="accCancel">Назад</button><button class="btn primary" type="submit" id="accGo">${mode === 'new' ? 'Створити' : 'Увійти'}</button></div>
     </form>`;
   const wire = () => {
     $('#accCancel').onclick = done;
+    $('#accEye').onclick = () => { const i = $('#accPass'), show = i.type === 'password'; i.type = show ? 'text' : 'password'; $('#accEye').setAttribute('aria-label', show ? 'Сховати пароль' : 'Показати пароль'); $('#accEye').classList.toggle('on', show); };
     $('#sheet').querySelectorAll('[data-am]').forEach(b => b.onclick = () => { mode = b.dataset.am; $('#sheet').innerHTML = draw(); wire(); });
     $('#accForm').onsubmit = async e => {
       e.preventDefault(); const name = $('#accName').value.trim(), pass = $('#accPass').value;
