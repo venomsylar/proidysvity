@@ -114,7 +114,8 @@ async function vgStart() {
   if (Object.keys(map).length < 2) return;
   const gid = G.gid;
   try {
-    const d = await api('POST', '/game/start', { participants: Object.values(map), mode: gameMode() });
+    const mode = setupState.mode === 'coop' ? 'coop' : G.teams ? 'teams' : 'ffa'; // G.coop ще не створений — беремо з налаштувань
+    const d = await api('POST', '/game/start', { participants: Object.values(map), mode });
     if (G.gid !== gid) return;
     G.vg = { id: d.gameId, map }; queueSnap();
     log(`🏆 Партію зареєстровано для загального борду: ${Object.keys(map).length} гравці з акаунтами.`);
