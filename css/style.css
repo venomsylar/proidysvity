@@ -976,3 +976,49 @@ html[data-ui="l"] #ui,html[data-ui="l"] .modal:not(.screen) .sheet,html[data-ui=
 .lossbox small{display:block;text-align:right;color:var(--muted);font-size:11px;margin-top:4px}
 .lossbox.out{opacity:0;transform:translate(-50%,-10px);transition:.35s}
 @keyframes lossIn{from{opacity:0;transform:translate(-50%,-14px) scale(.94)}to{opacity:1;transform:translate(-50%,0)}}
+
+/* скіни карт */
+.card.door .band{background:var(--band-door,#8a2650)}
+.card.treasure .band{background:var(--band-tre,#a8741a)}
+html[data-cskin="parchment"] .card{--paper:#e8d6ae;--ink:#2a1a0c;--band-door:#6b3418;--band-tre:#7d6418}
+html[data-cskin="forest"] .card{--paper:#e3eedf;--ink:#14231a;--band-door:#2d6a4a;--band-tre:#8a7420}
+html[data-cskin="vyshyvanka"] .card{--paper:#f7f3ea;--ink:#1a1414;--band-door:#b3202a;--band-tre:#262020}
+html[data-cskin="gold"] .card{--paper:#f6ebc4;--ink:#241a06;--band-door:#7a1f3a;--band-tre:#b8860b}
+html[data-cskin="arcane"] .card{--paper:#ebe5f6;--ink:#1a1430;--band-door:#4a2a8a;--band-tre:#2a6a8a}
+html[data-cskin="vyshyvanka"] .card:not(.big)::before{content:"";position:absolute;pointer-events:none;left:8%;right:8%;bottom:calc(2px*var(--k));height:calc(4px*var(--k));background:repeating-linear-gradient(90deg,#b3202a 0 calc(4px*var(--k)),transparent 0 calc(7px*var(--k)));border-radius:2px;opacity:.85}
+html[data-cskin="gold"] .card{background-image:linear-gradient(135deg,rgba(255,255,255,.35),transparent 40%,rgba(255,230,150,.25) 60%,transparent)}
+html[data-cskin="arcane"] .card{background-image:radial-gradient(circle at 80% 15%,rgba(160,130,255,.18),transparent 45%)}
+.cskins{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px}
+.cskin{display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 6px;border-radius:12px;border:1px solid var(--line);background:var(--raise);color:var(--text);font:inherit;cursor:pointer}
+.cskin[aria-pressed="true"]{border-color:var(--brass);box-shadow:0 0 0 1px var(--brass),0 0 14px rgba(224,169,59,.3)}
+.cskin b{font-size:13px;font-weight:600;color:var(--brass)}
+.cskin small{font-size:10.5px;color:var(--muted);line-height:1.25;text-align:center}
+.cskin.locked{opacity:.6;filter:grayscale(.5);cursor:not-allowed}
+.cskin.earned b::after{content:' ★';font-size:11px}
+.csw{display:flex;gap:4px;height:46px;align-items:flex-end}
+.csw i{display:block;width:30px;height:42px;border-radius:5px;border:2px solid;position:relative;box-shadow:0 3px 6px rgba(0,0,0,.4)}
+.csw i:first-child{transform:rotate(-6deg)}
+.csw i:last-child{transform:rotate(6deg)}
+.csw i b{position:absolute;left:3px;right:3px;top:3px;height:7px;border-radius:2px}
+/* кидок карти свайпом (лише сенсорні екрани) */
+html.touch-ui .hand .card{touch-action:pan-x}
+html.touch-ui .hand .card.playable{transform:translateY(-5px)}
+html.touch-ui .hand .card:hover{transform:none}
+html.touch-ui .hand .card.playable:hover{transform:translateY(-5px)}
+html.touch-ui .hand{padding-top:12px}
+.hand .card.swipe-src{visibility:hidden}
+.card.swipe-ghost{position:fixed;z-index:26;margin:0;pointer-events:none;transition:none;will-change:transform;box-shadow:0 0 0 calc(3px*var(--k)) var(--paper),0 0 0 calc(6px*var(--k)) var(--brass),0 18px 34px rgba(0,0,0,.55)}
+.card.swipe-ghost.swipe-go{box-shadow:0 0 0 calc(3px*var(--k)) var(--paper),0 0 0 calc(6px*var(--k)) #7fd081,0 0 26px rgba(127,208,129,.8),0 18px 34px rgba(0,0,0,.55)}
+.card.swipe-ghost.swipe-back{transition:transform .24s cubic-bezier(.2,1.3,.4,1)}
+.card.swipe-ghost.swipe-fly{transition:transform .38s cubic-bezier(.4,0,.6,1),opacity .38s;opacity:0}
+.swipe-hint{position:fixed;inset:0;z-index:24;pointer-events:none}
+.swipe-hint.soft{opacity:0;transition:opacity .2s}
+.sh-finger{position:fixed;width:0;height:0}
+.sh-finger span{position:absolute;left:-22px;top:-10px;font-size:44px;line-height:1;filter:drop-shadow(0 4px 6px rgba(0,0,0,.6));animation:shSwipe 1.8s ease-in-out infinite}
+.sh-finger i{position:absolute;left:-3px;top:-90px;width:6px;height:90px;border-radius:3px;background:linear-gradient(to top,rgba(255,236,170,.9),rgba(255,236,170,0));animation:shTrail 1.8s ease-in-out infinite;transform-origin:bottom}
+@keyframes shSwipe{0%{transform:translateY(10px);opacity:0}15%{opacity:1;transform:translateY(0)}55%{transform:translateY(-90px);opacity:1}75%,100%{transform:translateY(-110px);opacity:0}}
+@keyframes shTrail{0%,15%{transform:scaleY(0);opacity:0}55%{transform:scaleY(1);opacity:.9}75%,100%{transform:scaleY(1);opacity:0}}
+.sh-bubble{position:fixed;left:50%;transform:translateX(-50%);width:min(340px,calc(100vw - 32px));pointer-events:auto;display:grid;gap:6px;padding:12px 14px;border-radius:14px;background:#2a2016;border:1.5px solid var(--brass);box-shadow:0 14px 40px rgba(0,0,0,.55);color:var(--text);font-size:13.5px;line-height:1.4;animation:tipIn .25s ease-out}
+.sh-bubble b{color:var(--brass);font-size:15px}
+.sh-bubble .btn{justify-self:end}
+html.less-motion .sh-finger span,html.less-motion .sh-finger i{animation-duration:3s}

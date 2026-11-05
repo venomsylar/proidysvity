@@ -32,7 +32,7 @@ function statsSave() { try { localStorage.setItem(STATS_KEY, JSON.stringify(STAT
 function statMe() { if (!G.players.length) return null; if (NET.role === 'client') return G.players[NET.me] || null; return G.players.find(q => q.type === 'human') || null; }
 const isMe = p => !!p && p === statMe();
 const gameMode = () => G.coop ? 'coop' : G.teams ? 'teams' : 'ffa';
-const achUnlocks = id => [...Object.values(SKINS).filter(S => S.ach === id).map(S => `стіл «${S.name}»`), ...Object.keys(PANEL_ACH).filter(k => PANEL_ACH[k] === id).map(k => `тло «${PANELS[k]}»`)].join(', ');
+const achUnlocks = id => [...Object.values(SKINS).filter(S => S.ach === id).map(S => `стіл «${S.name}»`), ...Object.values(CARD_SKINS).filter(S => S.ach === id).map(S => `карти «${S.name}»`), ...Object.keys(PANEL_ACH).filter(k => PANEL_ACH[k] === id).map(k => `тло «${PANELS[k]}»`)].join(', ');
 function achieve(id) {
   if (STATS.ach[id]) return;
   const a = ACH.find(x => x[0] === id); if (!a) return;
@@ -93,3 +93,4 @@ function openStats() {
 // стіл чи тло, відкриті досягненням, могли зачинитися (скинули статистику) — повертаємо звичайні
 if (skinLocked(SKIN_ID)) applySkin('tavern');
 if (panelLocked(PANEL_ID)) applyPanel('oak');
+if (cskinLocked(CSKIN_ID)) applyCardSkin('classic');

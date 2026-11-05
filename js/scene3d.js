@@ -224,8 +224,11 @@ function applyUiSize(v) { if (!UI_SIZES[v]) return; UI_SIZE = v; document.docume
 applyUiSize(UI_SIZE);
 function openSkins(back) {
   const hex = n => '#' + n.toString(16).padStart(6, '0');
-  showModal(`<h2>Стіл і графіка</h2><p>Вибір зберігається лише на цьому пристрої й не впливає на інших гравців. Нові столи й тла відкриваються досягненнями.</p>
+  showModal(`<h2>Стіл і графіка</h2><p>Вибір зберігається лише на цьому пристрої й не впливає на інших гравців. Нові столи, карти й тла відкриваються досягненнями.</p>
     <div class="skins">${Object.entries(SKINS).map(([id, S]) => `${skinLocked(id) ? `<button type="button" class="skin locked" disabled title="Відкривається досягненням ${esc(achName(S.ach))}"><span class="sw" style="background:radial-gradient(circle at 50% 45%, ${S.felt[0]} 0 50%, ${S.felt[1]} 51% 60%, ${hex(S.ring)} 61% 66%, ${S.wood[0]} 67%)"><i>🔒</i></span><b>${S.name}</b><small>Відкриється за досягнення ${esc(achName(S.ach))}</small></button>` : `<button type="button" class="skin${S.ach ? ' earned' : ''}" data-skin="${id}" aria-pressed="${id === SKIN_ID}"><span class="sw" style="background:radial-gradient(circle at 50% 45%, ${S.felt[0]} 0 50%, ${S.felt[1]} 51% 60%, ${hex(S.ring)} 61% 66%, ${S.wood[0]} 67%)"></span><b>${S.name}</b><small>${S.desc}</small></button>`}`).join('')}</div>
+    <h3>Карти</h3>
+    <div class="cskins">${Object.entries(CARD_SKINS).map(([id, S]) => { const lk = cskinLocked(id), sw = `<span class="csw"><i style="background:${S.paper};border-color:${S.ink}"><b style="background:${S.door}"></b></i><i style="background:linear-gradient(135deg,${S.backT[0]},${S.backT[1]});border-color:${S.trim}"></i></span>`;
+      return lk ? `<button type="button" class="cskin locked" disabled title="Відкривається досягненням ${esc(achName(S.ach))}">${sw}<b>🔒 ${S.name}</b><small>${esc(achName(S.ach))}</small></button>` : `<button type="button" class="cskin${S.ach ? ' earned' : ''}" data-cs="${id}" aria-pressed="${id === CSKIN_ID}" title="${esc(S.desc)}">${sw}<b>${S.name}</b></button>`; }).join('')}</div>
     <h3>Розмір інтерфейсу</h3>
     <div class="seg" role="group" aria-label="Розмір інтерфейсу">${Object.entries(UI_SIZES).map(([k, n]) => `<button type="button" data-ui="${k}" aria-pressed="${k === UI_SIZE}">${n}</button>`).join('')}</div>
     <p class="hint" style="margin-top:8px">Більші чи менші панелі, карти й написи — під твій екран. Стіл не змінюється.</p>
@@ -246,37 +249,74 @@ function openSkins(back) {
   $('#sheet').querySelectorAll('[data-mo]').forEach(b => b.onclick = () => { setLessMotion(b.dataset.mo === 'less'); $('#sheet').querySelectorAll('[data-mo]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
   $('#sheet').querySelectorAll('[data-q]').forEach(b => b.onclick = () => { applyQuality(b.dataset.q); $('#sheet').querySelectorAll('[data-q]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); $('#qDesc').textContent = QUALITY[QUAL].desc; });
   $('#sheet').querySelectorAll('[data-ui]').forEach(b => b.onclick = () => { applyUiSize(b.dataset.ui); $('#sheet').querySelectorAll('[data-ui]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
+  $('#sheet').querySelectorAll('[data-cs]').forEach(b => b.onclick = () => { applyCardSkin(b.dataset.cs); $('#sheet').querySelectorAll('[data-cs]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
   $('#sheet').querySelectorAll('[data-pn]').forEach(b => b.onclick = () => { applyPanel(b.dataset.pn); $('#sheet').querySelectorAll('[data-pn]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
   $('#sheet').querySelectorAll('[data-skin]').forEach(b => b.onclick = () => { applySkin(b.dataset.skin); $('#sheet').querySelectorAll('[data-skin]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
   $('#skDone').onclick = () => { closeModal(); if (back) back(); };
 }
-function backTex(kind) {
-  return canvasTex(360, 504, (g, w, h) => {
-    const door = kind === 'door';
-    const grd = g.createLinearGradient(0, 0, w, h);
-    if (door) { grd.addColorStop(0, '#6e1d40'); grd.addColorStop(1, '#3d0f24'); } else { grd.addColorStop(0, '#b4801f'); grd.addColorStop(1, '#6d4610'); }
-    rr(g, 0, 0, w, h, 26); g.fillStyle = grd; g.fill();
-    g.save(); rr(g, 0, 0, w, h, 26); g.clip();
+/* скіни карт: папір, чорнило, кольори смуг і сорочки (DOM-карти й 3D-карти малюються з одних кольорів) */
+const CARD_SKINS = {
+  classic: { name: 'Класика', desc: 'Кремовий папір, бордові двері, мідні скарби.', paper: '#efe8dc', ink: '#1b1512', door: '#8a2650', tre: '#a8741a', backD: ['#6e1d40', '#3d0f24'], backT: ['#b4801f', '#6d4610'], trim: '#e0a93b', pat: 'stripes', noise: '90,65,40' },
+  parchment: { name: 'Пергамент', desc: 'Старий жовтуватий папір і бурі чорнила.', paper: '#e8d6ae', ink: '#2a1a0c', door: '#6b3418', tre: '#7d6418', backD: ['#5a3018', '#2e170a'], backT: ['#8a7024', '#4a3a0e'], trim: '#d9b26a', pat: 'stripes', noise: '110,70,30' },
+  forest: { name: 'Лісові', desc: 'Мʼятний папір, смарагдові двері, медові скарби.', paper: '#e3eedf', ink: '#14231a', door: '#2d6a4a', tre: '#8a7420', backD: ['#2d6a4a', '#123224'], backT: ['#9a8428', '#4e4210'], trim: '#c8e09a', pat: 'leaves', noise: '40,80,50' },
+  vyshyvanka: { ach: 'team_win', name: 'Вишиванка', desc: 'Біле полотно, червоно-чорна вишивка на сорочці.', paper: '#f7f3ea', ink: '#1a1414', door: '#b3202a', tre: '#262020', backD: ['#b3202a', '#6a0e14'], backT: ['#2e2626', '#0e0a0a'], trim: '#f2e6d0', pat: 'rhombus', noise: '120,40,40' },
+  gold: { ach: 'big_kill', name: 'Золоті', desc: 'Позолочений папір і блискучі сорочки.', paper: '#f6ebc4', ink: '#241a06', door: '#7a1f3a', tre: '#b8860b', backD: ['#7a1f3a', '#3a0a1a'], backT: ['#e0b23a', '#8a5e0a'], trim: '#ffe08a', pat: 'sparkle', noise: '140,100,20' },
+  arcane: { ach: 'triple', name: 'Чарівні', desc: 'Бузковий папір, сорочки в зорях і рунах.', paper: '#ebe5f6', ink: '#1a1430', door: '#4a2a8a', tre: '#2a6a8a', backD: ['#3a2270', '#140a30'], backT: ['#24607e', '#0a2838'], trim: '#bfa8ff', pat: 'stars', noise: '70,50,120' }
+};
+const cskinLocked = id => !!CARD_SKINS[id] && !achHave(CARD_SKINS[id].ach);
+let CSKIN_ID = (() => { try { const v = localStorage.getItem('pdsv-cskin'); return CARD_SKINS[v] ? v : 'classic'; } catch (e) { return 'classic'; } })();
+const CS = () => CARD_SKINS[CSKIN_ID] || CARD_SKINS.classic;
+function applyCardSkin(id) {
+  if (!CARD_SKINS[id] || cskinLocked(id)) id = 'classic';
+  CSKIN_ID = id; document.documentElement.dataset.cskin = id;
+  try { localStorage.setItem('pdsv-cskin', id); } catch (e) { }
+  if (!BACKS) return;
+  // перемальовуємо наявні текстури на місці — усі карти на столі змінюються одразу
+  for (const k of ['door', 'treasure']) { const t = BACKS[k], g = t.userData.g; g.clearRect(0, 0, 360, 504); drawBack(g, 360, 504, k); t.needsUpdate = true; }
+  faceCache.forEach(t => { const g = t.userData.g; g.clearRect(0, 0, 360, 504); drawCardFace(g, t.userData.card, 360, 504); t.needsUpdate = true; });
+  T.shadowDirty = true;
+}
+document.documentElement.dataset.cskin = CSKIN_ID;
+function backTex(kind) { return canvasTex(360, 504, (g, w, h) => drawBack(g, w, h, kind)); }
+function drawBack(g, w, h, kind) {
+  const S = CS(), door = kind === 'door', col = door ? S.backD : S.backT;
+  const grd = g.createLinearGradient(0, 0, w, h); grd.addColorStop(0, col[0]); grd.addColorStop(1, col[1]);
+  rr(g, 0, 0, w, h, 26); g.fillStyle = grd; g.fill();
+  g.save(); rr(g, 0, 0, w, h, 26); g.clip();
+  if (S.pat === 'rhombus') {
+    g.strokeStyle = 'rgba(255,240,225,.22)'; g.lineWidth = 3;
+    for (let y = 0; y < h + 40; y += 40) for (let x = (y / 40 % 2) * 20; x < w + 40; x += 40) { g.beginPath(); g.moveTo(x, y - 14); g.lineTo(x + 14, y); g.lineTo(x, y + 14); g.lineTo(x - 14, y); g.closePath(); g.stroke(); }
+  } else if (S.pat === 'stars') {
+    for (let i = 0; i < 160; i++) { g.fillStyle = `rgba(255,255,255,${.15 + Math.random() * .5})`; g.beginPath(); g.arc(Math.random() * w, Math.random() * h, Math.random() < .9 ? 1.4 : 2.6, 0, 6.28); g.fill(); }
+    g.strokeStyle = 'rgba(200,180,255,.25)'; g.lineWidth = 3; g.beginPath(); g.arc(w / 2, h / 2 - 20, 120, 0, 6.28); g.stroke();
+  } else if (S.pat === 'leaves') {
+    g.strokeStyle = 'rgba(230,255,210,.14)'; g.lineWidth = 3;
+    for (let i = 0; i < 26; i++) { const x = Math.random() * w, y = Math.random() * h, r = 14 + Math.random() * 12, a = Math.random() * 6.28; g.save(); g.translate(x, y); g.rotate(a); g.beginPath(); g.moveTo(0, -r); g.quadraticCurveTo(r * .7, 0, 0, r); g.quadraticCurveTo(-r * .7, 0, 0, -r); g.stroke(); g.restore(); }
+  } else if (S.pat === 'sparkle') {
+    g.strokeStyle = 'rgba(255,240,190,.14)'; g.lineWidth = 10; for (let i = -h; i < w + h; i += 34) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + h, h); g.stroke(); }
+    for (let i = 0; i < 40; i++) { const x = Math.random() * w, y = Math.random() * h, r = 3 + Math.random() * 6; g.fillStyle = 'rgba(255,250,220,.55)'; g.beginPath(); g.moveTo(x, y - r); g.lineTo(x + r * .3, y); g.lineTo(x, y + r); g.lineTo(x - r * .3, y); g.closePath(); g.fill(); }
+  } else {
     g.strokeStyle = door ? 'rgba(255,200,220,.07)' : 'rgba(255,240,200,.1)'; g.lineWidth = 10;
     for (let i = -h; i < w + h; i += 34) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + h, h); g.stroke(); }
-    g.restore();
-    g.strokeStyle = '#e0a93b'; g.lineWidth = 6; rr(g, 16, 16, w - 32, h - 32, 18); g.stroke();
-    g.lineWidth = 2; rr(g, 28, 28, w - 56, h - 56, 12); g.stroke();
-    const cx = w / 2, cy = h / 2 - 20;
-    g.lineWidth = 6; g.strokeStyle = '#1b1512';
-    if (door) {
-      g.fillStyle = '#8c5a2b'; g.beginPath(); g.moveTo(cx - 70, cy + 95); g.lineTo(cx - 70, cy - 30); g.arc(cx, cy - 30, 70, Math.PI, 0); g.lineTo(cx + 70, cy + 95); g.closePath(); g.fill(); g.stroke();
-      g.lineWidth = 3; for (const dx of [-35, 0, 35]) { g.beginPath(); g.moveTo(cx + dx, cy - (dx ? 88 : 100)); g.lineTo(cx + dx, cy + 95); g.stroke(); }
-      g.fillStyle = '#e0a93b'; g.beginPath(); g.arc(cx + 45, cy + 25, 9, 0, Math.PI * 2); g.fill(); g.stroke();
-    } else {
-      g.fillStyle = '#7a4a1e'; rr(g, cx - 85, cy - 10, 170, 100, 10); g.fill(); g.stroke();
-      g.beginPath(); g.moveTo(cx - 85, cy - 10); g.quadraticCurveTo(cx, cy - 90, cx + 85, cy - 10); g.closePath(); g.fillStyle = '#93602a'; g.fill(); g.stroke();
-      g.fillStyle = '#e0a93b'; rr(g, cx - 16, cy - 20, 32, 40, 6); g.fill(); g.stroke();
-      g.fillStyle = '#f5d27a'; for (let i = 0; i < 7; i++) { g.beginPath(); g.arc(cx - 60 + i * 20, cy - 34 - Math.sin(i / 6 * Math.PI) * 26, 10, 0, Math.PI * 2); g.fill(); g.lineWidth = 3; g.stroke(); }
-    }
-    g.fillStyle = '#f6e7c8'; g.font = '60px Underdog, cursive'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.strokeStyle = '#1b1512'; g.lineWidth = 8; g.strokeText(door ? 'ДВЕРІ' : 'СКАРБИ', cx, h - 92); g.fillText(door ? 'ДВЕРІ' : 'СКАРБИ', cx, h - 92);
-  });
+  }
+  g.restore();
+  g.strokeStyle = S.trim; g.lineWidth = 6; rr(g, 16, 16, w - 32, h - 32, 18); g.stroke();
+  g.lineWidth = 2; rr(g, 28, 28, w - 56, h - 56, 12); g.stroke();
+  if (S.pat === 'rhombus') { g.fillStyle = S.trim; for (let x = 44; x < w - 40; x += 24) { for (const y of [40, h - 40]) { g.beginPath(); g.moveTo(x, y - 6); g.lineTo(x + 6, y); g.lineTo(x, y + 6); g.lineTo(x - 6, y); g.closePath(); g.fill(); } } }
+  const cx = w / 2, cy = h / 2 - 20;
+  g.lineWidth = 6; g.strokeStyle = '#1b1512';
+  if (door) {
+    g.fillStyle = '#8c5a2b'; g.beginPath(); g.moveTo(cx - 70, cy + 95); g.lineTo(cx - 70, cy - 30); g.arc(cx, cy - 30, 70, Math.PI, 0); g.lineTo(cx + 70, cy + 95); g.closePath(); g.fill(); g.stroke();
+    g.lineWidth = 3; for (const dx of [-35, 0, 35]) { g.beginPath(); g.moveTo(cx + dx, cy - (dx ? 88 : 100)); g.lineTo(cx + dx, cy + 95); g.stroke(); }
+    g.fillStyle = S.trim; g.beginPath(); g.arc(cx + 45, cy + 25, 9, 0, Math.PI * 2); g.fill(); g.stroke();
+  } else {
+    g.fillStyle = '#7a4a1e'; rr(g, cx - 85, cy - 10, 170, 100, 10); g.fill(); g.stroke();
+    g.beginPath(); g.moveTo(cx - 85, cy - 10); g.quadraticCurveTo(cx, cy - 90, cx + 85, cy - 10); g.closePath(); g.fillStyle = '#93602a'; g.fill(); g.stroke();
+    g.fillStyle = S.trim; rr(g, cx - 16, cy - 20, 32, 40, 6); g.fill(); g.stroke();
+    g.fillStyle = '#f5d27a'; for (let i = 0; i < 7; i++) { g.beginPath(); g.arc(cx - 60 + i * 20, cy - 34 - Math.sin(i / 6 * Math.PI) * 26, 10, 0, Math.PI * 2); g.fill(); g.lineWidth = 3; g.stroke(); }
+  }
+  g.fillStyle = '#f6e7c8'; g.font = '60px Underdog, cursive'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.strokeStyle = '#1b1512'; g.lineWidth = 8; g.strokeText(door ? 'ДВЕРІ' : 'СКАРБИ', cx, h - 92); g.fillText(door ? 'ДВЕРІ' : 'СКАРБИ', cx, h - 92);
 }
 const faceCache = new Map();
 /* карта із заокругленими кутами (як на малюнку лицьового боку). Групи матеріалів такі самі,
@@ -302,21 +342,23 @@ function roundedCardGeo(w, t, h, r) {
 }
 function faceTex(c) {
   if (faceCache.has(c.uid)) return faceCache.get(c.uid);
-  const t = canvasTex(360, 504, (g, W, H) => drawCardFace(g, c, W, H));
+  const t = canvasTex(360, 504, (g, W, H) => drawCardFace(g, c, W, H)); t.userData.card = c;
   faceCache.set(c.uid, t); return t;
 }
 function drawCardFace(g, c, W, H) {
-  const i = cardInfo(c), door = c.deck === 'door', band = door ? '#8a2650' : '#a8741a';
-  rr(g, 0, 0, W, H, 26); g.fillStyle = '#efe8dc'; g.fill();
-  for (let n = 0; n < 700; n++) { g.fillStyle = `rgba(90,65,40,${Math.random() * .06})`; g.fillRect(Math.random() * W, Math.random() * H, 2, 2); }
-  g.lineWidth = 7; g.strokeStyle = '#1b1512'; rr(g, 12, 12, W - 24, H - 24, 18); g.stroke();
+  const S = CS(), i = cardInfo(c), door = c.deck === 'door', band = door ? S.door : S.tre;
+  rr(g, 0, 0, W, H, 26); g.fillStyle = S.paper; g.fill();
+  for (let n = 0; n < 700; n++) { g.fillStyle = `rgba(${S.noise},${Math.random() * .06})`; g.fillRect(Math.random() * W, Math.random() * H, 2, 2); }
+  g.lineWidth = 7; g.strokeStyle = S.ink; rr(g, 12, 12, W - 24, H - 24, 18); g.stroke();
+  if (S.pat === 'rhombus') { g.fillStyle = S.door; for (let x = 30; x < W - 24; x += 18) { const y = H - 20; g.beginPath(); g.moveTo(x, y - 4); g.lineTo(x + 4, y); g.lineTo(x, y + 4); g.lineTo(x - 4, y); g.closePath(); g.fill(); } }
   g.fillStyle = band; rr(g, 24, 24, W - 48, 52, 10); g.fill();
   g.fillStyle = '#fff4e0'; g.textBaseline = 'middle'; g.textAlign = 'left'; g.font = '700 21px Rubik, sans-serif';
   g.fillText(i.type.toUpperCase(), 38, 51);
   g.textAlign = 'right'; g.font = '36px Underdog, cursive'; g.fillText(String(i.corner), W - 38, 52);
-  g.fillStyle = '#1b1512'; g.textAlign = 'center'; g.font = '32px Underdog, cursive';
+  g.fillStyle = S.ink; g.textAlign = 'center'; g.font = '32px Underdog, cursive';
   wrapText(g, c.name, W / 2, 114, W - 56, 32, 2);
-  g.fillStyle = door ? 'rgba(138,38,80,.13)' : 'rgba(168,116,26,.18)';
+  g.save(); g.globalAlpha = .15; g.fillStyle = band; g.beginPath(); g.arc(W / 2, 210, 58, 0, Math.PI * 2); g.fill(); g.restore();
+  g.fillStyle = 'rgba(0,0,0,0)';
   g.beginPath(); g.arc(W / 2, 210, 58, 0, Math.PI * 2); g.fill();
   g.setLineDash([8, 7]); g.lineWidth = 3; g.strokeStyle = 'rgba(27,21,18,.45)'; g.stroke(); g.setLineDash([]);
   const im = artFor(c);
@@ -334,7 +376,7 @@ function drawCardFace(g, c, W, H) {
     else g.fillText(lab, W / 2, by + 17);
   }
   const ty = bdg ? 298 : 294;
-  g.font = '20px Pangolin, cursive'; g.fillStyle = '#1b1512';
+  g.font = '20px Pangolin, cursive'; g.fillStyle = S.ink;
   const nl = wrapText(g, i.text, W / 2, ty, W - 56, 23, i.flavor ? 4 : 6, false);
   if (i.flavor) { g.font = 'italic 17px Pangolin, cursive'; g.fillStyle = '#4a3a2d'; wrapText(g, i.flavor, W / 2, ty + nl * 23 + 8, W - 64, 19, Math.max(1, Math.min(3, 6 - nl)), false); }
   g.setLineDash([6, 6]); g.strokeStyle = 'rgba(27,21,18,.4)'; g.lineWidth = 2; g.beginPath(); g.moveTo(32, H - 58); g.lineTo(W - 32, H - 58); g.stroke(); g.setLineDash([]);
