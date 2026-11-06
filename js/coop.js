@@ -6,9 +6,10 @@
    зі своєю рукою: посилює монстрів, підкидає потвор і насилає прокляття. */
 const COOP_DIFF = {
   // meddle — шанс шкоди в бою, curse — прокляття наприкінці кола, pester — пакість на початку ходу гравця
-  easy: { name: 'Легко', max: 14, mult: .85, meddle: .35, cards: 1, bossCards: 1, curse: .35, draw: 1, pester: .12 },
-  normal: { name: 'Нормально', max: 12, mult: 1, meddle: .55, cards: 2, bossCards: 2, curse: .55, draw: 2, pester: .22 },
-  hard: { name: 'Важко', max: 10, mult: 1.25, meddle: .75, cards: 3, bossCards: 3, curse: .8, draw: 3, pester: .35 }
+  // tick — на скільки Загроза росте за кожне коло; шкала довша, але біжить швидше, а збивати її є чим
+  easy: { name: 'Легко', max: 16, tick: 1, mult: .85, meddle: .35, cards: 1, bossCards: 1, curse: .35, draw: 1, pester: .12 },
+  normal: { name: 'Нормально', max: 20, tick: 2, mult: 1, meddle: .55, cards: 2, bossCards: 2, curse: .55, draw: 2, pester: .22 },
+  hard: { name: 'Важко', max: 17, tick: 2, mult: 1.25, meddle: .75, cards: 3, bossCards: 3, curse: .8, draw: 3, pester: .35 }
 };
 const BOSSES = [
   { id: 'dragon', name: 'Древній Дракон Кредиту', art: '🐲', dragon: true, flavor: 'Спить на золоті. Твоєму.', ability: 'Дракон: вогняні речі й зілля проти нього не діють.' },
@@ -38,30 +39,35 @@ function coopDoorCards() {
   const d = [];
   [['Іржавий ключ від лігва', 'Висів на шиї у щура. Щур не віддавав.'], ['Кістяний ключ від лігва', 'Хтось ним колупав у зубах.'], ['Золотий ключ від лігва', 'Від дверей, яких краще не відчиняти.']]
     .forEach(([name, flavor]) => d.push(mk({ deck: 'door', kind: 'key', name, art: '🗝️', flavor })));
-  [['Розбудили варту', '🔔', 1, 'Хтось наступив на дзвоник. Ти.'], ['Гучний чих', '🤧', 1, 'Підземелля здригнулося. І прокинулося.'], ['Сигналізація з горщиків', '🥁', 2, 'Брязь! Бах! Ну все.'], ['Наступили на кота', '🐈‍⬛', 1, 'Кіт кричав так, що чули на поверхні.']]
+  [['Розбудили варту', '🔔', 1, 'Хтось наступив на дзвоник. Ти.'], ['Гучний чих', '🤧', 1, 'Підземелля здригнулося. І прокинулося.'], ['Сигналізація з горщиків', '🥁', 2, 'Брязь! Бах! Ну все.'], ['Наступили на кота', '🐈‍⬛', 1, 'Кіт кричав так, що чули на поверхні.'],
+   ['Скрипучі двері', '🚪', 1, 'Скри-и-ип. Ну хто ж так відчиняє?'], ['Розлите варення', '🍯', 2, 'Солодкий слід веде просто до вас.']]
     .forEach(([name, art, n, flavor]) => d.push(mk({ deck: 'door', kind: 'alarm', name, art, n, flavor })));
+  // затишшя: Загроза одразу падає
+  [['Тиха година', '😴', 2, 'Навіть монстри мають обідню перерву.'], ['Варта міняється', '🔄', 1, 'Старі пішли, нові ще не прийшли.']]
+    .forEach(([name, art, n, flavor]) => d.push(mk({ deck: 'door', kind: 'calm', name, art, n, flavor })));
   return d;
 }
+// карти, що збивають Загрозу (граються поза боєм)
 function coopTreasureCards() {
-  return [['Сигнальний ріг', '📯', 'Ту-ту-у! Чудовиська ховаються.'], ['Колискова для підземелля', '🎵', 'Баю-бай, засинай, на героїв не чіпай.']]
-    .map(([name, art, flavor]) => mk({ deck: 'treasure', kind: 'horn', name, art, value: 300, flavor }));
+  return [['Сигнальний ріг', '📯', 2, 'Ту-ту-у! Чудовиська ховаються.'], ['Колискова для підземелля', '🎵', 2, 'Баю-бай, засинай, на героїв не чіпай.'], ['Пиріжок для вартового', '🥟', 1, 'Вартовий жує — і нікого не чує.'],
+    ['Мапа обхідних стежок', '🗺️', 2, 'Підземелля навіть не помітить, що ви тут були.'], ['Мішок тиші', '👝', 3, 'Розвʼяжеш — і все довкола стихає.'], ['Свічка-оберіг', '🕯️', 1, 'Тепле світло заспокоює навіть гоблінів.']]
+    .map(([name, art, n, flavor]) => mk({ deck: 'treasure', kind: 'horn', name, art, n, value: 100 + n * 100, flavor }));
 }
-// ключі кладемо у верхню половину колоди, щоб похід не затягувався
+// ключі: кожен окремо в довільне місце колоди (не в стартовій роздачі й не на самому дні)
 function coopBuildDecks(door, treasure, n = 4) {
   const keys = [], rest = [];
   coopDoorCards().forEach(c => (c.kind === 'key' ? keys : rest).push(c));
   rest.forEach(c => door.splice(rnd(door.length - 4 * n), 0, c));
-  // не в стартовій роздачі (верхні 4×n карт), але й не на самому дні
-  // з меншою групою двері вибивають рідше — ключі кладемо ближче до верху
-  const top = 4 * n + 2, span = Math.max(6, Math.min(Math.floor(door.length * .55), 10 * n + 10) - top);
-  keys.forEach(c => door.splice(door.length - top - rnd(span), 0, c));
+  // вікно, яке загін реально встигає пройти за похід (~7 кіл): усередині нього кожен ключ лягає випадково
+  const top = 4 * n + 2, span = Math.max(20, Math.min(Math.floor(door.length * .5), 12 * n + 16));
+  keys.forEach(c => door.splice(door.length - top - rnd(span + 1), 0, c));
   coopTreasureCards().forEach(c => treasure.splice(rnd(treasure.length + 1), 0, c));
 }
 function coopStart(diff) {
   const D = COOP_DIFF[diff] || COOP_DIFF.normal;
   const n = G.players.length;
   // мала група розвивається повільніше за коло — даємо їй трохи довшу шкалу
-  G.coop = { diff: diff in COOP_DIFF ? diff : 'normal', threat: 0, max: D.max + (n <= 2 ? 3 : n === 3 ? 1 : 0), keys: 0, need: 3, lair: false, boss: null, round: 1, tries: 0, hand: [], stats: {} };
+  G.coop = { diff: diff in COOP_DIFF ? diff : 'normal', threat: 0, max: D.max + (n <= 2 ? 4 : n === 3 ? 2 : 0), keys: 0, need: 3, lair: false, boss: null, round: 1, tries: 0, hand: [], stats: {} };
   DUNGEON.hand = G.coop.hand; DUNGEON.mem = {};
   G.players.forEach(p => { G.coop.stats[p.idx] = { kills: 0, keys: 0, shots: 0 }; });
 }
@@ -80,6 +86,7 @@ async function coopSpecial(p, c) {
     renderUI(); return true;
   }
   if (c.kind === 'alarm') { discard(c); await addThreat(c.n || 1, `«${c.name}»`); return true; }
+  if (c.kind === 'calm') { discard(c); lowerThreat(c.n || 1, `«${c.name}»`, p); return true; }
   return false;
 }
 function openLair() {
@@ -101,11 +108,14 @@ async function addThreat(n, why) {
   renderUI();
   if (co.threat >= co.max) await coopEnd(false);
 }
+function lowerThreat(n, why, p) {
+  const co = G.coop; if (!co) return; const was = co.threat; co.threat = Math.max(0, co.threat - n);
+  log(`🕊 ${p ? nameTag(p) + ': ' : ''}${why}: Загроза −${was - co.threat} (${co.threat} з ${co.max}).`);
+  say('Підземелля притихло', 2000); sfx('help'); renderUI();
+}
 async function coopHorn(p, c) {
   removeFromHand(p, c); discard(c);
-  const co = G.coop, was = co.threat; co.threat = Math.max(0, co.threat - 2);
-  log(`${nameTag(p)} грає «${esc(c.name)}»: Загроза −${was - co.threat} (${co.threat} з ${co.max}).`);
-  say('Підземелля притихло', 2000); sfx('help'); renderUI();
+  lowerThreat(c.n || 2, `грає «${esc(c.name)}»`, p);
 }
 // прокляття з руки в поході можна жбурнути в монстра
 async function coopCurseMon(p, c) { c.bonus = -2; await playIntoCombat(p, c, 'mon'); }
@@ -113,10 +123,12 @@ async function coopCurseMon(p, c) { c.bonus = -2; await playIntoCombat(p, c, 'mo
 /* --- Підземелля як гравець --- */
 function dungeonDraw(n) {
   const co = G.coop; let got = 0;
+  const special = c => ['key', 'alarm', 'horn', 'calm'].includes(c.kind);
   for (let k = 0; k < n * 3 && got < n; k++) {
-    const deck = Math.random() < .25 ? 'treasure' : 'door';
-    const c = draw(deck); if (!c) continue;
-    if (['key', 'alarm', 'horn'].includes(c.kind)) { const d = deck === 'door' ? G.doorDeck : G.treasureDeck; d.splice(Math.max(0, d.length - rnd(Math.min(12, d.length + 1))), 0, c); syncDeck(deck); continue; }
+    const deck = Math.random() < .25 ? 'treasure' : 'door', d = deck === 'door' ? G.doorDeck : G.treasureDeck;
+    // Підземелля бере верхню «звичайну» карту — ключі, тривоги й затишшя лишаються на своїх місцях
+    let i = d.length - 1; while (i >= 0 && special(d[i])) i--;
+    const c = i >= 0 ? d.splice(i, 1)[0] : null; if (!c) continue; syncDeck(deck);
     if (['monster', 'mod', 'wander', 'curse', 'oneshot'].includes(c.kind)) { co.hand.push(c); got++; } else discard(c);
   }
   while (co.hand.length > 8) discard(co.hand.splice(rnd(co.hand.length), 1)[0]);
@@ -156,7 +168,10 @@ async function coopRoundEnd() {
   const co = G.coop; if (!co || G.over) return;
   co.round++;
   dungeonDraw(COOP_DIFF[co.diff].draw);
-  await addThreat(1, `минуло коло ${co.round - 1}`); if (G.over) return;
+  // за коло Загроза росте на tick; у малій групі коло коротше — і приріст менший (з накопиченням дробу)
+  const n = G.players.length; co.tickAcc = (co.tickAcc || 0) + (COOP_DIFF[co.diff].tick || 1) * (n <= 2 ? .6 : n === 3 ? .8 : 1);
+  const up = Math.floor(co.tickAcc); co.tickAcc -= up;
+  if (up) { await addThreat(up, `минуло коло ${co.round - 1}`); if (G.over) return; }
   // інколи Підземелля насилає прокляття на найсильнішого
   const c = co.hand.find(x => x.kind === 'curse');
   if (c && Math.random() < COOP_DIFF[co.diff].curse + threatStage() * .1) {
@@ -359,6 +374,7 @@ function showCoopEnd(a, isHost) {
 // хід бота в поході: ріг, коли Загроза росте
 async function coopBotManage(p) {
   if (!G.coop || G.combat || G.over) return;
-  const h = p.hand.find(c => c.kind === 'horn');
-  if (h && G.coop.threat >= Math.min(4, G.coop.max - 3)) { await botDelay(300); await coopHorn(p, h); }
+  const co = G.coop, hs = p.hand.filter(c => c.kind === 'horn').sort((a, b) => (a.n || 2) - (b.n || 2));
+  // дрібні — коли Загроза помітна, великі — коли вона вже близько до краю
+  for (const h of hs) { if (G.over || co.threat < Math.max(3, co.max * .3) || ((h.n || 2) >= 3 && co.threat < co.max * .55)) break; await botDelay(300); await coopHorn(p, h); }
 }

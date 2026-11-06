@@ -221,7 +221,7 @@ function cardActions(c, where, v = viewerP()) {
         }
       }
       sell(); break;
-    case 'horn': if (G.coop && free && !inCombat) A(`Затрубити: Загроза −2 (зараз ${G.coop.threat})`, { k: 'horn', uid: c.uid }, { dis: G.coop.threat ? null : 'Загрози й так немає.' }); sell(); break;
+    case 'horn': if (G.coop && free && !inCombat) A(`Загроза −${c.n || 2} (зараз ${G.coop.threat})`, { k: 'horn', uid: c.uid }, { dis: G.coop.threat ? null : 'Загрози й так немає.' }); sell(); break;
     case 'merchant': if (free && myTurn && !inCombat && ['start', 'afterKick', 'charity'].includes(G.phase)) A('Покликати торговця', { k: 'merchant', uid: c.uid }); break;
     case 'flee': if (inCombat && free && (isFighter || isHelper) && !cb.boss) A('Втекти з бою', { k: 'smoke', uid: c.uid }); sell(); break;
     case 'mod': if (combatOk && !(friend && c.bonus > 0)) A(`Зіграти на монстра (${sgn(c.bonus)})`, { k: 'mod', uid: c.uid }); break;

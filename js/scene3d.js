@@ -567,6 +567,9 @@ function init3D() {
   syncDeck('door'); syncDeck('treasure');
   bindPointer();
   addEventListener('resize', resize);
+  // iPad/iPhone: коли ховається клавіатура (закрили чат), подія resize інколи приходить із запізненням — перевіряємо самі
+  if (window.visualViewport) visualViewport.addEventListener('resize', resize);
+  document.addEventListener('focusout', () => { setTimeout(resize, 120); setTimeout(resize, 450); setTimeout(resize, 1000); });
   { const ro = new ResizeObserver(resize); ro.observe($('#dock')); ro.observe($('#combat')); ro.observe($('#players')); }
   resize();
   applyQuality(QUAL);
@@ -896,6 +899,7 @@ function loop(now) {
   if (cam.shake) { const k = 1 - (performance.now() - cam.shake.t0) / cam.shake.ms; if (k <= 0) cam.shake = null; else { const a = cam.shake.p * k * k; camera.position.x += (Math.random() - .5) * a; camera.position.y += (Math.random() - .5) * a; camera.position.z += (Math.random() - .5) * a; } }
   camera.lookAt(0, .5, 0);
   scene.fog.near = d + 6; scene.fog.far = d + 48;
+  if (innerWidth !== viewW || innerHeight !== viewH) resize(); // запасна перевірка, якщо браузер не надіслав resize
   renderer.render(scene, camera);
 }
 let viewW = 0, viewH = 0;
@@ -913,7 +917,7 @@ function resize() {
     cam.offTarget = Math.round((h - lower) - upper);
   } else cam.offTarget = Math.round(dock - top);
   if (w !== viewW || h !== viewH || cam.offK == null) {
-    viewW = w; viewH = h; renderer.setSize(w, h);
+    viewW = w; viewH = h; renderer.setSize(w, h, false); // розмір у CSS лишається 100% — полотно не «відстає» від екрана
     cam.offK = cam.offTarget;
     const tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * (w / (h + Math.abs(cam.offK)));
     cam.dist = clamp(9.2 / tanH * .92, 19.5, 32);

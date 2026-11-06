@@ -87,7 +87,7 @@ function draw(deck) {
 }
 function discard(c) { if (c.ephemeral) return; /* прокляття боса — не карта колоди */ (c.deck === 'door' ? G.doorDiscard : G.treasureDiscard).push(c); syncDiscardTop(c.deck); }
 function removeFromHand(p, c) { const i = p.hand.indexOf(c); if (i >= 0) p.hand.splice(i, 1); }
-function giveCard(p, c) { if (G.coop && (c.kind === 'key' || c.kind === 'alarm') && NET.role !== 'client') { coopSpecial(p, c); return; } p.hand.push(c); if (p.idx === G.viewer) G.fresh.add(c.uid); }
+function giveCard(p, c) { if (G.coop && ['key', 'alarm', 'calm'].includes(c.kind) && NET.role !== 'client') { coopSpecial(p, c); return; } p.hand.push(c); if (p.idx === G.viewer) G.fresh.add(c.uid); }
 
 function equipConflicts(p, c) {
   const out = [];

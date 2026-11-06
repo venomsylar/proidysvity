@@ -156,7 +156,7 @@ const GAL_CATS = [
   ['shot', 'Разові'], ['fight', 'Для бою'], ['coop', 'Похід на Боса']
 ];
 function galCat(c) {
-  if (c.boss || c.guard || ['key', 'alarm', 'horn'].includes(c.kind)) return 'coop';
+  if (c.boss || c.guard || ['key', 'alarm', 'horn', 'calm'].includes(c.kind)) return 'coop';
   if (c.kind === 'monster') return 'monster';
   if (c.kind === 'curse') return 'curse';
   if (['race', 'class', 'dual'].includes(c.kind)) return 'rc';
@@ -174,7 +174,7 @@ function galleryCards() {
   for (const c of cards) { const k = c.kind + '|' + c.name; if (seen.has(k)) seen.get(k).n++; else seen.set(k, { c, n: 1, cat: galCat(c) }); }
   const order = ['monster', 'curse', 'rc', 'gear', 'shot', 'fight', 'coop'];
   const lv = c => typeof c.lvl === 'number' ? c.lvl : 99;
-  const sub = c => c.guard ? 0 : c.boss ? 1 : ['key', 'alarm', 'horn', 'race', 'dual', 'class'].indexOf(c.kind) + 2;
+  const sub = c => c.guard ? 0 : c.boss ? 1 : ['key', 'alarm', 'calm', 'horn', 'race', 'dual', 'class'].indexOf(c.kind) + 2;
   GAL.list = [...seen.values()].sort((a, b) => order.indexOf(a.cat) - order.indexOf(b.cat) || sub(a.c) - sub(b.c) || lv(a.c) - lv(b.c) || (b.c.bonus || 0) - (a.c.bonus || 0) || a.c.name.localeCompare(b.c.name, 'uk'));
   return GAL.list;
 }

@@ -65,8 +65,9 @@ async function kickDoor() {
   await fly(m, deckPose('door'), centerPose(0, 1), 800, 2.4);
   if (c.kind === 'monster') { await beginCombat(c, m); return; }
   if (c.kind === 'merchant') { say('Мандрівний торговець розкладає крам!', 2000); await wait(700 * ANIM); await merchantVisit(p, c, m); G.phase = 'afterKick'; return; }
-  if (G.coop && (c.kind === 'key' || c.kind === 'alarm')) {
+  if (G.coop && ['key', 'alarm', 'calm'].includes(c.kind)) {
     if (c.kind === 'alarm') { say(`Тривога! «${c.name}»: Загроза +${c.n || 1}`, 2400); sfx('curse'); }
+    if (c.kind === 'calm') say(`Затишшя! «${c.name}»: Загроза −${c.n || 1}`, 2400);
     await wait(1000 * ANIM); disposeMesh(m); await coopSpecial(p, c); G.phase = 'afterKick'; return;
   }
   if (c.kind !== 'curse') say(`${KIND_FIND[c.kind] || 'Знахідка'}: «${c.name}» — карта йде в руку`, 2400);

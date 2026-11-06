@@ -355,7 +355,8 @@ function cardInfo(c) {
   switch (c.kind) {
     case 'key': return { type: 'Ключ', corner: '🗝', text: 'Ключ від лігва Боса. Спрацьовує одразу: зберіть три — і лігво відчиниться.', flavor: c.flavor, foot: ['Похід на Боса', ''] };
     case 'alarm': return { type: 'Тривога', corner: '+' + (c.n || 1), text: `Підземелля чує вас: Загроза +${c.n || 1}. Спрацьовує одразу.`, flavor: c.flavor, foot: ['Похід на Боса', ''] };
-    case 'horn': return { type: 'Разова', corner: '−2', text: 'Поза боєм: Загроза −2.', flavor: c.flavor, foot: [`${c.value} зол.`, 'Похід на Боса'] };
+    case 'calm': return { type: 'Затишшя', corner: '−' + (c.n || 1), text: `Підземелля дрімає: Загроза −${c.n || 1}. Спрацьовує одразу.`, flavor: c.flavor, foot: ['Похід на Боса', ''] };
+    case 'horn': return { type: 'Разова', corner: '−' + (c.n || 2), text: `Поза боєм: Загроза −${c.n || 2}.`, flavor: c.flavor, foot: [`${c.value} зол.`, 'Похід на Боса'] };
     case 'monster': {
       const t = [];
       if (c.boss) return { type: 'Бос', corner: c.lvl, text: `${c.ability} Бʼється весь загін.`, flavor: c.flavor, foot: ['Кінець походу', ''] };
@@ -398,6 +399,7 @@ function typeBadge(c) {
   if (c.guard) return { t: 'Вартовий', e: '🛡️', bg: '#2f4867', bd: '#a9c8f0', fg: '#eef5ff' };
   if (c.kind === 'key') return { t: 'Ключ', e: '🗝️', bg: '#7a5a12', bd: '#ffd36b', fg: '#fff6dc' };
   if (c.kind === 'alarm') return { t: 'Тривога', e: '⚠️', bg: '#8a2c14', bd: '#ffb26b', fg: '#fff1e2' };
+  if (c.kind === 'calm') return { t: 'Затишшя', e: '🕊', bg: '#1f5a4a', bd: '#9fe0c8', fg: '#eafff7' };
   if (c.kind === 'monster' && c.tyrant) return { t: c.dragon ? 'Бос-дракон' : c.undead ? 'Бос-нежить' : 'Бос', e: '👑', bg: '#6a4a10', bd: '#ffd36b', fg: '#fff6dc' };
   if (c.kind === 'monster' && c.ab && !c.dragon && !c.undead) return { t: 'Особливий', e: '⚡', bg: '#5a3a8a', bd: '#d9b8ff', fg: '#f6efff' };
   if (c.kind === 'monster') {
